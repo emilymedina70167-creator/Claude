@@ -37,7 +37,26 @@ export function parse(fields) {
   return { algo, items, pass };
 }
 
-/** 跑一遍：{ steps: [{ view, msg, ask? }], passes: [每一趟结束后的序列（数组）] } */
+/** 算法的名字（algo: 写的，大小写、中文别名都认）→ insert / shell / …；不认识是 undefined */
+export const sortAlgo = (src) => ALIAS[String(src ?? '').trim().toLowerCase()];
+
+/**
+ * 快排按真题说的「趟」（2019 年第 10 题：对尚未确定最终位置的所有元素进行一遍处理称为一趟）：
+ * 第 k 趟 = 递归树第 k 层的划分全做完（只剩一个、空的区间不划分）。log 是每一次划分（先左后右递归的先后）：
+ * { d 第几层（从 1 数）, lo, hi（下标从 0 数）, after（划分完那一刻整个序列）}。同一层的区间互不相交、祖先的划分都在它前面，
+ * 所以划分完那一刻区间里的就是这一层做完以后那一段的样子；区间外的格子（已经定下的枢轴、单个的）照上一层的样子
+ */
+export function roundsOf(a, log) {
+  const cur = a.slice(), out = [];
+  const depth = log.reduce((m, x) => Math.max(m, x.d), 0);
+  for (let d = 1; d <= depth; d++) {
+    for (const x of log) if (x.d === d) for (let i = x.lo; i <= x.hi; i++) cur[i] = x.after[i];
+    out.push(cur.slice());
+  }
+  return out;
+}
+
+/** 跑一遍：{ steps: [{ view, msg, ask? }], passes: [每一趟结束后的序列（数组）] }；快排另有 rounds（真题说的每一趟，见 roundsOf） */
 export function run(input) {
   const f = { insert: insertion, shell: (A) => shell(A, input.gaps), bubble, select: selection, quick, merge, radix }[input.algo];
   const ok = f(input.items.map((x) => ({ ...x })));
@@ -86,9 +105,9 @@ const MISTAKES = {
   // 插入排序把第 1 个元素自己也算一趟：学生的第 k 趟是正确的第 k−1 趟（第 1 趟是原样）
   insertCount: { passes: (a, ok) => [a.slice(), ...ok.passes.slice(0, -1)] },
   // 快排取最后一个作枢轴（填坑法）
-  quickLast: { passes: (a) => quickPasses(a, lastPartition) },
+  quickLast: { passes: (a) => quickWalk(a, lastPartition).passes, rounds: (a) => quickWalk(a, lastPartition).rounds },
   // 快排用交换法划分（枢轴还是第一个）
-  quickSwap: { passes: (a) => quickPasses(a, swapPartition), one: (a, v) => { swapPartition(a, v.lo - 1, v.hi - 1); return a; } },
+  quickSwap: { passes: (a) => quickWalk(a, swapPartition).passes, rounds: (a) => quickWalk(a, swapPartition).rounds, one: (a, v) => { swapPartition(a, v.lo - 1, v.hi - 1); return a; } },
   // 归并时最后落单的一段并进前面那一组
   mergeOdd: {
     passes: (a) => {
@@ -114,6 +133,12 @@ function mistakeRun(input, ok) {
   const n = ok.passes.length;
   const passes = M.passes(a, ok, input).slice(0, n);
   while (passes.length < n) passes.push((passes.at(-1) || a).slice());
+  // 快排的错法也按层交一份（行数照正确的那一遍补齐、截掉，和 passes 一样）
+  let rounds;
+  if (ok.rounds && M.rounds) {
+    rounds = M.rounds(a).slice(0, ok.rounds.length);
+    while (rounds.length < ok.rounds.length) rounds.push((rounds.at(-1) || a).slice());
+  }
   // 先猜：题面照抄正确的那一遍（外壳按题面找同一个问题），答案换成错法
   const steps = [{ view: { A: input.items.slice() }, msg: '' }];
   let k = 0;
@@ -123,7 +148,7 @@ function mistakeRun(input, ok) {
     k++;
     if (got) steps.push({ view: s.view, msg: '', ask: { ...s.ask, answer: got.join(' ') } });
   }
-  return { steps, passes };
+  return rounds ? { steps, passes, rounds } : { steps, passes };
 }
 const PASS_ASKS = ['pass', 'partition'];
 
@@ -136,12 +161,13 @@ function shiftMin(A, i) {
 }
 const shiftPasses = (a) => { const A = a.slice(), ps = []; for (let i = 0; i < A.length - 1; i++) ps.push(shiftMin(A, i).slice()); return ps; };
 
-// 快排的划分（下标从 0 数，返回枢轴落在哪）；quickPasses 和正确的一样：先左后右递归，只剩一个的区间不划分
-const quickPasses = (a, part) => {
-  const A = a.slice(), ps = [];
-  const sort = (lo, hi) => { if (lo >= hi) return; const p = part(A, lo, hi); ps.push(A.slice()); sort(lo, p - 1); sort(p + 1, hi); };
-  sort(0, A.length - 1);
-  return ps;
+// 快排的划分（下标从 0 数，返回枢轴落在哪）；quickWalk 和正确的一样：先左后右递归，只剩一个的区间不划分。
+// passes 是每一次划分以后，rounds 是每一层（真题的一趟，roundsOf）以后
+const quickWalk = (a, part) => {
+  const A = a.slice(), passes = [], log = [];
+  const sort = (lo, hi, d) => { if (lo >= hi) return; const p = part(A, lo, hi); passes.push(A.slice()); log.push({ d, lo, hi, after: A.slice() }); sort(lo, p - 1, d + 1); sort(p + 1, hi, d + 1); };
+  sort(0, A.length - 1, 1);
+  return { passes, rounds: roundsOf(a, log) };
 };
 function lastPartition(A, lo, hi) {
   const pivot = A[hi];
@@ -373,7 +399,8 @@ function selection(A) {
 // —— 快速排序（王道的 Partition：枢轴取 A[low]，high、low 轮流往中间走、填坑）——
 function quick(A) {
   const n = A.length;
-  const steps = [], passes = [];
+  const steps = [], passes = [], log = [];
+  const a0 = A.map(vOf);
   const fixed = new Set(); // 已经到最终位置的
   const fixedC = () => clsFor([...fixed], 'sv-done');
   steps.push({ view: { A: A.slice(), zero: { label: '枢轴', item: null } }, msg: '初始序列。王道的快速排序：每次划分取区间第一个元素作枢轴，high 从右往左找比它小的、low 从左往右找比它大的，轮流填坑，最后枢轴落到最终位置。' });
@@ -419,16 +446,18 @@ function quick(A) {
     });
     return l;
   };
-  const sort = (lo, hi) => {
+  // d：递归树第几层（真题说的第几趟，见 roundsOf）
+  const sort = (lo, hi, d) => {
     if (lo > hi) return;
     if (lo === hi) { fixed.add(lo); return; }
     const p = part(lo, hi);
-    sort(lo, p - 1);
-    sort(p + 1, hi);
+    log.push({ d, lo: lo - 1, hi: hi - 1, after: passes.at(-1) });
+    sort(lo, p - 1, d + 1);
+    sort(p + 1, hi, d + 1);
   };
-  sort(1, n);
+  sort(1, n, 1);
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done'), zero: { label: '枢轴', item: null } }, msg: `排序完成，一共划分了 ${count} 次（只剩一个元素的区间不用划分）。` });
-  return { steps, passes };
+  return { steps, passes, rounds: roundsOf(a0, log) };
 }
 
 // —— 二路归并排序（按趟：每段长 1、2、4……相邻两段归并）——
@@ -534,6 +563,21 @@ export function table(input, r) {
     dir: 'row',
     head: input.items.map((_, i) => `${i + 1}`),
     rows: r.passes.map((p, k) => ({ label: `第 ${k + 1} ${unit}${input.algo === 'shell' ? `（d = ${input.gaps[k]}）` : ''}`, cells: p.map((v) => ({ v: [String(v), `${v}′`, `${v}'`] })) })),
+  };
+}
+
+/**
+ * 快排按真题的「趟」填的表（检验的 trace 写 by: round）：一层划分做完一行，行名「第 k 趟」。
+ * r.rounds 是 run 的结果（错法那一遍也有），格子和 table 一样认 49、49′、49'
+ */
+export function roundTable(input, r) {
+  if (input.algo !== 'quick' || !r.rounds) return null;
+  return {
+    q: `对上面的序列做快速排序（升序，王道的划分方法：枢轴取区间第一个），写出每一趟结束后的序列（一趟：所有还没到最终位置的元素都处理一遍，也就是这一层的子表全部划分完）。`,
+    qhtml: arrayView(input.items, { pick: false }),
+    dir: 'row',
+    head: input.items.map((_, i) => `${i + 1}`),
+    rows: r.rounds.map((p, k) => ({ label: `第 ${k + 1} 趟`, cells: p.map((v) => ({ v: [String(v), `${v}′`, `${v}'`] })) })),
   };
 }
 

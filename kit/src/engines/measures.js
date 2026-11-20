@@ -20,7 +20,8 @@ import { itemText } from './arrayview.js';
 
 /** 每个引擎交出的量。`pass#` 是 pass1…passN，`cmp#` 是第几个操作的比较次数（堆） */
 export const MEASURES = {
-  sort: ['passes', 'pass#', 'final', 'cmp', 'move', 'swap', 'unstable', 'flipped'],
+  // 快排另有 rounds / round#：真题说的「趟」（一层划分做完，2019 年第 10 题的定义）；pass# 是第几次划分以后
+  sort: ['passes', 'pass#', 'rounds', 'round#', 'final', 'cmp', 'move', 'swap', 'unstable', 'flipped'],
   // 二叉排序树（bst:）：height leaves aslSucc；堆（heap:）：cmp cmp# swaps final pass#
   tree: ['height', 'leaves', 'aslSucc', 'cmp', 'cmp#', 'swaps', 'final', 'pass#'],
   // rot：调整几次（LR 算 1 次）；turns：单旋几次（LL、RR 1 次，LR、RL 2 次）
@@ -307,6 +308,10 @@ const MEASURERS = {
   sort(input, run) {
     const values = { passes: run.passes.length };
     passVals(run.passes, values);
+    if (run.rounds) {
+      values.rounds = run.rounds.length;
+      run.rounds.forEach((p, k) => { values[`round${k + 1}`] = p; });
+    }
     if (input.mistake) {
       // 错法那一遍只有每一趟的序列（引擎不演示错法），没有另数的比较和稳定性
       values.final = (run.passes.at(-1) || input.items.map((x) => x.v)).slice();

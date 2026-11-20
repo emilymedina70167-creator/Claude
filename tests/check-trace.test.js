@@ -64,7 +64,8 @@ test('第 2 趟写成了直接插入（一趟排完）：r1 ok、r2 false，why 
   const r = judgeMachine(SHELL, { cells: [row(R1), row(R3), row(R3)] });
   assert.equal(item(r, 'r1').ok, true);
   assert.equal(item(r, 'r2').ok, false);
-  assert.match(item(r, 'r2').why, /^第 2 趟（d = 2）第 1 格不对/);
+  // 每一格错的都列出来：写的、该是的（dr-plan4-fix 2）
+  assert.equal(item(r, 'r2').why, '第 2 趟（d = 2）第 1、2、3、4、5、6 格：你写的 13 27 38 49 49 65，应该是 27 13 49 38 65 49');
   // 第 3 趟 d = 1 怎么写都排得齐、「按上一行推」也对：但这一行整行做错了，不是笔误（笔误只认差一两格）
   assert.equal(item(r, 'r3').carried, true);
   assert.notEqual(item(r, 'r2').tag, 'slip');
@@ -83,7 +84,8 @@ test('第 1 趟换错一个数、后两趟照它推都对：r1 false、r2 r3 car
   assert.deepEqual(r.items.map((x) => [x.id, x.ok, !!x.carried]), [['r1', false, false], ['r2', true, true], ['r3', true, true]]);
   const e = item(r, 'r1');
   assert.equal(e.tag, 'slip');
-  assert.equal(e.why, '后面按你自己的上一行推都对，第 1 趟这一处写错了');
+  // 哪一处、写的什么、该是什么都说出来，笔误再接一句（dr-plan4-fix 2）
+  assert.equal(e.why, '第 1 趟（d = 4）第 7、8 格：你写的 97 65，应该是 65 97（后面按你自己的上一行推都对）');
   assert.equal(e.keys[0], 'slip');
   assert.ok(e.keys.includes('tag=slip'));
   assert.ok(e.keys.includes('r1'));
@@ -227,7 +229,7 @@ test('别的引擎：第一处错以后的行不列', () => {
   bad[3] = ['1', '2', '4', '√', '1'];
   const r = judgeMachine(opt, { cells: bad });
   assert.deepEqual(r.items.map((x) => [x.id, x.ok]), [['r1', true], ['r2', true], ['r3', true], ['r4', false]]);
-  assert.match(item(r, 'r4').why, /第 4 列「4」的「换出」不对/);
+  assert.equal(item(r, 'r4').why, '第 4 列「4」的「换出」：你写的 1，应该是 3');
   assert.equal(r.items.some((x) => x.carried), false);
 });
 

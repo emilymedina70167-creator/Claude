@@ -37,10 +37,11 @@ import { commandLine, instantiate, pickedText } from '../practicespec.js';
 import { calcValue, expandCalc, floatVars } from '../exact.js';
 import { MEASURES, measure, markDuplicates, variantsOf, variantValues } from '../engines/measures.js';
 import { ENGINES } from '../engines/registry.js';
+import { roundTable, sortAlgo } from '../engines/sort.js';
 import { fillSpec, checkFill, normCell, trackFields } from '../stepperspec.js';
 import { spaceOfId } from '../memory/space.js';
 import { parseBrackets, parseRoles, ROLES, findWrong, parseDecoys, parseAnswer, normText } from '../entext.js';
-import { bigO } from './values.js'; // values.js 也 import 这里：互相只在函数里用，不在模块顶层调用
+import { bigO, cleanInput, sameResult } from './values.js'; // values.js 也 import 这里：互相只在函数里用，不在模块顶层调用
 
 // 408、英语一的题型（计划 4，docs/superpowers/plans/2026-11-19-check-408-en.md）：trace predict code parse translate rewrite errfind 是新的，
 // tradeoff 是 recall 的别名、calc 是 solve 的别名（读法、判法照原来的，type 存自己的名字，BASE_OF / baseType）
@@ -93,8 +94,9 @@ const OWN = {
   recall: ['answer'],
   construct: ['slots', 'example', 'against'],
   predict: ['answer', 'against'],
-  // trace：use 写演示组件的名字，rows / given / cols 照 mode: fill（rows 还能写 2-3：只填第 2～3 行）；别的字段一律交给引擎
-  trace: ['use', 'against', 'rows', 'given', 'cols'],
+  // trace：use 写演示组件的名字，rows / given / cols 照 mode: fill（rows 还能写 2-3：只填第 2～3 行）；别的字段一律交给引擎。
+  // by: round 只给快排：按真题说的趟（一层划分做完）一行，不写是一次划分一行
+  trace: ['use', 'against', 'rows', 'given', 'cols', 'by'],
   claim: ['claim', 'truth', 'slots', 'example', 'proof', 'start', 'goal', 'vars'],
   // 英语的两个按钮（谓语 / 非谓语）：options: A | B + answer:，和 can: 只写一个
   discriminate: ['can', 'result', 'options', 'answer'],
@@ -177,8 +179,9 @@ function parseSlots(src) {
 
 const NUM_MARK = /^-?\d+(?:\.\d+)?['’′_]*$/;
 const stripBrackets = (raw) => String(raw ?? '').trim().replace(/^\[([\s\S]*)\]$/, '$1').trim();
-export const seqTokens = (raw) => stripBrackets(raw).split(/[\s,，、;；]+/).filter(Boolean);
-const procEntries = (raw) => stripBrackets(raw).split(/[;；\n]+|,(?=\s*[A-Za-z一-龥])/).map((x) => x.trim()).filter(Boolean);
+// 一排数、进程表读之前先全角转半角、去掉末尾的句号逗号（values.js 的 cleanInput：2 5 8。、４９ ３８）
+export const seqTokens = (raw) => stripBrackets(cleanInput(raw)).split(/[\s,，、;；]+/).filter(Boolean);
+const procEntries = (raw) => stripBrackets(cleanInput(raw)).split(/[;；\n]+|,(?=\s*[A-Za-z一-龥])/).map((x) => x.trim()).filter(Boolean);
 
 /**
  * 408 的格子学生写的格式对不对（只查格式：对了才交、才算第一次作答；格式对而引擎不收的另判没过）。
@@ -240,6 +243,10 @@ export function parseNamed(src, vars = {}, slots = []) {
 }
 
 const truthOf = (v, yes, no) => { const t = String(v ?? '').trim().toLowerCase(); if (yes.includes(t)) return true; if (no.includes(t)) return false; return null; };
+
+// predict 不写 run 时查有没有用到 r.faults 这样的量（引号里的是字、0.5 这种小数不算）
+const unquoted = (t) => String(t ?? '').replace(/"[^"]*"|“[^”]*”|「[^」]*」/g, ' ');
+const DOTTED = /\b[A-Za-z]\w*\.[A-Za-z_]\w*/;
 
 /**
  * 读一道探题（围栏里的内容）。返回 { probe } 或 { error }。
@@ -436,8 +443,13 @@ export function parseProbe(type, src) {
     Object.assign(probe, { lines, bug }, points(), f.fix ? { fix: f.fix } : {});
   }
   if (base === 'predict') {
-    if (!runs.length) return at('要写 run 行：run r: 引擎 字段=值 …（比如 run r: paging algo=lru frames=3 refs="1 2 3 4"）');
     if (!expects.length) return at('要写 expect：expect 缺页次数: r.faults（一行一个要学生写出来的结果）');
+    // 只问字面答案（expect 时间复杂度: O(n log n)）的不用 run 行；用到 r.… 的量、要认引擎的错法（against:）才要
+    if (!runs.length) {
+      const refs = expects.flatMap((e) => [e.value, ...e.wrongs.map((w) => w.expr)]).map(unquoted).find((t) => DOTTED.test(t));
+      if (refs !== undefined) return at(`要写 run 行：${refs.match(DOTTED)[0]} 是引擎跑出来的量（run r: 引擎 字段=值 …，比如 run r: paging algo=lru frames=3 refs="1 2 3 4"）`);
+      if (f.against !== undefined) return at('against: 要和 run 行一起写（认错法要照引擎再跑一遍）；不写 run 的 predict 认错答案用 wrong w1: 值 => 说明');
+    }
     Object.assign(probe, { expects, against: list(f.against) }, points(), f.answer ? { answer: f.answer } : {});
   }
   if (base === 'trace') {
@@ -456,6 +468,11 @@ export function parseProbe(type, src) {
     }
     if (f.given !== undefined) fill.given = f.given;
     if (f.cols !== undefined) fill.cols = f.cols;
+    if (f.by !== undefined) {
+      if (!/^(rounds?|趟)$/i.test(String(f.by).trim())) return at(`by: 只能写 round（快排按真题说的趟：一层划分做完一行；不写是一次划分一行），现在是「${f.by}」`);
+      if (use !== 'sort' || sortAlgo(efields.algo ?? efields.algorithm) !== 'quick') return at('by: round 只给快排（use: sort、algo: quick）：别的排序一趟本来就是一行');
+      fill.by = 'round';
+    }
     Object.assign(probe, { use, fields: efields, fill, against: list(f.against) });
   }
   if (base === 'solve') {
@@ -692,6 +709,7 @@ export function measureKnown(engine, name) {
 // run 的字段值写的是格子名：换成学生写的原文（[ ] 去掉；seq 的分隔统一成空格，撇号留着给 markDuplicates）
 function fieldOf(slot, raw) {
   if (slot.kind === 'seq') return seqTokens(raw).join(' ');
+  if (slot.kind === 'procs') return stripBrackets(cleanInput(raw));
   if (STR_KINDS.has(slot.kind)) return stripBrackets(raw);
   return String(raw ?? '');
 }
@@ -781,7 +799,7 @@ function condOk(text, scope, values, kinds, runNames) {
   const isStrSlot = (side) => STR_KINDS.has(kinds[side]);
   const val = (side) => {
     if (QUOTED.test(side)) return side.slice(1, -1);
-    if (isStrSlot(side)) return values[side];
+    if (isStrSlot(side)) return kinds[side] === 'seq' && typeof values[side] === 'string' ? seqTokens(values[side]).join(' ') : values[side];
     return compile(runRefs(side, runNames))(scope);
   };
   if (sp.op === 'in') {
@@ -1032,36 +1050,99 @@ function codeProblems(p) {
   return res.flatMap((r, i) => (r.ok ? [] : [`ref（参考解法）过不了自己的测试 t${i + 1}：${r.error || (r.diff || []).map((d) => `${d.what} 想要 ${d.want}，得到 ${d.got}`).join('；')}`]));
 }
 
+// C-SCAN / C-LOOK 跳回去的那一段算不算距离，各书不一样（引擎不写 jump: 时不算）：用到距离的题不猜，要写明
+export const JUMP_MSG = '写明 jump: count 或 jump: skip，题面也写清楚跳回去算不算';
+const jumpAlgo = (algo) => /^c-?(scan|look)$/i.test(String(algo ?? '').trim());
+
 // run 行自己的：引擎交不交量、题里用到的量是不是这个引擎的
 function runProblems(p) {
   const out = [];
   for (const r of p.runs || []) if (!MEASURES[r.engine]) out.push(`run ${r.name} 的引擎 ${r.engine} 不交量：run 只认 ${Object.keys(MEASURES).join('、')}`);
   if (out.length) return out;
-  const engineOf = Object.fromEntries((p.runs || []).map((r) => [r.name, r.engine]));
+  const runOf = Object.fromEntries((p.runs || []).map((r) => [r.name, r]));
+  const slotNames = new Set((p.slots || []).map((x) => x.name));
   for (const u of measuresUsed(p)) {
-    const e = engineOf[u.run];
-    if (!measureKnown(e, u.name)) out.push(`${u.key} 不是 ${e} 的量：${u.run}（${e}）的量有 ${MEASURES[e].join('、')}（pass#、cmp# 写成 pass2、cmp1）`);
+    const r = runOf[u.run], e = r.engine;
+    if (!measureKnown(e, u.name)) { out.push(`${u.key} 不是 ${e} 的量：${u.run}（${e}）的量有 ${MEASURES[e].join('、')}（pass#、cmp# 写成 pass2、cmp1）`); continue; }
+    const algo = r.fields.algo ?? r.fields.algorithm;
+    const literal = algo !== undefined && !slotNames.has(algo);
+    // rounds / round# 只有快排有（别的排序一趟就是 pass#）；algo 是学生写的格子时页面跑出来没有就是待核
+    // 没写 algo：跑不起来以外，也说清 round# 要的是快排（不然外部补一个别的 algo 又撞上一条）
+    if (e === 'sort' && /^round(s|\d+)$/.test(u.name) && algo === undefined) out.push(`${u.key}：round# 只有快排有：写 algo: quick（别的排序一趟就是 pass#）`);
+    if (e === 'sort' && /^round(s|\d+)$/.test(u.name) && literal && sortAlgo(algo) !== 'quick') out.push(`${u.key}：round#、rounds 只有快排有（真题说的趟：一层划分做完），别的排序一趟就是 pass#`);
+    // algo 写成格子（学生自己选）也算：学生选了 C-SCAN 一样说不清
+    if (e === 'disk' && (u.name === 'dist' || u.name === 'avg') && r.fields.jump === undefined && (jumpAlgo(algo) || (algo !== undefined && slotNames.has(algo)))) {
+      out.push(`run ${u.run}（disk algo=${algo}）用到 ${u.key}：C-SCAN / C-LOOK 跳回去的距离算不算各书不一样，${JUMP_MSG}（run 行写 jump=count 或 jump=skip）`);
+    }
   }
-  return out;
+  return [...new Set(out)];
 }
 
 // 写成 O(…) 的复杂度页面读不懂：学生写对了也判不过（values.js 的 valueMatch 退回去比字），交之前报给外部
 const O_UNREAD = '复杂度写法页面读不懂：写成 O(n log n)、O(n^2) 这样化简后的';
 const oUnread = (v) => typeof v === 'string' && /^\s*[oOΘθ]\s*[(（]/.test(v) && bigO(v) === null;
 
+// 一个 run 的错法：[{ key, label, vars, ties }]（vars 是把这个 run 的量换成错法算出来的那一份）；against 写了只要那几种
+export function variantVars(probe, run, vars) {
+  let list;
+  const fields = runFields(probe, run, {});
+  try { list = variantsOf(run.engine, fields); } catch { return []; }
+  const want = probe.against || [];
+  return list.filter((v) => !want.length || want.includes(v.key)).flatMap((v) => {
+    let vv;
+    try { vv = variantValues(run.engine, fields, v.key); } catch { return []; }
+    if (!vv) return [];
+    const out = { ...vars };
+    for (const k of Object.keys(out)) if (k.startsWith(`${run.name}__`)) delete out[k]; // 错法没交的量不拿对的顶上
+    for (const [k, x] of Object.entries(vv.values)) out[`${run.name}__${k}`] = x;
+    return [{ key: v.key, label: v.label, vars: out, ties: vv.ties.map((t) => `${run.name}.${t}`) }];
+  });
+}
+
+/**
+ * 一个 expect 的每一种诊断在这组数上算出来的值：[{ kind: 'tag' | 'hit', key, label, msg?, value }]。
+ * 引擎的错法（against 写了只要那几种；用到并列的、和对的一样的不要）在前，外部写的错答案（wrong w1: 式子 => 说明）在后。
+ * 判（judge.js 的 predictItems）和自检（predictProblems：两种诊断答案一样要报）都用这一份，认的是同一批。
+ * allVariants：每个 run 的错法 [{ run, list: variantVars(…) }]，判的时候几个 expect 共用一份（错法要把引擎再跑几遍）
+ */
+export function diagnosesOf(probe, e, right, vars, { names = (probe.runs || []).map((r) => r.name), allVariants } = {}) {
+  const all = allVariants ? allVariants() : (probe.runs || []).map((run) => ({ run: run.name, list: variantVars(probe, run, vars) }));
+  const out = [];
+  const usedM = measuresUsed({ runs: probe.runs, expects: [{ value: e.value, wrongs: [] }] });
+  const used = new Set(usedM.map((x) => x.run));
+  for (const { run, list } of all) {
+    if (!used.has(run)) continue;
+    for (const v of list) {
+      if (usedM.some((m) => v.ties.includes(m.key))) continue;
+      let wv;
+      try { wv = expectValue(e.value, v.vars, names); } catch { continue; }
+      if (wv === undefined || sameResult(wv, right)) continue;
+      if (!out.some((x) => x.key === v.key)) out.push({ kind: 'tag', key: v.key, label: v.label, value: wv });
+    }
+  }
+  for (const w of e.wrongs || []) {
+    let wv;
+    try { wv = expectValue(w.expr, vars, names); } catch { continue; }
+    if (wv === undefined || sameResult(wv, right)) continue;
+    out.push({ kind: 'hit', key: w.id, label: w.msg || w.id, msg: w.msg || '', value: wv });
+  }
+  return out;
+}
+
 // predict：照固定的字段跑一遍，每个 expect、wrong 的式子都算得出来；用到的量没有并列；against 的错法在、这组数分得开
 function predictProblems(p, base, tieLines, soft = new Set()) {
   const out = [];
+  const again = (m) => (soft.add(m), m); // 靠这组数的：模板重取
   const rv = runVars(p, {}, base);
   if (rv.error) return [`run ${rv.error.run} 跑不了：${rv.error.msg}`];
   out.push(...tieLines(rv.ties, ''));
-  const names = p.runs.map((r) => r.name);
+  const names = (p.runs || []).map((r) => r.name);
   const right = {};
   // 少写了「r.」的量名（expect 缺页: faults）会被当成字面的字，判的时候永远对不上：报出来
   const bare = (text) => {
     const plain = String(text ?? '').replace(/"[^"]*"|“[^”]*”|「[^」]*」/g, ' '); // 引号里的是字，不查
     for (const m of plain.matchAll(/(?<![.\w])([A-Za-z_]\w*)/g)) {
-      const run = p.runs.find((r) => measureKnown(r.engine, m[1]));
+      const run = (p.runs || []).find((r) => measureKnown(r.engine, m[1]));
       if (run && rv.vars[m[1]] === undefined) return `${m[1]} 是量的名字：写 ${run.name}.${m[1]}`;
     }
     return null;
@@ -1081,9 +1162,21 @@ function predictProblems(p, base, tieLines, soft = new Set()) {
       if (oUnread(wv)) out.push(`wrong ${w.id}「${wv}」：${O_UNREAD}`);
     }
   }
-  if (!p.against?.length) return out;
+  // 几种诊断（引擎的错法、wrong … =>）在这组数上答案一样：学生写这个值时页面分不清是哪一种（判的时候都记、不挑一种补讲）。
+  // 和 against 分不开一样靠这组数：模板重取
+  for (const e of p.expects) {
+    if (!(e.id in right)) continue;
+    const groups = [];
+    // 话里外部写的错答案（w1）排在引擎的错法前面
+    const ds = diagnosesOf(p, e, right[e.id], rv.vars, { names });
+    for (const d of [...ds.filter((x) => x.kind === 'hit'), ...ds.filter((x) => x.kind === 'tag')]) {
+      const g = groups.find((x) => sameResult(x.value, d.value));
+      if (g) g.keys.push(d.key); else groups.push({ value: d.value, keys: [d.key] });
+    }
+    for (const g of groups) if (g.keys.length > 1) out.push(again(`${e.id} 上 ${g.keys.slice(0, -1).join('、')} 和 ${g.keys.at(-1)} 的答案一样（学生写 ${String(g.value)} 时页面分不清是哪一种：换一组数，或者 against: 只留一种）`));
+  }
+  if (!p.against?.length || !p.runs?.length) return out;
   // 错法照第一个 run 认：换成那种错法跑出来的量，看有没有哪一个 expect 和对的不一样
-  const again = (m) => (soft.add(m), m); // 靠这组数的：模板重取
   const r0 = p.runs[0];
   const fields = runFields(p, r0, {});
   let keys = [];
@@ -1152,11 +1245,13 @@ export function traceTable(probe) {
   const tracked = trackFields(raw);
   const input = engine.parse(tracked.fields, '');
   const run = engine.run(input);
-  const full = engine.table(input, run, tracked.fields);
+  const fill = probe.fill || {};
+  // by: round：快排一层划分做完一行（真题说的趟），错法那几张也照层出
+  const tableOf = (inp, r) => (fill.by === 'round' ? roundTable(inp, r) : engine.table(inp, r, tracked.fields));
+  const full = tableOf(input, run);
   if (!full) throw new Error(`${use} 这组字段没有填表（换一种写法，或者用 predict 问结果）`);
   const unit = full.dir === 'col' ? '列' : '行';
   const spec = {};
-  const fill = probe.fill || {};
   if (fill.rows) {
     if (fill.rows.to > full.rows.length) throw specError(`rows: 写到第 ${fill.rows.to} ${unit}，这张表只有 ${full.rows.length} ${unit}`);
     spec.rows = String(fill.rows.to);
@@ -1173,7 +1268,7 @@ export function traceTable(probe) {
   try { list = variantsOf(use, probe.fields); } catch { list = []; }
   for (const v of list) {
     try {
-      const vt = engine.table(v.input, engine.run(v.input), tracked.fields);
+      const vt = tableOf(v.input, engine.run(v.input));
       if (vt) variants.push({ key: v.key, label: v.label, table: fillSpec(vt, spec).table });
     } catch { /* 这种错法在这组数上算不了 */ }
   }
@@ -1187,6 +1282,17 @@ export function traceTable(probe) {
   const out = { table, variants, ties, input, unknown: tracked.unknown() };
   traceCache.set(probe, out);
   return out;
+}
+
+// 数字键盘：整张表要填的格的答案全是不带符号的整数（排序没有 49′、页号、块号）才给 inputmode="numeric"。
+// 按整张表定、不按一格定：一格一格定的话，哪一格弹字母键盘就等于告诉学生 49′ 落在哪儿。
+// iPad 的数字键盘打不出「-」「′」，答案里有负数、49′、字母的表一律用默认键盘；表下面那几格（缺页率这种，可能写分数）也用默认的
+/** 填表（filltable.js）给不给数字键盘 */
+export function numericTable(t) {
+  const want = t.rows.flatMap((row) => row.cells.filter((c) => !c.given && !c.mark).map((c) => [].concat(c.v)[0])); // 只看标准答案（排序的格另收 1′ 这种写法）
+  // 一行里有相同的数（排序的 49 和 49′：标准答案都记成 49，学生会想写 49′ 分开）也用默认键盘
+  const twins = t.rows.some((row) => { const xs = row.cells.map((c) => String([].concat(c.v)[0] ?? '').trim()).filter(Boolean); return new Set(xs).size < xs.length && row.cells.some((c) => [].concat(c.v).some((x) => /['′]/.test(String(x)))); });
+  return !twins && want.length > 0 && want.every((v) => /^\d+$/.test(String(v ?? '').trim()) || String(v ?? '').trim() === '');
 }
 
 /** 这张表的第 k 个要填的行（r1、r2…从 1 数，只数有要填的格的行）：[{ r（table.rows 的下标）, id }] */
@@ -1216,6 +1322,9 @@ function traceProblems(p, soft = new Set()) {
     return [`${p.use} 的字段读不懂：${e.message}${lost.length ? `（${lost.join('；')}）` : ''}`];
   }
   const out = [...T.unknown];
+  // 和 runProblems 一样认 algo、algorithm 两种写法
+  const dAlgo = p.fields?.algo ?? p.fields?.algorithm;
+  if (p.use === 'disk' && jumpAlgo(dAlgo) && p.fields?.jump === undefined) out.push(`trace 的 disk（algo: ${dAlgo}）要填移动距离：C-SCAN / C-LOOK 跳回去的距离算不算各书不一样，${JUMP_MSG}`);
   const tied = traceRows(T.table).filter((x) => T.ties.includes(x.r));
   if (tied.length) {
     const first = tied[0].r;

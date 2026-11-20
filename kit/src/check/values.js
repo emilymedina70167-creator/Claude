@@ -5,13 +5,32 @@
 //   - 复杂度：O(nlogn)、O(n log₂n)、O(nlgn)、O(n log n) 一样；O(n^2)、O(n²)、O(n*n) 一样
 //   - 序列、字：照 spec.js 的 normTokens（不管空格逗号括号大小写撇号，相同的数后出现的记成 49′）
 // 读不懂的是 null：调用方写「读不懂」判没过（格式不对本来在交之前就挡住了），不当成过。
+//   - 读之前先 cleanInput：全角转半角（NFKC：iPad 中文键盘打出来的 ０.６、3／5），去掉末尾的 。.，,；;（0.6。、12,、2 5 8。）；
+//     交之前（expectProblems、slotProblems）和判的时候用同一个，交之前挡得住的判的时候也读得懂
 import { normTokens } from './spec.js';
+
+const SUP_RUN = /[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ]+/g;
+const SUP_OF = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', 'ⁿ': 'n' };
+
+/**
+ * 全角转半角（NFKC）。上标先写成 ^…（NFKC 会把 n² 变成 n2、2ⁿ 变成 2n，复杂度就读错了）；½ 拆出来的分数斜线 ⁄ 换成 /
+ */
+export function halfWidth(text) {
+  return String(text ?? '').replace(SUP_RUN, (m) => `^${[...m].map((c) => SUP_OF[c]).join('')}`).normalize('NFKC').replace(/⁄/g, '/');
+}
+
+/** 学生写的数、序列、复杂度读之前：全角转半角，去掉首尾空白和末尾的 。.，,；;（去完什么都不剩就留着原样，照旧读不懂） */
+export function cleanInput(text) {
+  const s = halfWidth(text).trim();
+  const t = s.replace(/[\s。.，,；;、]+$/u, '');
+  return t || s;
+}
 
 const exactly = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 
 // 学生写的数：{ v: 值, digits: 小数位数（百分数换成小数以后数）, sig: 有效数字几位, frac: 是不是分数 }；读不懂 null
 function readNum(student) {
-  const s = String(student ?? '').trim().replace(/\s*([/%％])\s*/g, '$1').replace(/[−–—]/g, '-').replace(/％/g, '%').replace(/．/g, '.');
+  const s = cleanInput(student).replace(/\s*([/%％])\s*/g, '$1').replace(/[−–—]/g, '-').replace(/％/g, '%').replace(/．/g, '.');
   let m;
   // 有效数字：去掉小数点、去掉开头的 0（末尾的 0 算），百分数换成小数不变
   const sigOf = (int, dec) => `${int}${dec}`.replace(/^0+/, '').length;
@@ -37,8 +56,6 @@ export function numMatch(student, value) {
 }
 
 // —— 复杂度 ——
-
-const SUP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', 'ⁿ': 'n' };
 
 // 一项（没有 +）的规范写法：变量带次数按字母排、log 因子按字母排、2^n 和 n! 另列；系数不要；什么都没有是 1。读不懂 null。
 // 数只认在一项的开头（系数 2n、底数 2^n）：跟在变量、log 后面的数（n2 是 n² 写漏了 ^ 还是 n·2？）读不懂，不当成系数放过
@@ -71,10 +88,9 @@ function termOf(t) {
 
 /** 复杂度的规范写法（O(nlogn)、O(n^2)、O(e+n)）；O( ) 不写也认；读不懂 null */
 export function bigO(text) {
-  let s = String(text ?? '').trim();
+  let s = cleanInput(text);
   if (!s) return null;
   s = s.replace(/[\s*·×⋅{}|]/g, '').replace(/（/g, '(').replace(/）/g, ')');
-  s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ]+/g, (m) => `^${[...m].map((c) => SUP[c]).join('')}`);
   const m = /^[oOΘθ]\((.*)\)$/.exec(s);
   let body = (m ? m[1] : s).toLowerCase();
   if (!body) return null;
@@ -91,8 +107,9 @@ export function bigO(text) {
 const looksBigO = (v) => typeof v === 'string' && /^\s*[oOΘθ]\s*[(（]/.test(v) && bigO(v) !== null;
 
 /** 两个序列一样不一样（normTokens 以后）；set：先后不论 */
+const cleanSide = (v) => (typeof v === 'string' ? cleanInput(v) : v);
 export function seqMatch(a, b, { set = false } = {}) {
-  let x = normTokens(a), y = normTokens(b);
+  let x = normTokens(cleanSide(a)), y = normTokens(cleanSide(b));
   if (set) { x = [...x].sort(); y = [...y].sort(); }
   return x.length === y.length && x.every((t, i) => t === y[i]);
 }
@@ -107,8 +124,26 @@ export function valueMatch(student, value) {
     const s = bigO(student);
     return s === null ? null : s === bigO(value);
   }
-  if (String(student ?? '').trim() === '') return false;
+  if (cleanInput(student) === '') return false;
   return seqMatch(student, value);
+}
+
+const NUM_TOK = /^-?\d+(?:\.\d+)?′*$/;
+// 对的值是一串数（7 1 0、[7, 0, 1]、只有一个数的数组）：学生写的也要每个都是数
+const numSeq = (v) => typeof v !== 'number' && !looksBigO(v) && (() => { const t = normTokens(cleanSide(v)); return t.length > 0 && t.every((x) => NUM_TOK.test(x)); })();
+
+/**
+ * 交之前：学生写的读不读得懂（按对的值的样子：数、复杂度、一串数）。读得懂（或没写、或是字）是 ''，读不懂是要说的话。
+ * 不说要写几个（换出的页有几个就等于说了缺页数）
+ */
+export function readProblem(student, value, label = '') {
+  const s = cleanInput(student);
+  if (!s) return '';
+  const name = `「${label}」`;
+  if (typeof value === 'number') return readNum(s) ? '' : `${name}只写数（分数、小数、百分数），不写单位`;
+  if (looksBigO(value)) return bigO(s) !== null ? '' : `${name}写成 O(n^2) 这样`;
+  if (numSeq(value)) return normTokens(s).every((x) => NUM_TOK.test(x)) ? '' : `${name}写一串数，用空格或逗号隔开`;
+  return '';
 }
 
 /** 读不懂时那一项写什么（按值的样子） */

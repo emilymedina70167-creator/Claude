@@ -9,11 +9,11 @@ import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { compareFx, DEFAULT_RANGE } from '../fx/sample.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
-import { baseType, probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, runRefs, slotScope, traceTable, traceRows, traceRowName, rewriteHits } from './spec.js';
+import { baseType, probeVars, evalIfs, withDefaults, runVars, measuresUsed, expectValue, runRefs, slotScope, traceTable, traceRows, traceRowName, rewriteHits, diagnosesOf, variantVars } from './spec.js';
 import { ROLES, matchText, diagnose, normText, joinWords, spanText, tokenizeSentence } from '../entext.js';
-import { variantsOf, variantValues, sortPass } from '../engines/measures.js';
+import { sortPass } from '../engines/measures.js';
 import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
-import { valueMatch, sameResult, unreadWhy } from './values.js';
+import { valueMatch, sameResult, unreadWhy, halfWidth, readProblem } from './values.js';
 import { parseJudge, STEP_KINDS, STEP_TAGS } from '../solvespec.js';
 import { parseCodeSpec, runTests } from '../codejudge.js';
 
@@ -23,7 +23,9 @@ export function blankCells(v) {
   return v === null || v === undefined || String(v).trim() === '' ? 1 : 0;
 }
 
-const readable = (x) => { try { readCell(x); return true; } catch { return false; } };
+// 格子里写的先全角转半角（iPad 中文键盘的 １/２），再照 anscheck 的 readCell 读
+const readCellHalf = (x) => readCell(typeof x === 'string' ? halfWidth(x) : x);
+const readable = (x) => { try { readCellHalf(x); return true; } catch { return false; } };
 
 /**
  * 交之前还差什么（构造题、判假的反例）：没填的格、读不懂的格（「1/」这种）、空着的式子框。'' 是能交了。
@@ -41,7 +43,7 @@ export function notReady(probe, answer = {}) {
 }
 
 // 学生格子里写的（'1/2'、'√2'、数）→ 数
-const cellNum = (x) => (Array.isArray(x) ? x.map(cellNum) : typeof x === 'number' ? x : Number(readCell(x)));
+const cellNum = (x) => (Array.isArray(x) ? x.map(cellNum) : typeof x === 'number' ? x : Number(readCellHalf(x)));
 
 const close = (a, b) => {
   if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => close(x, b[i]));
@@ -172,26 +174,37 @@ function runExprItem(probe, e, exprs, raw, rv, names) {
   return m === true ? { id: e.id, ok: true, why: '' } : { id: e.id, ok: false, why: m === null ? unreadWhy(right) : `${e.label}不对` };
 }
 
-// 一个 run 的错法：[{ key, label, vars }]（vars 是把这个 run 的量换成错法算出来的那一份）；against 写了只要那几种
-function variantVars(probe, run, vars) {
-  let list;
-  const fields = runFields(probe, run, {});
-  try { list = variantsOf(run.engine, fields); } catch { return []; }
-  const want = probe.against || [];
-  return list.filter((v) => !want.length || want.includes(v.key)).flatMap((v) => {
-    let vv;
-    try { vv = variantValues(run.engine, fields, v.key); } catch { return []; }
-    if (!vv) return [];
-    const out = { ...vars };
-    for (const k of Object.keys(out)) if (k.startsWith(`${run.name}__`)) delete out[k]; // 错法没交的量不拿对的顶上
-    for (const [k, x] of Object.entries(vv.values)) out[`${run.name}__${k}`] = x;
-    return [{ key: v.key, label: v.label, vars: out, ties: vv.ties.map((t) => `${run.name}.${t}`) }];
-  });
+// 每道题对的值算一次（交之前每打一个字都要查）：probe → { base, rights }
+const RIGHTS = new WeakMap();
+function expectRights(probe, base) {
+  const hit = RIGHTS.get(probe);
+  if (hit && hit.base === base) return hit.rights;
+  const rights = {};
+  let rv;
+  try { rv = runVars(probe, {}, base); } catch { rv = { error: true }; }
+  if (!rv.error) for (const e of probe.expects || []) { try { rights[e.id] = expectValue(e.value, rv.vars, runNames(probe)); } catch { /* 算不了的这一项不挡，判的时候待核 */ } }
+  RIGHTS.set(probe, { base, rights });
+  return rights;
+}
+
+/**
+ * predict 交之前还差什么（和 construct 的 slotProblems 一样，挡住的不算第一次作答）：没写的、读不懂的（照对的值的样子：
+ * 数带了单位、复杂度写成 O(n2)、一串数里夹了字）。全角、末尾的句号逗号不挡（values.js 的 cleanInput 读得懂）。[] 是能交了
+ */
+export function expectProblems(probe, got = {}, base = {}) {
+  const rights = expectRights(probe, base);
+  return (probe.expects || []).map((e) => {
+    const s = String(got?.[e.id] ?? '').trim();
+    if (!s) return `「${e.label}」还没写`;
+    return Object.hasOwn(rights, e.id) ? readProblem(s, rights[e.id], e.label) : '';
+  }).filter(Boolean);
 }
 
 /**
  * predict：每个 expect 一项（x1…）。不对时依次认：引擎的错法（against 的，没写看全部）→ tag、why 是错法的说法；
  * 外部写的错答案（wrong w1: 式子 => 说明）→ hit、why 是说明；错法、错答案这组数上算出来和对的一样的不用。
+ * 几种诊断都对得上（这组数上答案一样）→ tags 全记、why「这几种错法在这组数上答案一样：…」、keys [x1, default]，不挑一种；
+ * 认出来的都带 tagFit: 'exact'（值一模一样）。
  * 不对的项带 keys（补讲照它找：tag=… → w1 → x1）。有一项不对就停下；都对、写了 must → 理由交页面里的 Claude
  */
 function predictItems(probe, answer = {}, base = {}) {
@@ -214,23 +227,15 @@ function predictItems(probe, answer = {}, base = {}) {
     if (m === true) return { id: e.id, ok: true, why: '' };
     if (m === null) return { id: e.id, ok: false, why: unreadWhy(right), keys: [e.id] };
     const it = { id: e.id, ok: false, why: '' };
-    const used = new Set(measuresUsed({ runs: probe.runs, expects: [{ value: e.value, wrongs: [] }] }).map((x) => x.run));
-    for (const { run, list } of allVariants()) {
-      if (!used.has(run) || it.tag) continue;
-      for (const v of list) {
-        if (tiedIn(probe, [e.value], v.ties)) continue;
-        let wv;
-        try { wv = expectValue(e.value, v.vars, names); } catch { continue; }
-        if (sameResult(wv, right)) continue;
-        if (valueMatch(s, wv) === true) { it.tag = v.key; it.why = v.label; break; }
-      }
+    const hits = diagnosesOf(probe, e, right, rv.vars, { names, allVariants }).filter((d) => valueMatch(s, d.value) === true);
+    if (hits.length > 1) {
+      // 几种诊断在这组数上答案一样（OPT 和「没算一开始调入」、外部写的 r.faults - 3 都是 9）：分不清是哪一种，都记下、不挑一种补讲
+      Object.assign(it, { tags: hits.map((d) => d.key), tagFit: 'exact', why: `这几种错法在这组数上答案一样：${hits.map((d) => d.label).join('；')}`, keys: [e.id, 'default'] });
+      return it;
     }
-    for (const w of e.wrongs || []) {
-      let wv;
-      try { wv = expectValue(w.expr, rv.vars, names); } catch { continue; }
-      if (sameResult(wv, right)) continue;
-      if (valueMatch(s, wv) === true) { it.hit = w.id; it.why = it.why || w.msg; break; }
-    }
+    const [d] = hits;
+    if (d?.kind === 'tag') Object.assign(it, { tag: d.key, why: d.label, tagFit: 'exact' });
+    if (d?.kind === 'hit') Object.assign(it, { hit: d.key, why: d.msg, tagFit: 'exact' });
     if (!it.why) it.why = `${e.label}不对`;
     it.keys = [...(it.tag ? [`tag=${it.tag}`] : []), ...(it.hit ? [it.hit] : []), e.id];
     return it;
@@ -252,9 +257,86 @@ const plainNum = (x) => { const t = String(x ?? '').trim().replace(/['’′_]+$
 // 不加这一条的话倒数第二趟整行做错（第 2 趟当成直接插入一趟排完）后面也「按上一行推都对」，会被说成笔误
 const nearMiss = (row, mine) => row.cells.filter((c, j) => !c.given && !cellOk(c, mine?.[j] ?? '')).length <= 2;
 
-function traceItems(probe, answer = {}) {
+// 一行里哪几格不对（按判分的单位：一格，或一组不管先后的几格）：[{ c, mine, want, empty }]。
+// 一组格子（页框这样的 group）先把写对了的值消掉，剩下写的不在里面的格就是错的，「应该是」照剩下没对上的值依次给
+function rowDiff(table, r, mine) {
+  const row = table.rows[r];
+  const out = [];
+  const seen = new Set();
+  const want0 = (c) => [].concat(c.v)[0];
+  row.cells.forEach((cell, j) => {
+    if (cell.given) return;
+    const s = String(mine?.[j] ?? '');
+    if (cell.group === undefined) {
+      if (cellOk(cell, s)) return;
+      out.push({ c: j, mine: s.trim(), want: cell.mark ? (normCell(want0(cell)) ? '√' : '') : String(want0(cell) ?? ''), empty: !cell.mark && normCell(s) === '', mark: !!cell.mark });
+      return;
+    }
+    if (seen.has(cell.group)) return;
+    seen.add(cell.group);
+    const idx = row.cells.map((x, i) => (x.group === cell.group && !x.given ? i : -1)).filter((i) => i >= 0);
+    const left = row.cells.filter((x) => x.group === cell.group).map((x) => String(want0(x) ?? '')).filter((x) => normCell(x) !== '');
+    for (const x of row.cells.filter((y) => y.group === cell.group && y.given)) { const k = left.findIndex((w) => normCell(w) === normCell(want0(x))); if (k >= 0) left.splice(k, 1); }
+    const bad = idx.filter((i) => {
+      const v = normCell(mine?.[i] ?? '');
+      if (!v) return true;
+      const k = left.findIndex((w) => normCell(w) === v);
+      if (k < 0) return true;
+      left.splice(k, 1);
+      return false;
+    });
+    // 空着而且这一组本来就不该再有值的格不算错（组里的值比格子少）
+    for (const i of bad) {
+      const s = String(mine?.[i] ?? '');
+      const empty = normCell(s) === '';
+      const want = left.length ? left.shift() : '';
+      if (empty && !want) continue;
+      out.push({ c: i, mine: s.trim(), want, empty });
+    }
+  });
+  return out.sort((a, b) => a.c - b.c);
+}
+
+// 一行错在哪的话：「第 1 趟（d = 4）第 7、8 格：你写的 23 16，应该是 16 23」；空着的另说「第 3 格还空着」；整行空着「第 2 趟还空着」
+function rowDiffWhy(table, r, diff) {
+  const name = traceRowName(table, r);
+  const fill = table.rows[r].cells.filter((c) => !c.given && !c.mark);
+  if (fill.length && diff.filter((d) => d.empty).length >= fill.length) return `${name}还空着`;
+  const colName = (c) => { const h = table.head?.[c]; return /^\d+$/.test(String(h ?? '')) ? { n: String(h) } : h !== undefined && h !== '' ? { l: String(h) } : { n: String(c + 1) }; };
+  const cols = (ds) => {
+    const xs = ds.map((d) => colName(d.c));
+    if (xs.every((x) => x.n)) return `第 ${xs.map((x) => x.n).join('、')} 格`;
+    return `的${xs.map((x) => (x.n ? `第 ${x.n} 格` : `「${x.l}」`)).join('、')}`;
+  };
+  const list = (ds, key) => { const vs = ds.map((d) => (d[key] === '' ? '（空）' : d[key])); return vs.some((v) => /\s/.test(v)) ? vs.map((v) => `「${v}」`).join('') : vs.join(' '); };
+  // 打勾的格不说「你写的 空」：说该不该打勾
+  const written = diff.filter((d) => !d.empty && !d.mark), blank = diff.filter((d) => d.empty);
+  const tick = diff.filter((d) => d.mark && d.want), untick = diff.filter((d) => d.mark && !d.want);
+  const parts = [];
+  const more = (t) => (parts.length ? t.replace(/^的/, '') : t);
+  if (written.length) parts.push(`${cols(written)}：你写的 ${list(written, 'mine')}，应该是 ${list(written, 'want')}`);
+  if (blank.length) parts.push(`${more(cols(blank))}还空着`);
+  if (tick.length) parts.push(`${more(cols(tick))}该打勾`);
+  if (untick.length) parts.push(`${more(cols(untick))}不该打勾`);
+  return `${name}${parts.join('；') || '不对'}`;
+}
+
+function traceItems(probe, answer = {}) { return traceJudge(probe, answer).res; }
+
+/**
+ * 没过的那一屏重画学生交的表用（shell.js）：{ table, cells（统一过撇号的作答）, bad: Set('r:c')（错的格）, badExtra: Set(i), faint: Set(r)（按自己的上一行推对了的行） }；
+ * 不是 trace、页面跑不了引擎回 null
+ */
+export function traceReview(probe, answer = {}) {
+  if (baseType(probe) !== 'trace') return null;
+  const j = traceJudge(probe, answer);
+  return j.table ? { table: j.table, cells: j.cells, bad: j.bad, badExtra: j.badExtra, faint: j.faint } : null;
+}
+
+function traceJudge(probe, answer = {}) {
   let T;
-  try { T = traceTable(probe); } catch (e) { return { items: [{ id: 'run', ok: null, why: `页面跑不了：${e.message}` }], needsClaude: false, stop: true }; }
+  const marks = { bad: new Set(), badExtra: new Set(), faint: new Set() };
+  try { T = traceTable(probe); } catch (e) { return { res: { items: [{ id: 'run', ok: null, why: `页面跑不了：${e.message}` }], needsClaude: false, stop: true } }; }
   const { table, ties, input } = T;
   const sort = probe.use === 'sort';
   const raw = answer.cells || [];
@@ -279,13 +361,16 @@ function traceItems(probe, answer = {}) {
     if (!items.some((x) => x.ok === null)) (table.extra || []).forEach((cell, i) => {
       const s = cells.extra[i];
       const ok = normCell(s) !== '' && cellOk(cell, s);
-      items.push({ id: `x${i + 1}`, ok, why: ok ? '' : `「${cell.label}」${normCell(s) === '' ? '还空着' : '不对'}` });
+      if (!ok) marks.badExtra.add(i);
+      items.push({ id: `x${i + 1}`, ok, why: ok ? '' : `「${cell.label}」${normCell(s) === '' ? '还空着' : `不对：你写的 ${s.trim()}，应该是 ${[].concat(cell.v)[0]}`}` });
     });
-    return { items, needsClaude: false, stop: items.some((x) => x.ok === false) };
+    return { res: { items, needsClaude: false, stop: items.some((x) => x.ok === false) }, table, cells, ...marks };
   }
-  const head = table.head?.[bad.first.c];
-  const where = /^\d+$/.test(String(head ?? '')) ? `第 ${head} 格` : head !== undefined ? `的「${head}」` : `第 ${bad.first.c + 1} 格`;
-  const it = { id: bad.id, ok: false, why: `${traceRowName(table, bad.r)}${where}${bad.first.empty ? '还空着' : '不对'}` };
+  // 靠并列定的那一步（走到这里是有格空着）：写了的格可能是另一种也对的做法，不说「应该是」、不标红，只说空着的
+  const tied = ties.includes(bad.r);
+  const diff = rowDiff(table, bad.r, cells[bad.r]).filter((d) => !tied || d.empty);
+  for (const d of diff) marks.bad.add(`${bad.r}:${d.c}`);
+  const it = { id: bad.id, ok: false, why: `${tied ? '这一步有并列；' : ''}${rowDiffWhy(table, bad.r, diff)}` };
   // 后面的行：只有那四种排序接着核（carried：ok 是对学生自己的上一行而言；这道题照样没过）；别的引擎错行后面的不列
   const later = [];
   if (sort && CARRY.has(input.algo)) {
@@ -298,7 +383,13 @@ function traceItems(probe, answer = {}) {
     for (const x of rows.filter((y) => y.r > bad.r)) {
       const mine = nums(x.r);
       let ok = false;
-      if (prev && mine) { const want = sortPass(input.algo, prev, x.r + 1, { gaps: input.gaps, n }); ok = want.length === mine.length && want.every((v, i) => v === mine[i]); }
+      if (prev && mine) {
+        const want = sortPass(input.algo, prev, x.r + 1, { gaps: input.gaps, n });
+        ok = want.length === mine.length && want.every((v, i) => v === mine[i]);
+        // 画回去时标出照学生自己的上一行推也不对的格（给出的格不标）
+        if (!ok) table.rows[x.r].cells.forEach((c, j) => { if (!c.given && want[j] !== mine[j]) marks.bad.add(`${x.r}:${j}`); });
+      } else table.rows[x.r].cells.forEach((c, j) => { if (!c.given && normCell(cells[x.r][j]) === '') marks.bad.add(`${x.r}:${j}`); });
+      if (ok) marks.faint.add(x.r);
       const name = traceRowName(table, x.r);
       const blank = table.rows[x.r].cells.some((c, j) => !c.given && normCell(cells[x.r][j]) === '');
       const why = ok ? '' : blank ? `${name}还空着` : !mine ? `${name}读不懂：写一排数` : !prev ? '上一行读不成一排数，接着核不了' : `${name}按你写的上一行推也不对`;
@@ -335,11 +426,21 @@ function traceItems(probe, answer = {}) {
   const vlist = T.variants.filter((v) => (!want.length || want.includes(v.key)) && looksLike(v));
   const label = misreadFill(table, cells, vlist);
   const hitV = label ? vlist.find((v) => v.label === label) : null;
-  if (hitV) Object.assign(it, { tag: hitV.key, why: `${it.why}；${hitV.label}`, keys: [`tag=${hitV.key}`, it.id] });
-  else if (later.length && later.every((y) => y.ok === true) && nearMiss(table.rows[bad.r], cells[bad.r])) {
-    Object.assign(it, { tag: 'slip', why: `后面按你自己的上一行推都对，第 ${bad.r + 1} 趟这一处写错了`, keys: ['slip', 'tag=slip', it.id] });
+  // 整行和错法的那一行一样是 exact，只是大半像是 partial（话前面加「可能」：学生可能做的是另一件事）
+  const fitOf = (v) => (units.every((u) => unitIs(v.table?.rows?.[bad.r], u)) ? 'exact' : 'partial');
+  // 和 hitV 一样像的（misreadFill 两个先后都挑自己：对得上的格一样多）、而且像的程度（整行 / 大半）一样：分不清是哪一种
+  const same = hitV ? vlist.filter((v) => v === hitV || (fitOf(v) === fitOf(hitV) && misreadFill(table, cells, [v, hitV]) === v.label && misreadFill(table, cells, [hitV, v]) === hitV.label)) : [];
+  const say = (fit, text) => (fit === 'partial' ? `可能${text}` : text);
+  if (same.length > 1) {
+    const fit = fitOf(hitV);
+    Object.assign(it, { tags: same.map((v) => v.key), tagFit: fit, why: `${it.why}；${say(fit, `这几种错法在这组数上答案一样：${same.map((v) => v.label).join('；')}`)}`, keys: [it.id, 'default'] });
+  } else if (hitV) {
+    const fit = fitOf(hitV);
+    Object.assign(it, { tag: hitV.key, tagFit: fit, why: `${it.why}；${say(fit, hitV.label)}`, keys: [`tag=${hitV.key}`, it.id] });
+  } else if (later.length && later.every((y) => y.ok === true) && nearMiss(table.rows[bad.r], cells[bad.r])) {
+    Object.assign(it, { tag: 'slip', why: `${it.why}（后面按你自己的上一行推都对）`, keys: ['slip', 'tag=slip', it.id] });
   } else it.keys = [it.id];
-  return { items: [...items, it, ...later], needsClaude: false, stop: true };
+  return { res: { items: [...items, it, ...later], needsClaude: false, stop: true }, table, cells, ...marks };
 }
 
 // —— 408 的 code（计划 4 Task 5）：真跑老师给的测试，一个测试一项；编译错一项 compile ——

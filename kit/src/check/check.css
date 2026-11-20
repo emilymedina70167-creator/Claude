@@ -86,3 +86,9 @@ body.is-checking .class-pages, body.is-checking .class-pins, body.is-checking .c
 /* 检验的过程表一格一格点着写：触控目标至少 44px（一类演示的填表照旧 40px，不动） */
 .ck-probe .sv-fill-in { min-height: 44px; height: 44px; }
 .ck-errfind .en-words, .ck-parse .en-words { margin: 2px 0 4px; }
+/* 没过的那一屏重画的表（filltable.js 的 fillTableView）：错的格用一类填表同一种标法（.is-bad），按自己的上一行推对了的行淡下去 */
+.ck-review-slot { display: flex; flex-direction: column; gap: 6px; }
+.ck-review .sv-fill-t td { padding: 2px 8px; font-weight: 600; }
+.ck-review .sv-fill-t td.is-faint { opacity: 0.45; }
+.ck-review .sv-fill-x { display: inline-flex; gap: 8px; align-items: center; min-height: 44px; padding: 0 10px; border-radius: 10px; }
+.ck-review .sv-fill-x.is-bad { box-shadow: inset 0 0 0 2.5px var(--coral); background: rgb(var(--coral-rgb) / 0.1); }

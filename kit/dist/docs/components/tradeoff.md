@@ -8,12 +8,12 @@
 
 各题型：
 
-- **trace**（手推）：`use: 演示组件名`，下面原样写那个组件自己的字段（`algo: shell`、`array: …`、`gaps: …`，写法见那个组件）；我填的就是它 `mode: fill` 的那张表。可选 `rows: 2`（只填前 2 行）或 `rows: 2-3`（第 1 行给出、填第 2～3 行）、`given:` `cols:`（同 `mode: fill`）、`against: 错法短名`。组件的字段名和检验的字段撞了（sched 的 `q`、tree / thread 的 `level`、net / kmp 的 `use`、csma / mem 的 `retry`、memexp / util 的 `target`）写 `use.名字:`（`use.q: 2`）。elim、det、eig、schmidt、quad 不收（那是结果表，不是过程）。
-  - 判：整张表交一次一起判，一行一项（`r1`、`r2`…，表下面的格是 `x1`…）。第一处错的那一行没过，对上了引擎的错法 `tag` 是错法短名、话后面接错法的说法。直接插入、希尔、冒泡、简单选择：错的那一行后面每一行，页面拿「对的这一趟作用在我写的上一行上」再核（证据里那几项带 `carried: true`，`ok` 是对我自己的上一行而言；这道题照样没过）；后面全对、没对上错法、错的那一行和对的最多差 2 格，那一项 `tag: slip`，话是「后面按你自己的上一行推都对，第 k 趟这一处写错了」。别的引擎错行后面的不列。
+- **trace**（手推）：`use: 演示组件名`，下面原样写那个组件自己的字段（`algo: shell`、`array: …`、`gaps: …`，写法见那个组件）；我填的就是它 `mode: fill` 的那张表。可选 `rows: 2`（只填前 2 行）或 `rows: 2-3`（第 1 行给出、填第 2～3 行）、`given:` `cols:`（同 `mode: fill`）、`against: 错法短名`；快排（`use: sort`、`algo: quick`）能写 `by: round`：一趟（真题说的趟，一层划分做完）一行，行名「第 k 趟」，不写是一次划分一行。组件的字段名和检验的字段撞了（sched 的 `q`、tree / thread 的 `level`、net / kmp 的 `use`、csma / mem 的 `retry`、memexp / util 的 `target`）写 `use.名字:`（`use.q: 2`）。elim、det、eig、schmidt、quad 不收（那是结果表，不是过程）。
+  - 判：整张表交一次一起判，一行一项（`r1`、`r2`…，表下面的格是 `x1`…）。第一处错的那一行没过，对上了引擎的错法 `tag` 是错法短名、话后面接错法的说法；`tagFit` 是 `exact`（那一行和照错法填的一模一样）或 `partial`（只是大半像，话里写「可能像是……」：我可能做的是另一件事）。几种错法填出来一样、对得一样好：都记进 `tags`（没有 `tag`），话是「这几种错法在这组数上答案一样：……」，补讲走那一行 → `default`。直接插入、希尔、冒泡、简单选择：错的那一行后面每一行，页面拿「对的这一趟作用在我写的上一行上」再核（证据里那几项带 `carried: true`，`ok` 是对我自己的上一行而言；这道题照样没过）；后面全对、没对上错法、错的那一行和对的最多差 2 格，那一项 `tag: slip`，话是「后面按你自己的上一行推都对，第 k 趟这一处写错了」。别的引擎错行后面的不列。
   - teach 键：对上错法的先找 `tag=错法短名`，笔误先找 `slip`，再找那一行（`r2`），最后 `default`。格子没填完交不了（该空着的格写 `-`）。
-- **predict**（不推，直接写结果）：`run r: 引擎 字段=值 …`（一行一个，名字只用字母和数字；值有空格加引号：`refs="1 2 3"`）；`expect [x1] 标签: 式子`（一个要我写的结果一行，编号不写自动编 x1、x2…；式子能用 `r.faults`、`r.pass1`、`let` 和模板的量，`"2 5 8"` 是字）；`wrong [w1]: 式子 => 说明`（带 `=>` 的是错答案，挂在它上面最近的那个 `expect`）；不带 `=>` 的 `wrong` 是理由里的常见错说法；`against: 错法短名, …`；可选 `must` / `may`（理由要点，页面里的 Claude 判）、`answer:`。至少一个 run、一个 expect。
-  - 判：每个 expect 一项，页面比值（见「值怎么比」）。值不对时：等于某个错法算出来的（写了 `against:` 只看那几个，没写看这个引擎全部）→ `tag` 是错法短名，话是错法的说法；等于 `wrong … =>` 的式子 → 话是那条说明；都没对上 →「标签不对」。值都对了才把理由交页面里的 Claude。某组数上错法和对的算出来一样，那个错法这组数不比。
-  - teach 键：`tag=错法短名` → `w1` → `x1` → `default`。
+- **predict**（不推，直接写结果）：`run r: 引擎 字段=值 …`（一行一个，名字只用字母和数字；值有空格加引号：`refs="1 2 3"`）；`expect [x1] 标签: 式子`（一个要我写的结果一行，编号不写自动编 x1、x2…；式子能用 `r.faults`、`r.pass1`、`let` 和模板的量，`"2 5 8"` 是字）；`wrong [w1]: 式子 => 说明`（带 `=>` 的是错答案，挂在它上面最近的那个 `expect`）；不带 `=>` 的 `wrong` 是理由里的常见错说法；`against: 错法短名, …`；可选 `must` / `may`（理由要点，页面里的 Claude 判）、`answer:`。至少一个 expect；用到 `r.` 的量、写 `against:` 才要 run，只问字面答案的（`expect 时间复杂度: O(n log n)`、`wrong w1: O(n^2) => 那是最坏`）不写 run（这时不写 `against:`）。
+  - 判：每个 expect 一项，页面比值（见「值怎么比」）。值不对时：等于某个错法算出来的（写了 `against:` 只看那几个，没写看这个引擎全部）→ `tag` 是错法短名，话是错法的说法；等于 `wrong … =>` 的式子 → 话是那条说明；对上了的带 `tagFit: exact`；都没对上 →「标签不对」。几种（错法、`wrong … =>`）在这组数上算出来一样、我写的正好是它：都记进 `tags`（没有 `tag`、`hit`），话是「这几种错法在这组数上答案一样：……」，补讲走 `x1` → `default`，不挑一种；固定的题执行前的检查报「x1 上 w1 和 opt 的答案一样」（换一组数，或 `against:` 只留一种），模板取到这种数重取。值都对了才把理由交页面里的 Claude。某组数上错法和对的算出来一样，那个错法这组数不比。
+  - teach 键：`tag=错法短名` → `w1` → `x1` → `default`（几种撞在一起时 `x1` → `default`）。
 - **construct**（408 的格子和量）：在数学的写法（`slots` `if` `expr` `example`，见 `recall` 那一节）上多三种格子：`seq(8)`（8 个数；不写个数最多 24 个）、`text`（一行字）、`procs(3)` / `procs(3, prio)`（3 个进程，一行一个「名字 到达时间 运行时间[ 优先级]」）；多 `run` 行（同 predict，值写格子名就换成我写的：`array=A`）；条件里用量：`r.unstable >= 1`、`P in r.flipped`（我写的这一对是 `r.flipped` 里的一对，先后不论）、`r.order == "P2 P1 P3"`。比大小 `>=` `<=` `>` `<`；比字 `==` `!=` `in`，不管空格、逗号、大小写、撇号的写法。一串（序列、字）只和格子、量、`"字"` 比，不和一个数比（`r.flipped != 0` 报写法错误，写 `r.unstable >= 1`）。不写 `against:`。teach 键 `if1`、`e1`、`run`（引擎不收我造的输入）、`default`。
 - **tradeoff**（讲取舍）：写法、判法同 `recall`（`must` 每题最多 3 条、`may`、`wrong`、`answer`），页面里的 Claude 照要点判。
 - **calc**（过程 + 最后的值）：写法同 `solve`（`q`、`steps:` 一行一步 `编号 setup|rule|calc|conclude: 内容`），多可选的 `run` 行和 `result: 式子`（最后的值，页面判，能用 `r.xxx`）。我写整道题的过程（打字或手写）和一行「最后的值」。步骤一律页面里的 Claude 逐步判，最后的值错了步骤照样判。teach 键 `result`、`s2`、`default`。照考试样子写的算法设计题（思想、代码、复杂度，手写）用 calc：`s1 setup: 思想…`、`s2 calc: 代码…`、`s3 conclude: 时间、空间复杂度`。
@@ -23,14 +23,14 @@
 
 | 引擎 | 量 | 错法短名（`against:`） |
 |---|---|---|
-| `sort` | `passes` 几趟（快排是几次划分）、`pass1` `pass2`…（第 k 趟以后的序列）、`final`、`cmp` 比较次数、`move` 移动次数（快排、归并不交）、`swap` 交换次数（只有冒泡、简单选择）、`unstable`（排完换了先后的相同数有几对）、`flipped`（那几对，「49 49′」） | 直接插入 `insertCount`；希尔 `shellBlock`；冒泡 `bubbleFront` `bubbleMin`；简单选择 `selectMax` `selectShift`；快排 `quickSwap` `quickLast`；基数 `radixMSD` `radixLIFO`；归并没有 |
+| `sort` | `passes` 几趟（快排是几次划分）、`pass1` `pass2`…（第 k 趟以后的序列；快排是第 k 次划分以后）、快排另有 `rounds` 几趟、`round1` `round2`…（真题说的「第 k 趟」：一层划分做完以后的序列）、`final`、`cmp` 比较次数、`move` 移动次数（快排、归并不交）、`swap` 交换次数（只有冒泡、简单选择）、`unstable`（排完换了先后的相同数有几对）、`flipped`（那几对，「49 49′」） | 直接插入 `insertCount`；希尔 `shellBlock`；冒泡 `bubbleFront` `bubbleMin`；简单选择 `selectMax` `selectShift`；快排 `quickSwap` `quickLast`；基数 `radixMSD` `radixLIFO`；归并没有 |
 | `tree`（`bst:`） | `height`（根在第 1 层）、`leaves`、`aslSucc` | `mirror`；带 `ops: delete …` 还有 `replace` |
 | `tree`（`heap:`） | `cmp`（全部操作的比较）、`cmp1` `cmp2`…（第 k 个操作的）、`swaps`、`final`、`pass1`…（`ops` 里有 `sort` 时：堆排序第 k 趟以后） | `minHeap` / `maxHeap`、`insertBuild` |
 | `tree`（`nodes:` + `walk:`） | 不交量 | `preorder` `postorder` `levelorder` `inorder`（写的不是的那几种） |
 | `avl` | `rot`（调整几次，LR、RL 算 1 次）、`turns`（单旋几次：LL、RR 1 次，LR、RL 2 次）、`LL` `RR` `LR` `RL`、`root` | `lr2ll` `bfsign` `topmost` |
 | `paging` | `faults`、`hits`、`rate`（缺页率）、`victims`（依次换出的页） | `fifo` `lru` `opt` `clock`（写的不是的那几种）、`noInitial`；`eclock` 还有 `clearFirst` |
 | `sched` | `avgTurn`、`avgWait`、`avgWeighted`、`order`（CPU 上依次运行的进程） | `fcfs` `sjf` `srtf` `hrrn` `prio` `pprio`（写的不是的那几种）、RR 的 `rrOld` |
-| `disk` | `dist`（移动的磁道总数）、`avg`、`order`（依次访问的磁道） | `fcfs` `sstf` `scan` `cscan` `look` `clook`（写的不是的那几种）、`reverse`、C-SCAN / C-LOOK 的 `jump` |
+| `disk` | `dist`（移动的磁道总数）、`avg`、`order`（依次访问的磁道） | `fcfs` `sstf` `scan` `cscan` `look` `clook`（写的不是的那几种）、`reverse`、C-SCAN / C-LOOK 的 `jump`（写了 `jump: count` 时是 `noJump`） |
 | `hash` | `aslSucc`、`aslFail`、`clashes`（碰到过冲突的关键字有几个） | 开放定址 `modSize` `linear` / `quadratic` `failNoEmpty` `failBySize` `failByN`；拉链 `nullCounted` `failByN` |
 
 错法短名照这组数列：某组数上和对的算出来一样的那个错法不列。写错的名字页面报，后面列着这组数有的。别的引擎（rbt、btree、huffman、kmp、bsearch、banker、组成原理、计网）不交量，trace 照样能用（只要那个组件有 `mode: fill` 的表）。
@@ -40,6 +40,8 @@
 - 直接插入、希尔：`if (A[i] < A[i-dk])` 和循环第一次 `A[0] < A[j]` 是同一对关键字，算一次；哨兵 `A[0]` 让循环停下的那次照算；`j > 0`、`low < high` 这种下标的比较不算。移动是元素的每一次赋值（进出 `A[0]`、`pivot` 都算；一次交换算 3 次）。直接插入最坏（倒序）比较 (n+2)(n−1)/2、移动 (n+4)(n−1)/2，最好（顺序）比较 n−1、移动 0。
 - 冒泡：倒序比较 n(n−1)/2、交换 n(n−1)/2、移动 3n(n−1)/2；顺序比较 n−1、1 趟。简单选择：比较总是 n(n−1)/2。
 - 快排：一次划分 m 个元素比 m−1 次（每个不是枢轴的元素和枢轴比一次）；顺序时比较 n(n−1)/2、划分 n−1 次。
+- 快排的「趟」有两种：`pass#` = 第几次划分以后；`round#` / `rounds` = 真题说的「第几趟」（2019 年第 10 题的定义：对尚未确定最终位置的所有元素进行一遍处理称为一趟，也就是这一层的子表全部划分完；只剩一个、空的子表不划分）。题里说「第二趟」用 `round2`。例：`49 38 65 97 76 13 27 49′` 的 `round1` 是 `27 38 13 49 76 97 65 49′`，`round2` 是 `13 27 38 49 49′ 65 76 97`（`pass2` 是 `13 27 38 49 76 97 65 49′`：第 2 次划分只划分了左边的子表）。trace 照真题的趟填写 `by: round`。
+- C-SCAN / C-LOOK 跳回去的那一段：各书不一样，有的算进移动距离、有的不算。`jump: count` 算，`jump: skip` 不算（演示组件不写时不算）。检验题（predict、construct、calc、trace）用到 `cscan` / `clook` 的 `dist` `avg`（trace 的表里有移动距离）又没写 `jump:`，执行前的检查报「写明 jump: count 或 jump: skip，题面也写清楚跳回去算不算」；run 行写 `jump=count` / `jump=skip`。
 - 归并：`Merge` 里每执行一次 `B[i] <= B[j]` 算一次（下标的比较不算）；趟是段长 1、2、4……自底向上，落单的一段不比。
 - 堆：向下调整时有两个孩子的一层比 2 次（两个孩子比一次、大的（小根堆是小的）和双亲比一次），只有一个孩子的一层比 1 次；向上调整（插入）一层比 1 次。建堆、删堆顶（`ops: delete`）、插入都数。
 - SJF 运行时间一样的按到达先后，不算并列。
@@ -56,7 +58,8 @@
 
 **交之前和判不了的**：
 
-- 格式不对交不了、不算第一次作答，页面说哪里不对（「A：要 8 个数，写了 7 个」「P2 少一格」「「x」不是数」）。
+- 数、序列、复杂度读之前先全角转半角、去掉末尾的 `。` `.` `，` `,` `；` `;`（`０.６`、`3／5`、`0.6。`、`12,`、`2 5 8。` 照常读；construct 的格子也先全角转半角）。
+- 格式不对交不了、不算第一次作答，页面说哪里不对（「A：要 8 个数，写了 7 个」「P2 少一格」「「x」不是数」）；predict 照对的值的样子查：「「缺页次数」只写数（分数、小数、百分数），不写单位」（`12次`）、「「时间复杂度」写成 O(n^2) 这样」（`O(n2)`）、「「换出的页」写一串数，用空格或逗号隔开」，不说要写几个。
 - 格式对了引擎不收（AVL 里有重复的数、增量比元素个数还大）判没过，那一项（`run`）写引擎的原话。
 - 你那边出的问题（固定的字段引擎跑不了、`expect` 算不出来、`let` 出错、`check:` 出错）那一项待核，不算我错，也不算过。
 

@@ -148,21 +148,24 @@ test('predict：写了少 3 的 → hit w1、why 是外部写的说明、补讲 
   assert.equal(teachFor(p, ['x1'], r.items).key, 'w1');
 });
 
-test('predict：错法和外部的错答案都对上（noInitial 就是少 3）→ keys 是 tag=… → w1 → x1，补讲照这个先后找', () => {
+test('predict：错法和外部的错答案都对上（noInitial 就是少 3）→ 两种都记进 tags、不挑一种：keys 是 x1 → default（dr-plan4-fix 3）', () => {
   const p = LRU('', 'against: fifo, noInitial');
   const r = judgeMachine(p, { expects: { x1: '7', x2: '2' } });
   const x1 = item(r, 'x1');
-  assert.equal(x1.tag, 'noInitial');
-  assert.equal(x1.hit, 'w1');
-  assert.deepEqual(x1.keys, ['tag=noInitial', 'w1', 'x1']);
-  // 没有 teach tag=noInitial：下一个是 w1
-  assert.equal(teachFor(p, ['x1'], r.items).key, 'w1');
-  // 有 tag=noInitial 的先用它
-  const p2 = LRU('teach tag=noInitial: 开头的也算。', 'against: fifo, noInitial');
-  assert.equal(teachFor(p2, ['x1'], judgeMachine(p2, { expects: { x1: '7', x2: '2' } }).items).key, 'tag=noInitial');
-  // 都没有：x1，再没有 default
-  const p3 = P('predict', `id: q\ntarget: x\nlevel: 基础\nrun r: paging algo=lru frames=3 refs="${REFS}"\nexpect: r.faults\nwrong w1: r.faults - 3 => 少了\nteach x1: 按项的。\nteach default: 兜底。`);
+  assert.deepEqual(x1.tags, ['noInitial', 'w1']);
+  assert.equal(x1.tag, undefined);
+  assert.equal(x1.hit, undefined);
+  assert.equal(x1.tagFit, 'exact');
+  assert.match(x1.why, /^这几种错法在这组数上答案一样：.*没把一开始调入.*；开头装进 3 个空页框/);
+  assert.deepEqual(x1.keys, ['x1', 'default']);
+  // 有 tag=noInitial、w1 的补讲也不挑：没有 teach x1 时是 default
+  const p2 = LRU('teach tag=noInitial: 开头的也算。\nteach default: 兜底。', 'against: fifo, noInitial');
+  assert.equal(teachFor(p2, ['x1'], judgeMachine(p2, { expects: { x1: '7', x2: '2' } }).items).key, 'default');
+  // 只对上一种：照旧
+  const p3 = P('predict', `id: q\ntarget: x\nlevel: 基础\nrun r: paging algo=lru frames=3 refs="${REFS}"\nexpect: r.faults\nwrong w1: r.faults - 3 => 少了\nagainst: fifo\nteach x1: 按项的。\nteach default: 兜底。`);
   const r3 = judgeMachine(p3, { expects: { x1: '7' } });
+  assert.equal(item(r3, 'x1').hit, 'w1');
+  assert.deepEqual(item(r3, 'x1').keys, ['w1', 'x1']);
   assert.equal(teachFor(p3, ['x1'], r3.items).key, 'x1');
   const r4 = judgeMachine(p3, { expects: { x1: '4' } });
   assert.deepEqual(item(r4, 'x1').keys, ['x1']);
@@ -171,13 +174,13 @@ test('predict：错法和外部的错答案都对上（noInitial 就是少 3）�
   assert.equal(teachFor(p5, ['x1'], judgeMachine(p5, { expects: { x1: '4' } }).items).key, 'default');
 });
 
-test('predict：没写 against 看这个引擎的全部错法', () => {
+test('predict：没写 against 看这个引擎的全部错法；答案一样的几种都记', () => {
   const p = LRU('', '');
   const r = judgeMachine(p, { expects: { x1: '9', x2: '2' } });
-  assert.equal(item(r, 'x1').tag, 'fifo'); // fifo、clock 都是 9：先列的那个
+  assert.deepEqual(item(r, 'x1').tags, ['fifo', 'clock']); // fifo、clock 都是 9：分不清
   const n = judgeMachine(p, { expects: { x1: '7', x2: '2' } });
-  assert.ok(['opt', 'noInitial'].includes(item(n, 'x1').tag));
-  assert.equal(item(n, 'x1').hit, 'w1');
+  assert.ok(n.items[0].tags.includes('w1'));
+  assert.ok(n.items[0].tags.some((t) => ['opt', 'noInitial'].includes(t)));
 });
 
 test('predict：哪个都没对上 → why「不对」、keys 只有 x1；第二项错也是 stop', () => {

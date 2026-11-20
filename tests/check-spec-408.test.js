@@ -190,7 +190,7 @@ run r: paging algo=lru frames=3 refs="1 2 3 4 1 2 5 1 2 3 4 5"
 expect 缺页次数: r.faults
 wrong w1: r.faults - 3 => 开头装进 3 个空页框的那 3 次也是缺页
 expect x2 最后换出的页: 2
-against: fifo, noInitial
+against: fifo
 must: 换出的是最久没用过的那一页
 wrong: 换出的是最早装进来的
 teach tag=fifo: LRU 看的是最近一次用到的时候，不是装进来的时候。
@@ -207,7 +207,7 @@ test('predict：run、expect（编号、标签、值）、带 => 的 wrong 挂�
     { id: 'x1', label: '缺页次数', value: 'r.faults', wrongs: [{ id: 'w1', expr: 'r.faults - 3', msg: '开头装进 3 个空页框的那 3 次也是缺页' }] },
     { id: 'x2', label: '最后换出的页', value: '2', wrongs: [] },
   ]);
-  assert.deepEqual(p.against, ['fifo', 'noInitial']);
+  assert.deepEqual(p.against, ['fifo']);
   // 不带 => 的 wrong 是理由里的常见错说法，编号不和上面的 w1 撞
   assert.deepEqual(p.must.map((m) => m.text), ['换出的是最久没用过的那一页']);
   assert.deepEqual(p.wrong, [{ id: 'w2', text: '换出的是最早装进来的' }]);
@@ -218,7 +218,9 @@ test('predict：run、expect（编号、标签、值）、带 => 的 wrong 挂�
 
 test('predict：带 => 的 wrong 写在 expect 前面报；要有 run 和 expect', () => {
   assert.match(parseProbe('predict', 'id: q\ntarget: x\nlevel: 基础\nrun r: paging algo=lru frames=3 refs="1 2 3"\nwrong w1: 3 => 说明\nexpect: r.faults').error, /expect/);
-  assert.match(parseProbe('predict', 'id: q\ntarget: x\nlevel: 基础\nexpect: 3').error, /run/);
+  // 只问字面答案的不要 run 行；用到 r. 的量、写了 against 才要（dr-plan4-fix 小的那条）
+  assert.equal(parseProbe('predict', 'id: q\ntarget: x\nlevel: 基础\nexpect: 3').error, undefined);
+  assert.match(parseProbe('predict', 'id: q\ntarget: x\nlevel: 基础\nexpect: r.faults').error, /run/);
   assert.match(parseProbe('predict', 'id: q\ntarget: x\nlevel: 基础\nrun r: paging algo=lru frames=3 refs="1 2 3"').error, /expect/);
 });
 
@@ -243,14 +245,14 @@ teach default: 往后看谁最晚再用。
   const e = errsOf(wrap('predict', opt));
   assert.ok(e.some((x) => /victims/.test(x) && /并列/.test(x)), e.join('\n'));
   // 只问缺页次数没有并列
-  assert.deepEqual(errsOf(wrap('predict', opt.replace('r.victims', 'r.faults'))), []);
+  assert.deepEqual(errsOf(wrap('predict', opt.replace('r.victims', 'r.faults\nagainst: fifo'))), []);
 });
 
 test('against：名字不是这个引擎的错法、这组数分不开，各报一条', () => {
-  const e1 = errsOf(wrap('predict', LRU('p2').replace('against: fifo, noInitial', 'against: fifoo')));
+  const e1 = errsOf(wrap('predict', LRU('p2').replace('against: fifo', 'against: fifoo')));
   assert.ok(e1.some((x) => /fifoo/.test(x) && /不是 paging 的错法/.test(x) && /分不开/.test(x) && /fifo、opt、clock、noInitial/.test(x)), e1.join('\n'));
   // 1 2 3 4 2 5：LRU 和 FIFO 都缺 5 次（换出的页不一样，但这道题只问次数）
-  const same = LRU('p2').replace('refs="1 2 3 4 1 2 5 1 2 3 4 5"', 'refs="1 2 3 4 2 5"').replace('expect x2 最后换出的页: 2\n', '').replace('against: fifo, noInitial', 'against: fifo');
+  const same = LRU('p2').replace('refs="1 2 3 4 1 2 5 1 2 3 4 5"', 'refs="1 2 3 4 2 5"').replace('expect x2 最后换出的页: 2\n', '');
   const e2 = errsOf(wrap('predict', same));
   assert.ok(e2.some((x) => /fifo/.test(x) && /分不开/.test(x)), e2.join('\n'));
 });
