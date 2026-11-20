@@ -1060,6 +1060,17 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .plane.graph .g-seq { stroke: none; }
 .plane.graph .g-seq.is-dim { fill-opacity: .35; }
 .plane.graph .g-join { stroke-opacity: .45; filter: none; }
+/* 平面上的东西（第 2 批）：方向场的小线段、向量场的小箭头、向量、区域的边、区域里的一条、等高线上的值 */
+.plane.graph .g-slope { fill: none; stroke-width: 1.6; stroke-opacity: .6; stroke-linecap: round; }
+.plane.graph .g-farrow line { stroke-width: 1.5; stroke-opacity: .7; }
+.plane.graph .g-farrow polygon { fill-opacity: .7; stroke: none; }
+.plane.graph .g-vec line { stroke-width: 3.6; stroke-linecap: round; }
+.plane.graph .g-vec polygon { stroke: none; }
+.plane.graph .g-region { stroke-width: 1.6; stroke-opacity: .7; }
+.plane.graph .g-where { shape-rendering: crispEdges; }
+.plane.graph .g-strip { stroke-width: 4.5; stroke-linecap: round; }
+.r-show > .is-stale { opacity: .45; }
+.plane.graph .g-label.is-small { font: 13px var(--sans); stroke-width: 3px; }
 /* 学生在图上点出来的点：紫色（「你的猜测」），检查以后配上的绿、多的红；目标是黄的实心点 */
 .plane.graph .g-pickpt { fill: var(--lav); fill-opacity: .3; stroke: var(--lav); stroke-width: 2.4; }
 .plane.graph .g-pickpt.is-hit { fill: var(--green); stroke: var(--green); }
