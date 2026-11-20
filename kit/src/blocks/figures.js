@@ -26,6 +26,29 @@ function figure(el, src, create, { cls, title }) {
     el.dataset.link = linkId;
     link(linkId).on((n) => { extra.step = n; extra.t = 0; api.draw(); api.animate('t', 0, 1, 800); });
   }
+  tasks(el, api, titleText, body);
+}
+
+// 函数图里要学生做的事（goal：拖到、调到；pick：在图上点出来）：是关卡，全做到（或看了答案）才过；每次检查记一条作答
+function tasks(el, api, titleText, body) {
+  if (api.lonelyAfter) session.problem(el, 'graph', 'after / before 要配 goal 或 pick（图里没有要学生做的事，这两个修饰不管用）');
+  const side = body.querySelector('.w-side');
+  if (body.querySelector('.handle')) side.insertAdjacentHTML('beforeend', '<div class="w-hint">拖动圆点可以移动它。</div>');
+  const nGoals = api.goals || 0, nPicks = api.picks || 0;
+  if (!nGoals && !nPicks) return;
+  if (nPicks) side.insertAdjacentHTML('beforeend', '<div class="w-hint">在图上点出来；点错了再点一下去掉。</div>');
+  const done = session.gate(el, titleText);
+  let goals = 0, picks = 0;
+  const maybe = () => { if (goals >= nGoals && picks >= nPicks) done(); };
+  api.on('goal', () => {
+    goals++;
+    if (goals >= nGoals) session.record({ type: 'graph', title: titleText, ok: true, el });
+    maybe();
+  });
+  api.on('pick', (i, info) => {
+    session.record({ type: 'graph', title: titleText, q: info.q, ok: info.ok, value: info.value, detail: info.text, attempts: info.attempts, ...(info.giveup ? { giveup: true, expected: info.expected } : {}), el });
+    if (info.done) { picks++; maybe(); }
+  });
 }
 
 export const graph = (el, src) => figure(el, src, createGraph, { cls: 'graph', title: '函数图 Graph' });

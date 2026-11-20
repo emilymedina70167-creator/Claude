@@ -1032,6 +1032,10 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 /* ===== graph：函数图（宽一些，图在上、滑块在下）===== */
 .block-graph .w-body { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .block-graph .w-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 22px; align-items: start; }
+/* 做到了的那句、提示、报错各占一整行：不和读数挤成三栏 */
+.block-graph .w-side > :is(.goal-msg, .w-hint, .w-note, .scene-error) { grid-column: 1 / -1; }
+/* 没有滑块时读数占一整行（上面那几样跨了全部的栏，空栏不会自己收起来） */
+.block-graph .w-side > .sliders:empty + .r-show { grid-column: 1 / -1; }
 .plane.graph { width: 100%; height: auto; display: block; }
 .plane.graph .tick { font: 13px var(--sans); font-variant-numeric: tabular-nums; fill: var(--muted); }
 .plane.graph .g-curve { fill: none; stroke-width: 3.4; stroke-linejoin: round; stroke-linecap: round; filter: var(--rough-v); }
@@ -1056,6 +1060,21 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .plane.graph .g-seq { stroke: none; }
 .plane.graph .g-seq.is-dim { fill-opacity: .35; }
 .plane.graph .g-join { stroke-opacity: .45; filter: none; }
+/* 学生在图上点出来的点：紫色（「你的猜测」），检查以后配上的绿、多的红；目标是黄的实心点 */
+.plane.graph .g-pickpt { fill: var(--lav); fill-opacity: .3; stroke: var(--lav); stroke-width: 2.4; }
+.plane.graph .g-pickpt.is-hit { fill: var(--green); stroke: var(--green); }
+.plane.graph .g-pickpt.is-miss { fill: var(--coral); stroke: var(--coral); }
+.plane.graph .g-target { fill: var(--yellow); }
+.g-plot .g-pick { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.05); }
+.g-plot .g-pick.is-idle { opacity: .55; }
+.g-plot .g-pick-q { font-size: 16px; line-height: 1.5; }
+.g-plot .g-pick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.g-plot .g-pick-count { flex: 1 1 auto; font-size: 14px; color: var(--muted); }
+.g-plot .g-pick-row .btn { min-height: 44px; }
+.g-plot .g-pick-msg { margin-top: 6px; font-size: 15px; min-height: 1.2em; color: var(--muted); }
+.g-plot .g-pick-msg.is-ok { color: var(--green); }
+.g-plot .g-pick-msg.is-bad { color: var(--coral); }
+.g-plot .g-pick.is-done .g-pick-row { display: none; }
 .plane.graph .g-drag-line { stroke: var(--yellow); stroke-width: 2; stroke-dasharray: 3 5; }
 .plane.graph .g-handle-label { font-family: var(--hand); font-size: 18px; fill: var(--board-3); }
 .plane.graph .handle { touch-action: none; }

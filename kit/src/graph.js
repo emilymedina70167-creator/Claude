@@ -18,6 +18,8 @@ import { riemannRects, betweenArea, areaBetween, placeLabels } from './fx/graphg
 import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls, dragHandles } from './plot.js';
+import { judgePicks, pickFeedback, snapPick } from './graphpick.js';
+import { close } from './scene.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const W = 640, H = 400, ML = 52, MR = 18, MT = 18, MB = 40;
@@ -51,9 +53,16 @@ export function createGraph(container, src, opts = {}) {
   const compile = (s) => compileWith(s, defs);
   const extra = opts.extraVars || {};
   const base = opts.baseVars || {};
-  const state = { slider: {}, drag: {}, override: {} };
+  // goalsHit：做到了的 goal（命令的下标）；picks：每条 pick 学生点了哪些、判了没有
+  const state = { slider: {}, drag: {}, override: {}, goalsHit: new Set(), picks: new Map() };
   cmds.filter((c) => c.kind === 'slider').forEach((c) => (state.slider[c.name] = c.init));
-  container.innerHTML = '<div class="w-plot g-plot"></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div></div>';
+  const goalIdx = cmds.map((c, i) => (c.kind === 'goal' ? i : -1)).filter((i) => i >= 0);
+  const pickIdx = cmds.map((c, i) => (c.kind === 'pick' ? i : -1)).filter((i) => i >= 0);
+  pickIdx.forEach((i) => state.picks.set(i, { pts: [], tries: 0, done: false, giveup: false, res: null, msg: '' }));
+  const hasTasks = goalIdx.length + pickIdx.length > 0;
+  // 学生要做的都做到了（或者看了答案）：after 的东西这时才显示
+  const revealed = () => hasTasks && goalIdx.every((i) => state.goalsHit.has(i)) && pickIdx.every((i) => state.picks.get(i).done);
+  container.innerHTML = '<div class="w-plot g-plot"></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div><div class="goal-msg" hidden></div></div>';
   const side = container.querySelector('.w-side');
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -118,7 +127,9 @@ export function createGraph(container, src, opts = {}) {
     return e;
   };
   const color = (c, d) => COLOR[String(c.mods.color || '').toLowerCase()] || d;
-  const visible = (c) => !(c.mods.from !== undefined && !((extra.step ?? 0) >= Number(c.mods.from))) && !(c.mods.until !== undefined && !((extra.step ?? 0) <= Number(c.mods.until)));
+  const visible = (c) => !(c.mods.from !== undefined && !((extra.step ?? 0) >= Number(c.mods.from))) && !(c.mods.until !== undefined && !((extra.step ?? 0) <= Number(c.mods.until)))
+    // after / before：配 goal、pick 用（做到以后才显示 / 做到以前显示）；图里没有要学生做的事时不管用
+    && !(hasTasks && c.mods.after && !revealed()) && !(hasTasks && c.mods.before && revealed());
 
   function axes() {
     const sx = niceStep(xr[1] - xr[0], 8), sy = niceStep(yr[1] - yr[0], 5);
@@ -301,14 +312,40 @@ export function createGraph(container, src, opts = {}) {
         if (c.kind !== 'let' || !c.mods.drag || !visible(c)) continue;
         cur = i + 1;
         const x = v[c.name];
+        // on= 的把手骑在曲线上：(a, f(a)) 一个圆点，往下一条细线落到 x 轴；那里曲线没定义、在窗口外就退回 x 轴上
+        const hy = c.onF ? quiet(fnOf(c.onF, v))(x) : NaN;
+        if (c.onF && !Number.isNaN(hy) && inside(x, hy)) {
+          el('line', { x1: X(x), y1: Y(hy), x2: X(x), y2: yr[0] <= 0 && yr[1] >= 0 ? Y(0) : H - MB, class: 'g-drag-line' }, top);
+          el('circle', { cx: X(x), cy: Y(hy), r: 5, class: 'g-dot' }, top).style.fill = color(c, 'var(--yellow)');
+          el('circle', { cx: X(x), cy: Y(hy), r: 22, class: 'handle', 'data-handle': c.name, style: `--vc:${color(c, 'var(--yellow)')}` }, top);
+          continue;
+        }
         el('line', { x1: X(x), y1: MT, x2: X(x), y2: H - MB, class: 'g-drag-line' }, top);
         el('circle', { cx: X(x), cy: H - MB, r: 15, class: 'handle', 'data-handle': c.name, style: `--vc:${color(c, 'var(--yellow)')}` }, top);
         el('text', { x: X(x), y: H - MB + 4, class: 'g-handle-label', 'text-anchor': 'middle', 'pointer-events': 'none' }, top).textContent = c.mods.label || c.name;
+      }
+      // 学生点出来的点（紫色：「你的猜测」）；检查以后配上的变绿、多的变红；做完了画出目标（黄的实心点）
+      for (const i of pickIdx) {
+        const c = cmds[i], st = state.picks.get(i);
+        cur = i + 1;
+        const where = (p) => (c.on === 'free' ? p : c.on === 'axis' ? [p, yr[0] <= 0 && yr[1] >= 0 ? 0 : yr[0]] : [p, quiet(fnOf(c.onF, v))(p)]);
+        st.pts.forEach((p, k) => {
+          const [px, py] = where(p);
+          if (Number.isNaN(py)) return;
+          const cls = st.res ? (st.res.hits.includes(k) ? ' is-hit' : st.res.extra.includes(k) ? ' is-miss' : '') : '';
+          el('circle', { cx: X(px), cy: clampY(py), r: 9, class: `g-pickpt${cls}` }, top);
+        });
+        if (st.done) {
+          let ts = [];
+          try { ts = c.targets(v); } catch { ts = []; }
+          for (const t of ts) { const [px, py] = where(t); if (!Number.isNaN(py)) el('circle', { cx: X(px), cy: clampY(py), r: 5, class: 'g-dot g-target' }, top); }
+        }
       }
       cur = null;
       side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errs, compile), { inline: true })}</div>` : '')).join('');
     }
     cur = null;
+    if (v) checkGoals(v, ctl.quiet);
     const msg = [...new Set(errs)].join('；');
     if (msg !== lastErr) {
       lastErr = msg;
@@ -316,6 +353,106 @@ export function createGraph(container, src, opts = {}) {
       if (msg) { if (!box) { box = document.createElement('div'); box.className = 'block-error scene-error'; side.appendChild(box); } box.textContent = '图形描述有误：' + msg; } else box?.remove();
     }
     ctl.mark();
+  }
+
+  // goal：学生拖到、调到了算做到。主讲用 set / play 摆上去的（quiet）不算：记下来，学生挪开、再自己放回去才算（和 scene 一样）
+  const placedByTeacher = new Set();
+  function checkGoals(v, quiet) {
+    for (const i of goalIdx) {
+      const c = cmds[i];
+      if (state.goalsHit.has(i) || !visible(c)) continue;
+      let ok = false;
+      try { ok = c.cond ? !!c.cond(v) : close(c.lhs(v), c.rhs(v), Number(c.mods.tol) || 0.05); } catch { ok = false; }
+      if (quiet || !ok) { if (quiet && ok) placedByTeacher.add(i); else placedByTeacher.delete(i); continue; }
+      if (placedByTeacher.has(i)) continue;
+      state.goalsHit.add(i);
+      const box = side.querySelector('.goal-msg');
+      box.hidden = false;
+      box.innerHTML = mdToHtml(c.mods.msg || '做到了！', { inline: true });
+      ctl.emit('goal', i, c);
+      // after 的东西这一下才该出来：再画一遍（goalsHit 已经记了，不会绕回来）
+      if (revealed()) setTimeout(() => draw(), 0);
+    }
+  }
+
+  // pick：图下面一条——题目、点了几个、检查。同时只有第一条没做完的在收点
+  const plotBox = container.querySelector('.g-plot');
+  const activePick = () => pickIdx.find((i) => !state.picks.get(i).done);
+  const fmt = (p) => (Array.isArray(p) ? `(${p.map((x) => Number(x.toFixed(2))).join(', ')})` : String(Number(p.toFixed(2))));
+  const tolOf = (c) => c.tol ?? (xr[1] - xr[0]) * 0.04;
+  // 目标算不出来（式子写错了）：报写法错误，不让学生白点
+  const targetsOf = (c) => { try { return c.targets(env()); } catch (e) { return e; } };
+  function syncPicks() {
+    const act = activePick();
+    for (const i of pickIdx) {
+      const c = cmds[i], st = state.picks.get(i), row = plotBox.querySelector(`.g-pick[data-pick="${i}"]`);
+      const bad = targetsOf(c) instanceof Error;
+      row.classList.toggle('is-done', st.done);
+      row.classList.toggle('is-idle', !st.done && i !== act);
+      row.querySelector('.g-pick-count').textContent = st.done ? '' : st.pts.length ? `点了 ${st.pts.length} 个` : c.on === 'curve' ? '在曲线上点出来' : c.on === 'axis' ? '在 x 轴上点出来' : '在图上点出来';
+      row.querySelector('.g-pick-check').disabled = st.done || i !== act || bad;
+      row.querySelector('.g-pick-clear').hidden = st.done || !st.pts.length;
+      row.querySelector('.g-pick-show').hidden = st.done || st.tries < 3;
+      const m = row.querySelector('.g-pick-msg');
+      m.textContent = bad ? `图形描述有误：${targetsOf(c).message}` : st.msg;
+      m.className = `g-pick-msg${bad ? ' is-bad' : st.done && !st.giveup ? ' is-ok' : st.res && !st.res.ok ? ' is-bad' : ''}`;
+    }
+  }
+  function finishPick(i, giveup) {
+    const c = cmds[i], st = state.picks.get(i);
+    const ts = targetsOf(c);
+    st.done = true; st.giveup = giveup;
+    if (giveup) st.msg = '答案画在图上了（黄点）';
+    ctl.emit('pick', i, { q: c.q, ok: !giveup, done: true, ...(giveup ? { giveup: true, expected: Array.isArray(ts) ? ts.map(fmt).join(', ') : '' } : {}), attempts: st.tries, value: st.pts.map(fmt).join(', '), text: st.msg });
+    draw(); syncPicks();
+  }
+  for (const i of pickIdx) {
+    const c = cmds[i], st = state.picks.get(i);
+    const row = document.createElement('div');
+    row.className = 'g-pick';
+    row.dataset.pick = i;
+    row.innerHTML = `<div class="g-pick-q">${mdToHtml(c.q, { inline: true })}</div><div class="g-pick-row"><span class="g-pick-count"></span><button type="button" class="btn btn-sm g-pick-clear" hidden>清空</button><button type="button" class="btn btn-primary g-pick-check">检查</button><button type="button" class="btn btn-sm g-pick-show" hidden>看答案</button></div><div class="g-pick-msg" aria-live="polite"></div>`;
+    row.querySelector('.g-pick-clear').addEventListener('click', () => { st.pts = []; st.res = null; st.msg = ''; draw(); syncPicks(); });
+    row.querySelector('.g-pick-show').addEventListener('click', () => finishPick(i, true));
+    row.querySelector('.g-pick-check').addEventListener('click', () => {
+      const ts = targetsOf(c);
+      if (ts instanceof Error) return;
+      st.tries++;
+      // 随便点的：横竖比例不一样，按屏幕上的远近算（两个方向各除以窗口的宽高，再乘回横向的宽）
+      const scale = c.on === 'free' ? [1, (yr[1] - yr[0]) / (xr[1] - xr[0])] : [1, 1];
+      st.res = judgePicks(st.pts, ts, tolOf(c), { scale });
+      st.msg = pickFeedback(st.res);
+      if (st.res.ok) { finishPick(i, false); return; }
+      ctl.emit('pick', i, { q: c.q, ok: false, done: false, attempts: st.tries, value: st.pts.map(fmt).join(', '), text: st.msg });
+      draw(); syncPicks();
+    });
+    plotBox.appendChild(row);
+  }
+  // 点图：加一个点；点在已有的点上（22px 内）是去掉它。把手、拖动不算点
+  if (pickIdx.length) {
+    svg.addEventListener('click', (e) => {
+      const i = activePick();
+      if (i === undefined || e.target.getAttribute?.('data-handle') || svg.classList.contains('dragging')) return;
+      const c = cmds[i], st = state.picks.get(i);
+      const r = svg.getBoundingClientRect(), k = W / r.width;
+      const sx = (e.clientX - r.left) * k, sy = (e.clientY - r.top) * k;
+      if (sx < ML - 6 || sx > W - MR + 6 || sy < MT - 6 || sy > H - MB + 6) return;
+      const mx = xr[0] + ((sx - ML) / (W - ML - MR)) * (xr[1] - xr[0]), my = yr[0] + ((H - MB - sy) / (H - MT - MB)) * (yr[1] - yr[0]);
+      let v;
+      try { v = env(); } catch { return; }
+      const g = c.on === 'curve' ? quiet(fnOf(c.onF, v)) : null;
+      const screen = (p) => (c.on === 'free' ? [X(p[0]), Y(p[1])] : c.on === 'axis' ? [X(p), sy] : [X(p), Y(g(p))]);
+      const near = st.pts.findIndex((p) => { const [px, py] = screen(p); return Math.hypot(px - sx, (c.on === 'free' ? py - sy : 0)) <= 22 * k; });
+      st.res = null; st.msg = '';
+      if (near >= 0) st.pts.splice(near, 1);
+      else {
+        const p = snapPick(Number(mx.toFixed(3)), Number(my.toFixed(3)), { on: c.on, f: g });
+        if (p === null) st.msg = '这里曲线没有定义';
+        else if (st.pts.length >= 12) st.msg = '最多点 12 个：点一下已有的点去掉它';
+        else st.pts.push(p);
+      }
+      draw(); syncPicks();
+    });
   }
 
   // 课堂操作（play / set / highlight / vars / dragend）：见 plot.js 的 figureControls
@@ -375,8 +512,16 @@ export function createGraph(container, src, opts = {}) {
   });
 
   draw();
+  syncPicks();
   return {
     fields, draw,
+    // 学生要做的事有几件（blocks/figures.js 据此当关卡、记作答）
+    goals: goalIdx.length,
+    picks: pickIdx.length,
+    // after 要配 goal / pick：没有要做的事时一直显示，自检提一句
+    get lonelyAfter() { return !hasTasks && cmds.some((c) => c.mods.after || c.mods.before); },
+    // 现在做到哪了：黑板现状、板边助教读
+    tasks() { return { goals: `${state.goalsHit.size}/${goalIdx.length}`, picks: pickIdx.map((i) => { const st = state.picks.get(i); return { q: cmds[i].q, picked: st.pts.map(fmt), tries: st.tries, done: st.done, ...(st.giveup ? { giveup: true } : {}) }; }) }; },
     animate: ctl.animate,
     on: ctl.on,
     snapshot() { return ctl.withTargets(() => { try { const v = env(); const o = {}; for (const c of cmds) if (c.kind === 'let' || c.kind === 'slider') o[c.name] = v[c.name]; return o; } catch { return {}; } }); },
