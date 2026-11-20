@@ -403,10 +403,13 @@ function realFn(n, vars, fns) {
   const name = n.args[1].name, body = n.args[0], v = bindVar(vars, name);
   const a = num(run(n.args[2], vars, fns)), b = num(run(n.args[3], vars, fns));
   const f = (x) => { v[name] = x; try { const y = run(body, v, fns); return isNum(y) ? y : NaN; } catch { return NaN; } };
+  // 最值、求根是在区间上取点找的：区间要有限（积分另算，它自己换元处理无穷限）
+  if (n.name !== 'int' && !(Number.isFinite(a) && Number.isFinite(b))) throw new Error(`${n.name} 的区间要是有限的（现在是 ${a} 到 ${b}）`);
   return { f, a, b };
 }
 const GOLD = (Math.sqrt(5) - 1) / 2;
 function goldenMax(f, a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return NaN; // 区间有一头是无穷：没法收缩（调用的地方先拦了，这里再守一道）
   let c = b - GOLD * (b - a), d = a + GOLD * (b - a), fc = f(c), fd = f(d);
   for (let i = 0; i < 80 && b - a > 1e-13 * Math.max(1, Math.abs(a) + Math.abs(b)); i++) {
     if (fc > fd || Number.isNaN(fd)) { b = d; d = c; fd = fc; c = b - GOLD * (b - a); fc = f(c); } else { a = c; c = d; fc = fd; d = a + GOLD * (b - a); fd = f(d); }

@@ -376,7 +376,8 @@ function same(a, b) {
   if (Array.isArray(a) !== Array.isArray(b)) return false;
   try {
     const x = toFloat(a), y = toFloat(b);
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    // 有一边不是有限数（学生写 ∞、1/0、10^400）就不相等：两边都是 Infinity 时右边的容差也是 Infinity（dr-final-fix 第 1 条）
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
     return Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(x), Math.abs(y));
   } catch { return false; }
 }

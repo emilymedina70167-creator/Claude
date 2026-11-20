@@ -33,7 +33,8 @@ export function parseConditions(src) {
 const toFloat = (x) => (Array.isArray(x) ? x.map(toFloat) : Number(x));
 function close(a, b) {
   if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => close(x, b[i]));
-  return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+  // 有一边不是有限数就不相等（dr-final-fix 第 1 条：∞ 和任何数的容差都是 ∞）
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
 }
 export function checkConditions(cond, given, vars) {
   const scope = { ...vars, ans: toFloat(given) };

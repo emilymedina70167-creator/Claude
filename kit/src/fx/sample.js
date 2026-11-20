@@ -89,7 +89,7 @@ const flat = (v) => (Array.isArray(v) ? v.flat(Infinity) : [v]);
 const usable = (v) => flat(v).every((x) => isFiniteNum(x) && Math.abs(x) <= TOO_BIG);
 const close = (a, b, scale = 0) => {
   const x = flat(a), y = flat(b);
-  return x.length === y.length && x.every((p, i) => Math.abs(p - y[i]) <= TOL * Math.max(1, Math.abs(p), Math.abs(y[i]), scale));
+  return x.length === y.length && x.every((p, i) => Number.isFinite(p) && Number.isFinite(y[i]) && Math.abs(p - y[i]) <= TOL * Math.max(1, Math.abs(p), Math.abs(y[i]), scale));
 };
 export const showNum = (v) => (Array.isArray(v) ? `[${v.map(showNum).join(', ')}]` : !isFiniteNum(v) ? String(v) : String(Number(v.toPrecision(4))));
 const at = (pt) => Object.entries(pt).map(([k, v]) => `${k} = ${showNum(v)}`).join(', ');

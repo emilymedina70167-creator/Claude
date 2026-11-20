@@ -10,7 +10,7 @@ import { markDraft } from '../drafts.js';
 import { pen } from '../ink/engine.js';
 import { timedPad } from './inkpad.js';
 import { uploadAll } from './judgekit.js';
-import { notReady, expectProblems } from './judge.js';
+import { notReady, expectProblems, resultProblem } from './judge.js';
 import { hasInk, dropInk } from './inkstore.js';
 import { baseType, slotProblems, seqTokens, traceTable } from './spec.js';
 import { markDuplicates } from '../engines/measures.js';
@@ -323,7 +323,8 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
     const w = writer({ label: solve ? '整道题的过程（每一步写依据）' : '', rows: solve ? 8 : 6, placeholder: baseType(probe) === 'recall' ? '合上板书，自己写' : '' });
     const res = solve && probe.result ? lineIn(work, { label: '最后的值' }) : null;
     get = () => ({ text: w.text(), ...(res ? { result: res.value.trim() } : {}) });
-    problem = () => (res && !w.blank() && !res.value.trim() ? '还没写最后的值' : '');
+    // 最后的值读不懂（带了单位、写成别的样子）挡在交之前，和 predict 的 expect 一样（judge.js 的 resultProblem）
+    problem = () => (res && !w.blank() && !res.value.trim() ? '还没写最后的值' : res ? resultProblem(probe, res.value, base) : '');
     empty = () => w.blank();
   }
   // 写着还没交的（drafts.js：下课那一刻没交的记成草稿证据）

@@ -158,3 +158,12 @@ test('8 大数的阶乘不拖慢：超出双精度的直接是无穷', () => {
   for (let i = 0; i < 20; i++) f({ n: 1999, x: 1 + i / 20 });
   assert.ok(performance.now() - t0 < 400, `${Math.round(performance.now() - t0)} ms`);
 });
+
+test('最值、求根的区间要是有限的；有一边是无穷时不拿「差不多相等」去比（合进主干的 finite-scan 规矩）', () => {
+  assert.throws(() => evaluate('maxon(1/(1 + x^2), x, 0, inf)'), /区间要是有限的/);
+  assert.throws(() => evaluate('minon(x, x, -inf, 0)'), /区间要是有限的/);
+  assert.throws(() => evaluate('roots(x - 1, x, 0, inf)'), /区间要是有限的/);
+  near(evaluate('int(exp(-t), t, 0, inf)'), 1, 1e-6); // 积分的上下限照旧能写无穷
+  // 差商冲到无穷（竖直切线）不当成「尖点」，也不当成「对得上」去画一条错的切线：不拦，由调用的地方看斜率是不是有限
+  assert.equal(smoothAt((x) => Math.cbrt(x), 0, Infinity, 6), true);
+});

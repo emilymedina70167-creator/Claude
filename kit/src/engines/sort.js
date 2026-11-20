@@ -18,6 +18,9 @@ const ALIAS = {
 
 const vOf = (x) => x.v;
 const seqOf = (A) => A.map(vOf).join(' ');
+// 一趟结束后的序列：值的数组（mode: quiz / fill、错法照旧只比值），另挂一份当时的元素（带 id、撇号），
+// 不可枚举：比数组、存 JSON 都看不见。检验的量（measures.js 的 final、pass#、round#）照它写出 5′（dr-final-fix 第 3 条）
+const snap = (A) => Object.defineProperty(A.map(vOf), 'items', { value: A.slice() });
 const t = itemText;
 const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i);
 const clsFor = (ps, c, base = {}) => { const o = { ...base }; for (const p of ps) o[p] = o[p] ? `${o[p]} ${c}` : c; return o; };
@@ -251,7 +254,7 @@ function insertion(A) {
     });
     if (!(vOf(x) < vOf(y))) {
       steps.push({ view: { A: A.slice(), cls: { ...done(i), [i]: 'sv-done sv-cmp', [i - 1]: 'sv-done sv-cmp' }, ptr: { [i]: 'i' }, zero: { label: '哨兵', item: null } }, msg: `${t(x)} ≥ ${t(y)}（不小于），它已经在正确的位置上，这一趟不用动。前 ${i} 个有序了。` });
-      passes.push(A.map(vOf));
+      passes.push(snap(A));
       continue;
     }
     steps.push({ view: { A: A.slice(), cls: { ...done(i - 1), [i]: 'sv-cmp', [i - 1]: 'sv-done sv-cmp' }, ptr: { [i]: 'i' }, zero: { label: '哨兵', item: x, fresh: true, cls: 'sv-cur' } }, msg: `${t(x)} < ${t(y)}：把 ${t(x)} 存进哨兵 A[0]，从 j = ${i - 1} 往前找插入的位置。` });
@@ -269,7 +272,7 @@ function insertion(A) {
       msg: j === 0 ? `j = 0：A[0] 就是 ${t(x)} 自己，A[0] < A[0] 不成立，循环停下。把 ${t(x)} 放进 A[1]。前 ${i} 个有序了。` : `A[0] = ${t(x)} ≥ A[${j}] = ${t(at(j))}：循环停下。把 ${t(x)} 放进 A[${j + 1}]。前 ${i} 个有序了。`,
       ask: { tag: 'place', kind: 'pick', q: `${t(x)} 最后插在第几个位置？在图里点那个格子。`, answer: String(j + 1) },
     });
-    passes.push(A.map(vOf));
+    passes.push(snap(A));
   }
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done'), zero: { label: '哨兵', item: null } }, msg: `排序完成，一共 ${n - 1} 趟。` });
   return { steps, passes };
@@ -313,7 +316,7 @@ function shell(A, gaps) {
         msg: d === 1 ? `整个序列做直接插入排序：${before.map(t).join(', ')} → ${vals.map(t).join(', ')}。` : `第 ${g + 1} 组（第 ${gs(ps)} 个）：${before.map(t).join(', ')}${moved.length ? ` → ${vals.map(t).join(', ')}` : '，已经有序，不用动'}。`,
       });
     });
-    passes.push(A.map(vOf));
+    passes.push(snap(A));
     steps.push({ view: { A: A.slice(), cls: groupCls(n, d), ...base }, msg: `第 ${pass} 趟（d = ${d}）结束：${A.map(t).join(' ')}。${d === 1 ? '' : `每一组（同色）内部都有序了，整个序列还没有。`}` });
   });
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done') }, msg: `排序完成，一共 ${gaps.length} 趟。希尔排序不稳定：相同的数分在不同的组里，可能换了先后。` });
@@ -353,7 +356,7 @@ function bubble(A) {
         ask: { tag: 'swap', kind: 'choice', q: `第 ${j} 个（${t(a)}）和第 ${j + 1} 个（${t(b)}）要交换吗？`, choices: ['交换', '不交换'], answer: swap ? '交换' : '不交换' },
       });
     }
-    passes.push(A.map(vOf));
+    passes.push(snap(A));
     steps.push({ view: { A: A.slice(), cls: clsFor(range(1, i + 1), 'sv-done') }, msg: flag ? `第 ${pass} 趟结束：${t(A[i])} 到了第 ${i + 1} 个。` : `第 ${pass} 趟一次都没有交换：剩下的已经有序，排序提前结束（flag = false）。` });
     if (!flag) break;
   }
@@ -389,7 +392,7 @@ function selection(A) {
     }
     const swapped = m !== i;
     if (swapped) [A[i], A[m]] = [A[m], A[i]];
-    passes.push(A.map(vOf));
+    passes.push(snap(A));
     steps.push({ view: { A: A.slice(), cls: clsFor(range(1, i + 1), 'sv-done', swapped ? { [m + 1]: 'sv-swap' } : {}), fresh: swapped ? [i + 1, m + 1] : [], lo: i + 1 }, msg: swapped ? `把最小的 ${t(A[i])} 和第 ${i + 1} 个交换（换到第 ${m + 1} 个的是 ${t(A[m])}）。第 ${pass} 趟结束。` : `最小的就是第 ${i + 1} 个，不用交换。第 ${pass} 趟结束。` });
   }
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done') }, msg: `排序完成，一共 ${n - 1} 趟。` });
@@ -400,7 +403,7 @@ function selection(A) {
 function quick(A) {
   const n = A.length;
   const steps = [], passes = [], log = [];
-  const a0 = A.map(vOf);
+  const a0 = A.map(vOf), items0 = A.slice();
   const fixed = new Set(); // 已经到最终位置的
   const fixedC = () => clsFor([...fixed], 'sv-done');
   steps.push({ view: { A: A.slice(), zero: { label: '枢轴', item: null } }, msg: '初始序列。王道的快速排序：每次划分取区间第一个元素作枢轴，high 从右往左找比它小的、low 从左往右找比它大的，轮流填坑，最后枢轴落到最终位置。' });
@@ -438,7 +441,7 @@ function quick(A) {
     }
     A[l - 1] = pivot;
     fixed.add(l);
-    passes.push(A.map(vOf));
+    passes.push(snap(A));
     steps.push({
       view: { A: A.slice(), zero: { label: '枢轴', item: null }, lo, hi, cls: { ...fixedC(), [l]: 'sv-done sv-placed' }, fresh: [l] },
       msg: `low = high = ${l}：把枢轴 ${t(pivot)} 放进第 ${l} 个，它到了最终位置。左边（第 ${lo}～${l - 1} 个）都 ≤ ${t(pivot)}，右边（第 ${l + 1}～${hi} 个）都 ≥ ${t(pivot)}。`,
@@ -457,7 +460,10 @@ function quick(A) {
   };
   sort(1, n, 1);
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done'), zero: { label: '枢轴', item: null } }, msg: `排序完成，一共划分了 ${count} 次（只剩一个元素的区间不用划分）。` });
-  return { steps, passes, rounds: roundsOf(a0, log) };
+  // 每一层的元素也照 roundsOf 拼一份（带 id，round# 照它写撇号）
+  const rounds = roundsOf(a0, log);
+  roundsOf(items0, log.map((x) => ({ ...x, after: x.after.items }))).forEach((r, k) => Object.defineProperty(rounds[k], 'items', { value: r }));
+  return { steps, passes, rounds };
 }
 
 // —— 二路归并排序（按趟：每段长 1、2、4……相邻两段归并）——
@@ -489,7 +495,7 @@ function merge(A) {
       A.splice(a1 - 1, out.length, ...out);
       steps.push({ view: { A: A.slice(), cls: { ...runs(2 * len), ...clsFor(range(a1, b2), 'sv-cmp') }, fresh: range(a1, b2) }, msg: `把（${left.join(', ')}）和（${right.join(', ')}）归并：两段各从头比，小的先放（相等先放左边的），得到（${A.slice(a1 - 1, b2).map(t).join(', ')}）。` });
     }
-    passes.push(A.map(vOf));
+    passes.push(snap(A));
     steps.push({ view: { A: A.slice(), cls: runs(Math.min(2 * len, n)) }, msg: `第 ${pass} 趟结束：现在每段长 ${Math.min(2 * len, n)}${2 * len >= n ? '，整个序列就是一段，排序完成' : ''}。` });
   }
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done') }, msg: `排序完成，一共 ${pass} 趟（⌈log₂${n}⌉ = ${pass}）。` });
@@ -512,7 +518,7 @@ function radix(A) {
     steps.push({ view: { A: A.slice(), digit: k }, msg: `第 ${k + 1} 趟：按${name}分配。`, ask: { tag: 'pass', kind: 'text', q: `第 ${k + 1} 趟（按${name}）收集之后，序列是什么？`, answer: seqOf(after) } });
     steps.push({ view: { A: A.slice(), digit: k, buckets: buckets.map((b) => b.slice()) }, msg: `从前往后，把每个数放进它${name}对应的队列（${buckets.map((b, i) => (b.length ? `${i} 号：${b.map(t).join(' ')}` : '')).filter(Boolean).join('；')}）。同一个队列里先进先出，保持原来的先后。` });
     A.splice(0, n, ...after);
-    passes.push(A.map(vOf));
+    passes.push(snap(A));
     steps.push({ view: { A: A.slice(), digit: k, fresh: range(1, n) }, msg: `从 0 号队列到 9 号队列依次收集，得到第 ${k + 1} 趟的结果。` });
   }
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done') }, msg: `排序完成，一共 ${d} 趟。` });

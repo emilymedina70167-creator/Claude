@@ -59,7 +59,7 @@ const RAD = new Set([
   'exact.js', 'formula.js', 'graph.js', 'graphspec.js', 'anscheck.js', 'derivedo.js', 'practicespec.js', 'textspec.js', 'matrixspec.js',
   'blocks/answer.js', 'blocks/steps.js', 'blocks/matrix.js', 'blocks/practice.js', 'blocks/letblock.js',
   'check/judge.js', 'check/spec.js', 'codejudge.js', 'render.js', 'stage/value.js', 'algofuncs.js', 'usespec.js',
-  'anstypes.js', 'blocks/widget.js', 'class/classroom.js', 'exam/drillgen.js', 'exam/verify.js', 'stage/answer.js', 'stepperspec.js',
+  'anstypes.js', 'check/values.js', 'blocks/widget.js', 'class/classroom.js', 'exam/drillgen.js', 'exam/verify.js', 'stage/answer.js', 'stepperspec.js',
 ]);
 function callers(dir = 'kit/src', out = []) {
   for (const f of readdirSync(dir)) {

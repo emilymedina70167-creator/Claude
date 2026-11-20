@@ -90,6 +90,7 @@ export function smoothAt(f, a, k, span) {
   const h = 1e-6 * Math.max(span, 1e-9), y = val(f, a), l = val(f, a - h), r = val(f, a + h);
   if ([y, l, r].some(Number.isNaN)) return true; // 一边没定义（定义域的端点）：不拦，照公式画
   const dl = (y - l) / h, dr = (r - y) / h;
+  if (!Number.isFinite(dl) || !Number.isFinite(dr)) return true; // 差商冲到无穷（竖直切线）：不是尖点，不拦
   return Math.abs(dl - dr) <= 0.02 * Math.max(1, Math.abs(dl), Math.abs(dr), Math.abs(k) || 0);
 }
 
