@@ -1104,6 +1104,37 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .plane.space .sp-face { fill-opacity: .13; stroke-opacity: .75; stroke-width: 1.6; stroke-linejoin: round; }
 /* 二次曲面的线框：细一点、淡一点，前后的线都看得见 */
 .plane.space .sp-quad { stroke-width: 1.4; stroke-opacity: .72; stroke-linecap: round; }
+/* 第 3 批：曲面、截痕、区域……（颜色都是命令给的，这里只定粗细和透明度） */
+.plane.space .sp-surf { fill-opacity: .16; stroke-opacity: .42; stroke-width: .8; stroke-linejoin: round; }
+.plane.space .sp-surf.is-front { fill-opacity: .3; }
+.plane.space .sp-solid { fill-opacity: .1; stroke-opacity: .3; }
+.plane.space .sp-solid.is-front { fill-opacity: .2; }
+.plane.space .sp-shell { fill-opacity: .3; stroke-opacity: .7; }
+.plane.space .sp-piece { fill-opacity: .2; stroke: none; }
+.plane.space .sp-tplane { fill-opacity: .28; }
+.plane.space .sp-plane-edge { stroke-width: 1.5; stroke-opacity: .6; }
+.plane.space .sp-cut { fill-opacity: .08; stroke-opacity: .35; stroke-width: 1; stroke-dasharray: 5 5; }
+.plane.space .sp-slice { fill-opacity: .42; stroke-width: 2; stroke-linejoin: round; }
+.plane.space .sp-region { fill-opacity: .22; stroke-opacity: .8; stroke-width: 1.6; stroke-linejoin: round; }
+.plane.space :is(.sp-wire, .sp-curve, .sp-section, .sp-arc) { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.plane.space .sp-wire { stroke-width: 1.4; stroke-opacity: .75; }
+.plane.space .sp-wire.is-faint { stroke-width: 1; stroke-opacity: .32; }
+.plane.space .sp-curve { stroke-width: 3.4; }
+.plane.space .sp-section { stroke-width: 3.6; }
+.plane.space .sp-meet { stroke-width: 4; stroke-linecap: round; }
+.plane.space .sp-eigen { stroke-width: 4.5; stroke-opacity: .85; stroke-linecap: round; }
+.plane.space .sp-tangent { stroke-width: 2.6; stroke-linecap: round; }
+.plane.space .sp-arc { stroke-width: 2.6; }
+.plane.space .sp-arc-arm { stroke-width: 1.6; stroke-opacity: .8; }
+.plane.space .sp-drop { stroke-width: 2.4; stroke-dasharray: 6 5; }
+.plane.space .sp-wall { stroke-width: 1; stroke-opacity: .4; }
+.plane.space .sp-column { stroke-width: 5; stroke-linecap: round; }
+.plane.space .g-pickpt { fill: var(--lav); fill-opacity: .3; stroke: var(--lav); stroke-width: 2.4; }
+.plane.space .g-pickpt.is-hit { fill: var(--green); stroke: var(--green); }
+.plane.space .g-pickpt.is-miss { fill: var(--coral); stroke: var(--coral); }
+.plane.space .g-target { fill: var(--yellow); stroke: rgb(var(--halo-rgb)); stroke-width: 1.5; }
+.plane.space .handle { touch-action: none; }
+.r-show > .sp-auto { color: var(--muted); font-size: 15px; }
 .sp-tools { position: absolute; right: 4px; top: 4px; display: flex; gap: 6px; }
 .sp-tools .btn-sm { min-height: 32px; padding: 0 10px; font-size: 17px; --frame: rgb(var(--chalk-rgb) / 0.3); background: rgb(var(--board-3-rgb) / 0.7); }
 

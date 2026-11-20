@@ -77,6 +77,18 @@ function callers(dir = 'kit/src', out = []) {
   }
   return out;
 }
+// 三维图两种都有（视觉第 3 批）：解析在 spacespec.js，经 fx/defs.js 的 compileWith 求值，上面按 import 找不到它，单独守着。
+// 老的图（线代）按角度；写了函数定义、微积分命令的图按弧度；angle: 明着定
+test('三维图：老的图按角度，微积分的图按弧度', async () => {
+  const { parseSpace } = await import('../kit/src/spacespec.js');
+  near(parseSpace('vector [cos(60), 0, 0]').cmds[0].expr({})[0], 0.5);
+  near(parseSpace('f(x, y) = cos(x)\nvector [f(pi/3, 0), 0, 0]').cmds[0].expr({})[0], 0.5);
+  near(parseSpace('angle: rad\nvector [cos(pi/3), 0, 0]').cmds[0].expr({})[0], 0.5);
+  const src = readFileSync('kit/src/space.js', 'utf8');
+  assert.ok(!/from '\.\/expr\.js'[^\n]*\bcompile\b|import \{[^}]*\bcompile\b[^}]*\} from '\.\/expr\.js'/.test(src), 'space.js 不该自己从 expr.js 拿 compile（角度 / 弧度由 spacespec.js 定）');
+  assert.match(src, /parsed\.rad \? undefined : \{ deg: true \}/);
+});
+
 test('每个调用的地方都归了类', () => {
   const missing = callers().filter((f) => !DEG.has(f) && !RAD.has(f) && !f.startsWith('fx/')); // fx/ 下全是弧度（计划 3 的实数取点）
   assert.deepEqual(missing, [], `这些文件用到了求值，要在 tests/expr-rad.test.js 里归进 DEG（画图、角度）或 RAD（答案、弧度）`);

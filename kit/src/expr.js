@@ -26,6 +26,11 @@ const FUNCS = {
   norm: (v) => (isNum(v) ? Math.abs(v) : Math.hypot(...asVec(v))), // |x| 写在数上就是绝对值
   proj: (u, v) => scale(dot(asVec(u), asVec(v)) / dot(asVec(v), asVec(v)), asVec(v)),
   cross: (u, v) => { const [a, b, c] = asVec(u), [d, e, f] = asVec(v); return [b * f - c * e, c * d - a * f, a * e - b * d]; },
+  // 空间里的距离和夹角（三维图）：点是 [x, y, z]，平面是 [a, b, c, d]（ax + by + cz = d），直线是 [[点], [方向]]。
+  // 图里起了名字的平面、直线就是这样的量。夹角是弧度；angledeg 是度
+  dist: (a, b) => geoDist(a, b),
+  angleof: (a, b) => geoAngle(a, b),
+  angledeg: (a, b) => (geoAngle(a, b) * 180) / Math.PI,
   rot: (deg) => { const r = (num(deg) * Math.PI) / 180; return [[Math.cos(r), -Math.sin(r)], [Math.sin(r), Math.cos(r)]]; },
   lerp: (a, b, t) => add(scale(1 - num(t), a), scale(num(t), b)),
   mat: (...cols) => transpose(cols.map(asVec)), // 由列向量组成矩阵
@@ -598,6 +603,28 @@ const SPECIAL = {
 };
 const FORM_ONLY = new Set(Object.keys(SPECIAL));
 /** 这个名字是不是页面自带的函数（含特殊形式）：图里定义自己的函数时不能撞名 */
+// dist / angleof 认的三种东西
+const geoKind = (o) => (isVec(o) && o.length === 3 ? 'point' : isVec(o) && o.length === 4 ? 'plane' : Array.isArray(o) && o.length === 2 && o.every((r) => isVec(r) && r.length === 3) ? 'line' : null);
+const d3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const x3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function geoDist(a, b) {
+  let ka = geoKind(a), kb = geoKind(b);
+  if (ka !== 'point' && kb === 'point') { [a, b] = [b, a]; [ka, kb] = [kb, ka]; }
+  if (ka === 'point' && kb === 'point') return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  if (ka === 'point' && kb === 'plane') return Math.abs(d3(a, b) - b[3]) / Math.hypot(b[0], b[1], b[2]);
+  if (ka === 'point' && kb === 'line') { const w = [a[0] - b[0][0], a[1] - b[0][1], a[2] - b[0][2]]; return Math.hypot(...x3(w, b[1])) / Math.hypot(...b[1]); }
+  throw new Error('dist 的写法：dist(点, 点)、dist(点, 平面)、dist(点, 直线)');
+}
+function geoAngle(a, b) {
+  const ka = geoKind(a), kb = geoKind(b);
+  const dir = (o, k) => (k === 'plane' ? o.slice(0, 3) : k === 'line' ? o[1] : o);
+  if (!ka || !kb || (ka === 'point') !== (kb === 'point')) throw new Error('angleof 的写法：angleof(平面, 平面)、angleof(直线, 直线)、angleof(直线, 平面)，或者两个向量');
+  const u = dir(a, ka), w = dir(b, kb), c = d3(u, w) / (Math.hypot(...u) * Math.hypot(...w));
+  if (ka === 'point') return Math.acos(Math.max(-1, Math.min(1, c))); // 两个向量：0 到 π
+  // 线和面：线的方向和法向量的夹角的余角；别的（面面、线线）取锐角
+  return (ka === 'plane') !== (kb === 'plane') ? Math.asin(Math.min(1, Math.abs(c))) : Math.acos(Math.min(1, Math.abs(c)));
+}
+
 export const isFuncName = (name) => Object.hasOwn(FUNCS, name) || Object.hasOwn(SPECIAL, name) || Object.hasOwn(DEG, name);
 
 export const isNum = (x) => typeof x === 'number';
