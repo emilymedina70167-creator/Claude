@@ -37,6 +37,8 @@ export function parseCalc(line) {
   const need = { deriv: ['of'], antideriv: ['of'], integral: ['of', 'from', 'to'], limit: ['of', 'at'], equiv: ['of', 'at'], order: ['of', 'at'], taylor: ['of', 'order'], integral2: ['of', 'x', 'y'], sum: ['of', 'n'], ode: ['eq'] }[out.kind];
   for (const k of need) if (!out[k]) throw new Error(`calc: ${out.kind} 要写 ${k}=`);
   if (out.C && !['need', 'any', 'no'].includes(out.C)) throw new Error('calc: antideriv 的 C= 写 need（要写 +C，默认）、any（写不写都行）或 no（不写）');
+  // at=0+、at=0-、at=0^+：单侧（dr-calc-fix 第 6 条），和 side= 一样
+  if (out.at !== undefined) { const t = splitSide(out.at); out.at = t.at; if (t.side && !out.side) out.side = t.side; }
   if (out.side && !['+', '-'].includes(out.side)) throw new Error('side= 写 + 或 -');
   if (out.order !== undefined && out.order !== 'n' && !/^\d+$/.test(out.order)) throw new Error('order= 写一个整数，或者 n（n 阶导的通式）');
   if (out.kind === 'taylor' && Number(out.order) > 8) throw new Error('taylor 的 order 最多写 8');
@@ -63,6 +65,13 @@ export function parseCalc(line) {
 }
 
 // 极限的点：数、inf（两侧）、+inf、-inf
+/** 「0+」「0-」「0^+」「0^(-)」→ { at: '0', side: '+' }；没写单侧的原样（+inf、-inf 的正负号在前面，不算） */
+export function splitSide(s) {
+  const t = String(s ?? '').trim();
+  const m = /^(.*?[^\s^+-])\s*\^?\s*[({]?\s*([+-])\s*[)}]?$/.exec(t);
+  return m && !/^[+-]?(inf|∞)$/i.test(t) ? { at: m[1].trim(), side: m[2] } : { at: t, side: null };
+}
+
 export function atOf(s) {
   const t = String(s ?? '').trim().replace(/∞/g, 'inf').replace(/\s+/g, '');
   if (/^inf$/i.test(t)) return 'inf';
@@ -375,7 +384,10 @@ const termText = (k, x, at) => (k === 0 ? '常数' : `${at ? `(${x}${at > 0 ? '-
  * 判学生的。given：照输入框读好的串（normalizeFormula 的结果）。
  * 回 { ok: true | false | null, msg（给学生看，可带 $TeX$）, note（进作答记录）, bad? }
  */
-export function judgeCalc(spec, given) {
+// texOf：学生的式子写成 TeX（formula.js 的 formulaTeX 传进来，免得两边互相 import）：判错时照学生写的说，不写算出来的小数
+export function judgeCalc(spec, given, { texOf = null } = {}) {
+  let gotTeX = null;
+  try { gotTeX = texOf ? texOf(given) : null; } catch { gotTeX = null; }
   const c = spec.calc;
   let g;
   try { g = parse(given); } catch (e) { return { ok: false, msg: `看不懂你写的：${e.message}`, note: '读不懂' }; }
@@ -383,7 +395,7 @@ export function judgeCalc(spec, given) {
   const opt = { domain, scope: spec.scope, seed: spec.seed };
   switch (c.kind) {
     case 'deriv': {
-      if (c.at !== undefined && c.order !== 'n') return judgeValue('deriv', valueKind(spec.expected, spec.scope), valueKind(given, spec.scope));
+      if (c.at !== undefined && c.order !== 'n') return judgeValue('deriv', valueKind(spec.expected, spec.scope), valueKind(given, spec.scope), null, gotTeX);
       if (c.order === 'n') {
         const want = expectedOf(spec);
         for (const n of NS) {
@@ -407,7 +419,7 @@ export function judgeCalc(spec, given) {
       return r;
     }
     case 'sum': {
-      if (!spec.domain?.length) return judgeValue('sum', valueKind(spec.expected, spec.scope), valueKind(given, spec.scope));
+      if (!spec.domain?.length) return judgeValue('sum', valueKind(spec.expected, spec.scope), valueKind(given, spec.scope), null, gotTeX);
       return compareFx(expectedOf(spec), g, opt);
     }
     case 'ode': return odeCheck(c, g, spec);
@@ -415,7 +427,7 @@ export function judgeCalc(spec, given) {
       const want = valueKind(spec.expected, spec.scope);
       const got = valueKind(given, spec.scope);
       if (got.kind === 'bad') return { ok: false, msg: '这里写一个数（或 ∞、+∞、−∞、不存在、发散）', note: '写的不是一个数' };
-      return judgeValue(c.kind, want, got, spec.trueKind);
+      return judgeValue(c.kind, want, got, spec.trueKind, gotTeX);
     }
     case 'equiv': {
       const f = fn(c.ofAst, c.x, spec.scope), h = fn(g, c.x, spec.scope);
@@ -450,9 +462,10 @@ export function judgeCalc(spec, given) {
 
 // 一个数的答案：照审的表（+∞ 写 ∞ 对、说一句；∞ 写不存在对、说一句）
 // trueKind：外部写的 ∞、页面算出来是 +∞（或 −∞）时，学生写那个带符号的也对
-function judgeValue(kind, want, got, trueKind = null) {
+function judgeValue(kind, want, got, trueKind = null, gotTeX = null) {
   const right = (msg = '') => ({ ok: true, msg, note: msg });
-  const wrong = () => ({ ok: false, msg: `不对：你写的是 $${kindText(got)}$。`, note: `写了 ${kindText(got)}，答案是 ${kindText(want)}` });
+  const wrote = gotTeX || kindText(got); // 学生写 π/2 就说 π/2，不说 1.571（dr-calc-fix）
+  const wrong = () => ({ ok: false, msg: `不对：你写的是 $${wrote}$。`, note: `写了 ${kindText(got)}，答案是 ${kindText(want)}` });
   if (want.kind === 'finite') return got.kind === 'finite' && Math.abs(got.value - want.value) <= 1e-9 * Math.max(1, Math.abs(want.value)) ? right() : wrong();
   if (want.kind === got.kind) return right();
   if (kind === 'limit') {

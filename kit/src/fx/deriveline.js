@@ -11,7 +11,7 @@ import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { compareFx, parseDomain, floatScope, showNum, DEFAULT_RANGE, fxEval } from './sample.js';
 import { diffAst, substitute, has } from './diff.js';
 import { numLimit } from './limit.js';
-import { stripTail, atOf } from './calc.js';
+import { stripTail, atOf, splitSide, valueKind } from './calc.js';
 import { nearFraction } from './taylor.js';
 
 const VARS = ['x', 't', 'u', 'y', 'n', 's', 'v', 'w', 'z'];
@@ -28,7 +28,9 @@ export function parseDeriveCalc(line) {
   for (const kv of m[2].matchAll(/(at|side|var)\s*=\s*(\S+)/g)) out[kv[1]] = kv[2];
   if (out.kind === 'limit') {
     if (out.at === undefined) throw new Error('calc: limit 要写 at=（x 趋向哪：0、inf、+inf、-inf）');
-    out.at = atOf(out.at);
+    const t = splitSide(out.at); // at=0+（dr-calc-fix 第 6 条）
+    out.at = atOf(t.at);
+    if (t.side && !out.side) out.side = t.side;
   }
   out.v = out.var || 'x';
   return out;
@@ -103,6 +105,20 @@ export function readLine(text, { kind, names = [] } = {}) {
   return { ast, src, vars, lim, hadC };
 }
 
+// 一行只写一个特殊的值：∞（无符号）、+∞、−∞、不存在
+const SPECIAL_TEXT = { inf: '∞', '+inf': '+∞', '-inf': '−∞', none: '不存在' };
+export function specialKind(src) {
+  const k = valueKind(src).kind;
+  return k in SPECIAL_TEXT && /inf|__dne/.test(String(src)) ? k : null;
+}
+// 真的极限是 truth、学生写的是 wrote：对回 true 或一句提醒（字），错回 false（照 answer 的表：+∞ 写 ∞ 对、∞ 写不存在对）
+export function sameKind(truth, wrote) {
+  if (truth === wrote) return true;
+  if ((truth === '+inf' || truth === '-inf') && wrote === 'inf') return `写 ${SPECIAL_TEXT[truth]} 更准确`;
+  if (truth === 'inf' && wrote === 'none') return '更准确是 ∞';
+  return false;
+}
+
 const fmt = (v) => {
   const q = nearFraction(v, { tol: 1e-9, maxDen: 1000 });
   return q ? q.toString() : showNum(v);
@@ -142,6 +158,15 @@ export function checkFxLine(calc, prev, text, { ctx = {}, domain = [], scope = {
 }
 
 function limitLine(calc, prev, read, ctx, scope, domain) {
+  // 整行只写 ∞ / +∞ / -∞ / 不存在（dr-calc-fix 第 5 条）：当极限的值和上一行的极限比，照 answer 那张表认
+  const sp = specialKind(read.src);
+  if (sp) {
+    const a = limitOf(prev.read.ast, prev.lim || ctx.lim, scope);
+    if (a.kind === null) return { ok: null, why: '页面判不了这一步（上一行的极限算不出来）', read, ctx };
+    const r = sameKind(a.kind, sp);
+    if (r === false) return { ok: false, why: `上一行的极限是 ${limText(a)}，这一行写的是 ${SPECIAL_TEXT[sp]}`, read, ctx, prevLim: limText(a), lineLim: SPECIAL_TEXT[sp] };
+    return { ok: true, read, ctx, ...(r ? { hint: r } : {}) };
+  }
   // 这一行的变量和点：写了 lim 就用它的；没写、变量换了、有换元的：照换元算点；别的沿用上一行的
   let lim = read.lim || ctx.lim || { v: calc.v, at: calc.at, side: calc.side || 'both' };
   if (!read.lim && read.vars.length && !read.vars.includes(lim.v)) {

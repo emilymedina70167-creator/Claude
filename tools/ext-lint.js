@@ -227,7 +227,12 @@ export function deriveDoProblems(body) {
   const out = [];
   const self = checkLine(spec, envs, spec.start, spec.start);
   if (!self.ok) out.push(`start: ${spec.start} ${self.error || self.why || '算不出来'}`);
-  if (spec.goal) { const g = checkLine(spec, envs, spec.goal, spec.goal); if (!g.ok) out.push(`goal: ${spec.goal} ${g.error || g.why || '算不出来'}`); }
+  // goal 和 start 判一次（和页面 blocks/derivedo.js 开题前查的同一句，dr-calc-fix 第 7 条）：不相等学生永远推不到
+  if (spec.goal) {
+    const g = checkLine(spec, envs, spec.start, spec.goal);
+    if (g.error) out.push(`goal: ${spec.goal} ${g.error}`);
+    else if (g.ok === false) out.push(`goal: 和 start: 不相等（${g.why || '算出来不一样'}）：学生永远推不到`);
+  }
   return out;
 }
 

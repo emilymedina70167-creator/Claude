@@ -115,13 +115,22 @@ function absGroups(toks) {
   return out;
 }
 
-// 实数的题：不带括号的指数是「数字紧跟字母」（e^2x、e^-2x、x^2y）不读——读成 e²·x 再判错就是把对的判成错
+// 实数的题：不带括号的指数是「数字紧跟字母」（e^2x、e^-2x、x^2y）不读——读成 e²·x 再判错就是把对的判成错。
+// 两种照读（dr-calc-fix 第 1、2 条）：底是函数名（sin^2x 是 (sin x)²，数字后面是参数，wrapArgs 处理）；
+// 紧跟的是 e 而且后面还有 ^（x^2e^x：指数到数字为止，e^x 是新的因子）。不收的话照学生写的底和字母说（第 3 条）
 function checkExponents(toks) {
   for (let k = 0; k < toks.length; k++) {
     if (toks[k].v !== '^') continue;
+    if (toks[k - 1]?.k === 'fn') continue;
     let j = k + 1;
+    const sign = toks[j]?.v === '-' ? '-' : '';
     if (toks[j]?.v === '-' || toks[j]?.v === '+') j++;
-    if (toks[j]?.k === 'num' && toks[j + 1]?.k === 'name' && !toks[j + 1].sp) throw new Error('指数写不清：写 e^(2x) 或 e^2·x（不带括号的指数只读到数字为止）');
+    const n = toks[j], l = toks[j + 1];
+    if (n?.k !== 'num' || l?.k !== 'name' || l.sp) continue;
+    if (l.cst && l.v === 'e' && toks[j + 2]?.v === '^') continue;
+    const b = toks[k - 1]?.k === 'num' || toks[k - 1]?.k === 'name' ? toks[k - 1].v : '(…)';
+    const ways = sign ? `${b}^(-${n.v}${l.v}) 或 ${b}^(-${n.v})·${l.v}` : `${b}^${n.v}·${l.v} 或 ${b}^(${n.v}${l.v})`;
+    throw new Error(`指数写不清：写 ${ways}（不带括号的指数只读到数字为止）`);
   }
 }
 
@@ -144,8 +153,9 @@ function exponentEnd(toks, j) {
 const P = (v) => ({ k: 'op', v });
 
 // 函数的参数：带括号的照旧；不带括号的，新函数吃「系数（数、π）+ 一个名字（带它的指数）」，老函数照旧只吃一个记号（trA → tr(A)）
+// 从右往左包（dr-calc-fix 第 4 条）：里面的函数先包好，外面的函数后面紧跟一个函数时，参数就是那一个（ln ln x、sin√x）
 function wrapArgs(toks, { real }) {
-  for (let k = 0; k < toks.length; k++) {
+  for (let k = toks.length - 1; k >= 0; k--) {
     const t = toks[k];
     if (t.k !== 'fn') continue;
     const name = t.v === 'log' && t.base !== undefined ? `log_${t.base}` : t.v;
@@ -169,7 +179,7 @@ function wrapArgs(toks, { real }) {
       if (toks[j]?.k === 'name' && !toks[j].cst) {
         j++;
         if (toks[j]?.v === '^') j = exponentEnd(toks, j + 1);
-      } else if (j === from && toks[j]?.k === 'fn' && toks[j].absGroup) j = closeOf(toks, j + 1) + 1; // ln|x|
+      } else if (j === from && toks[j]?.k === 'fn' && toks[j + 1]?.v === '(') j = closeOf(toks, j + 1) + 1; // ln|x|、ln ln x、sin√x（里面那个已经包好了）
       if (j === from) throw new Error(`${name} 后面要写它作用在什么上，比如 ${name}(x)`);
       if (toks[j]?.k === 'name' && !toks[j].cst) {
         const a = toks.slice(from, j).map((x) => x.v).join('');
@@ -187,7 +197,6 @@ function wrapArgs(toks, { real }) {
     if (power) {
       toks.splice(end, 0, P(')'), P('^'), ...power);
       toks.splice(k, 0, P('('));
-      k++;
     }
   }
   return toks;
@@ -204,8 +213,12 @@ function splitName(w, known, fn) {
     if (!s) return [];
     if (memo.has(s)) return memo.get(s);
     let best = null;
-    for (const n of all) {
+    // C_1cos2x：数字自成一段（cos2x → cos、2、x）
+    const d = /^\d+(?:\.\d+)?/.exec(s);
+    if (d) { const rest = go(s.slice(d[0].length)); if (rest) best = [{ k: 'num', v: d[0] }, ...rest]; }
+    for (const n of best ? [] : all) {
       if (!s.startsWith(n)) continue;
+      if (n === 'log' && /^\d/.test(s.slice(3))) continue; // log2 不拆
       const rest = go(s.slice(n.length));
       if (rest) { best = [{ k: fn.has(n) && !known.has(n) ? 'fn' : 'name', v: n }, ...rest]; break; }
     }
@@ -309,6 +322,13 @@ export function parseFree(spec) {
   });
 }
 
+// 输入框的示例字按题换（dr-calc-fix）：答案是一个数的「比如 1/2、e^2、∞」，函数式的「比如 x e^x」
+function placeholderFor(c) {
+  if (c && !FUNCTION_KINDS.has(c.kind) && c.kind !== 'sum') return '比如 1/2、e^2、∞';
+  if (c && c.kind === 'deriv' && c.at !== undefined && c.order !== 'n') return '比如 1/2、e^2、∞';
+  return '比如 x e^x';
+}
+
 // 小键盘多的那一排：极限题能写无穷和不存在，积分题能写发散，别的是常用函数
 function padFor(c) {
   if (c && c.kind === 'limit') return ['∞', '+∞', '-∞', '不存在', 'e', 'π'];
@@ -397,7 +417,7 @@ function matrixPowerIn(ast, freeNames, scope) {
  */
 export function compareFormula(expected, given, opts = {}) {
   // calc:（导数、不定积分、极限……）：fx/calc.js 判
-  if (opts.calc) return judgeCalc(opts, given);
+  if (opts.calc) return judgeCalc(opts, given, { texOf: formulaTeX });
   // 实数取点的题（formula: x、x in (…)、domain:、calc:）：fx/sample.js 判
   if (opts.real) return compareFx(expected, given, { domain: opts.domain, ints: opts.ints, scope: opts.scope, seed: opts.seed });
   const { free, scope = {} } = opts;
@@ -524,7 +544,7 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
     if (calc) {
       // 学生写 +C、o(x^3)：输入框读法里认这几个名字，判的时候在语法树上去掉（fx/calc.js 的 stripTail）
       const extra = calc.kind === 'antideriv' ? CONST_NAMES.filter((c) => !(c in scope)) : calc.kind === 'ode' ? ['C', 'C_1', 'C_2', 'C_3', 'C1', 'C2', 'C3'].filter((c) => !(c in scope)) : [];
-      const spec = { expected, free, scope, names: [...names, ...extra], keys, display: shown, real: true, domain, ints, seed, calc, pad: padFor(calc),
+      const spec = { expected, free, scope, names: [...names, ...extra], keys, display: shown, real: true, domain, ints, seed, calc, pad: padFor(calc), placeholder: placeholderFor(calc),
         read: { names: [...names, ...extra], real: domain.length > 0, ...(calc.kind === 'taylor' ? { funcs: [...FORMULA_FUNCS, 'o', 'O'] } : {}) } };
       const { errors, hints } = calcSelfCheck(spec, { budget: opts.budget ?? PAGE_BUDGET });
       if (errors.length) throw new Error(errors.join('；'));
@@ -533,7 +553,7 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
     }
     const self = compareFx(ast, ast, { domain, ints, scope, seed });
     if (self.ok !== true) throw new Error(`answer: ${shown} 在给的范围里算不出来（${self.note}）：检查式子，或用 domain: x in (…) 给范围`);
-    return { expected, free, scope, names, keys, display: shown, real: true, domain, ints, seed, read: { names, real: true }, pad: padFor(null) };
+    return { expected, free, scope, names, keys, display: shown, real: true, domain, ints, seed, read: { names, real: true }, pad: padFor(null), placeholder: placeholderFor(null) };
   }
   const self = compareFormula(ast, ast, { free, scope });
   if (!self.ok) throw new Error(`answer: ${src} 代不进去：${self.msg}`);
