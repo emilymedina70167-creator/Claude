@@ -57,8 +57,10 @@ function readOther(student) {
   const t = s.replace(/\s+/g, '');
   if (!t) return null;
   let m;
-  if ((m = BIN.exec(t))) return { v: parseInt(m[1] ?? m[2], 2) };
-  if ((m = HEX.exec(t))) return { v: parseInt(m[1] ?? m[2], 16) };
+  // 后缀的写法（王道的 1011B、3A3CH）另记「同样的数字当十进制读」plain：100B 也可能是 100 个字节、5h 是 5 小时（numMatch 看）
+  const plainOf = (digits) => (digits !== undefined && /^\d+$/.test(digits) ? Number(digits) : undefined);
+  if ((m = BIN.exec(t))) return { v: parseInt(m[1] ?? m[2], 2), plain: plainOf(m[2]), unit: 'B' };
+  if ((m = HEX.exec(t))) return { v: parseInt(m[1] ?? m[2], 16), plain: plainOf(m[2]), unit: 'H' };
   if (SCI.test(t)) return { v: Number(t) };
   if (/\d\s+\d/.test(s) || /\d*\.\d*\./.test(t)) return null; // 5.3.3 也不读成 5.3 × .3
   try {
@@ -77,7 +79,11 @@ export function numMatch(student, value) {
   const r = readNum(student);
   if (!r || !Number.isFinite(r.v)) {
     const o = readOther(student);
-    return o ? exactly(o.v, value) : null;
+    if (!o) return null;
+    // 后缀的二进制、十六进制按进制读对不上、同样的数字当十进制读却对得上（对的值 100 写 100B；5 写 5h）：
+    // 分不清是进制还是单位，回 UNSURE（判的时候待核，不当对也不当错；ambiguousWhy 说）
+    if (o.plain !== undefined && exactly(o.plain, value)) return UNSURE;
+    return exactly(o.v, value);
   }
   if (exactly(r.v, value)) return true;
   if (r.frac || r.digits < 2 || r.sig < 3) return false;
@@ -142,9 +148,19 @@ export function seqMatch(a, b, { set = false } = {}) {
   return sameSeq(cleanSide(a), cleanSide(b), { set });
 }
 
+/** numMatch / valueMatch 的第四种结论：读得懂，但分不清是进制还是单位（100B、5h），判的时候待核 */
+export const UNSURE = 'unsure';
+/** UNSURE 时那一项写什么 */
+export function ambiguousWhy(student) {
+  const s = cleanInput(student);
+  const o = readOther(s);
+  if (!o || o.plain === undefined) return `「${s}」页面判不了，主讲会核`;
+  return o.unit === 'B' ? `「${s}」是二进制还是 ${o.plain} 个字节？页面判不了，主讲会核` : `「${s}」是十六进制还是 ${o.plain} 小时？页面判不了，主讲会核`;
+}
+
 /**
  * 学生写的（字）和算出来的值比：按值的样子挑——数走 numMatch、复杂度走 bigO、数组和别的字走 seqMatch（先后算数）。
- * true / false；读不懂 null（数、复杂度才会读不懂）
+ * true / false；读不懂 null（数、复杂度才会读不懂）；分不清进制还是单位 UNSURE（numMatch）
  */
 export function valueMatch(student, value) {
   if (typeof value === 'number') return numMatch(student, value);

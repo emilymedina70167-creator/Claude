@@ -1036,12 +1036,32 @@ function problemsOf(p, base, soft) {
     }
   } else if (p.ifs && p.exampleSrc && !p.tpl) out.push('example 算不出来');
   if (p.expects) out.push(...predictProblems(p, base, tieLines, soft));
+  out.push(...markedMathProblems(p));
   if (p.use) out.push(...traceProblems(p, soft));
   if (p.type === 'rewrite') out.push(...rewriteProblems(p));
   if (p.code) out.push(...codeProblems(p));
   else if (p.result && baseType(p) === 'solve' && p.runs?.length) out.push(...solveResultProblems(p, base, vars, tieLines));
   else if (p.result) { try { compile(p.result)(withDefaults(vars)); } catch (e) { out.push(`result 算不了：${e.message}`); } }
   return out;
+}
+
+// 排序的 final、pass#、round# 有相同的数时带撇号（'5′' 是字，dr-final-fix 第 3 条）：只能整串拿来比（expect: r.final、
+// B == r.final），放进算式（sum(r.final)、el(r.pass1, 2) + 1）里，有相同的数的那一组就算不对——不看这组数有没有相同的数，
+// 写了就报（模板换一组数就可能有）。条件按两边分开看：一边只写这个量是比，不是算
+const MARKED = /^(?:final|pass\d+|round\d+)$/;
+function markedMathProblems(p) {
+  const sorts = new Set((p.runs || []).filter((r) => r.engine === 'sort').map((r) => r.name));
+  if (!sorts.size) return [];
+  const refsIn = (text) => [...String(text ?? '').replace(/"[^"]*"|“[^”]*”|「[^」]*」/g, ' ').matchAll(/\b([A-Za-z]\w*)\.([A-Za-z_]\w*)/g)]
+    .filter((m) => sorts.has(m[1]) && MARKED.test(m[2])).map((m) => `${m[1]}.${m[2]}`);
+  const sides = [
+    ...(p.expects || []).flatMap((e) => [e.value, ...e.wrongs.map((w) => w.expr)]),
+    ...(p.exprs || []).map((e) => e.expected), p.result,
+    ...(p.ifs || []).flatMap((c) => { const sp = condParts(c.text); return sp ? [sp.lhs, sp.rhs] : [c.text]; }),
+  ];
+  const bad = new Set();
+  for (const t of sides) for (const k of refsIn(t)) if (String(t).trim() !== k) bad.add(k);
+  return [...bad].map((k) => `${k} 有相同的数时带撇号，是一串字，不拿来算：整串拿来比（expect: ${k}、B == ${k}），要个数、比较次数用 passes、cmp 这些量`);
 }
 
 // solve / calc 的 result 带 run：照固定的字段跑一遍，算得出来、用到的量没有并列

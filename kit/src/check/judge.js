@@ -13,7 +13,7 @@ import { baseType, probeVars, evalIfs, withDefaults, runVars, measuresUsed, expe
 import { ROLES, matchText, diagnose, normText, joinWords, spanText, tokenizeSentence } from '../entext.js';
 import { sortPass } from '../engines/measures.js';
 import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
-import { valueMatch, sameResult, unreadWhy, halfWidth, readProblem } from './values.js';
+import { valueMatch, sameResult, unreadWhy, halfWidth, readProblem, UNSURE, ambiguousWhy } from './values.js';
 import { parseJudge, STEP_KINDS, STEP_TAGS } from '../solvespec.js';
 import { parseCodeSpec, runTests } from '../codejudge.js';
 
@@ -179,6 +179,7 @@ function runExprItem(probe, e, exprs, raw, rv, names) {
   const s = String(exprs?.[e.id] ?? '').trim();
   if (!s) return { id: e.id, ok: false, why: `没写${e.label}` };
   const m = valueMatch(s, right);
+  if (m === UNSURE) return { id: e.id, ok: null, why: ambiguousWhy(s) };
   return m === true ? { id: e.id, ok: true, why: '' } : { id: e.id, ok: false, why: m === null ? unreadWhy(right) : `${e.label}不对` };
 }
 
@@ -233,6 +234,8 @@ function predictItems(probe, answer = {}, base = {}) {
     if (!s) return { id: e.id, ok: false, why: `没写${e.label}`, keys: [e.id] };
     const m = valueMatch(s, right);
     if (m === true) return { id: e.id, ok: true, why: '' };
+    // 100B、5h：分不清是进制还是单位，待核（dr-final-fix 第 4 条的裁定）
+    if (m === UNSURE) return { id: e.id, ok: null, why: ambiguousWhy(s) };
     // 判的时候还读不懂（交之前没挡住的）：读不懂不是答错，待核（dr-final-fix 第 4 条）
     if (m === null) return { id: e.id, ok: null, why: `${unreadWhy(right)}（页面读不懂，待核）` };
     const it = { id: e.id, ok: false, why: '' };
@@ -485,6 +488,7 @@ function resultItem(probe, answer = {}, base = {}) {
   const m = valueMatch(s, right);
   // 判的时候还读不懂（交之前没挡住的）：待核，不当答错（dr-final-fix 第 4 条）
   if (m === null) return { id: 'result', ok: null, why: `${unreadWhy(right)}（页面读不懂，待核）` };
+  if (m === UNSURE) return { id: 'result', ok: null, why: ambiguousWhy(s) };
   return m === true ? { id: 'result', ok: true, why: '' } : { id: 'result', ok: false, why: '最后的值不对' };
 }
 

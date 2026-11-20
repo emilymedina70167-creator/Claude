@@ -4,7 +4,7 @@
 //   4. solve / calc 的最后的值、predict 的数：十六进制、二进制、式子都认；带单位交之前挡；判的时候还读不懂是待核 null
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseProbe } from '../kit/src/check/spec.js';
+import { parseProbe, probeIssues } from '../kit/src/check/spec.js';
 import { judgeMachine, expectProblems, resultProblem } from '../kit/src/check/judge.js';
 import { measure } from '../kit/src/engines/measures.js';
 import { valueMatch } from '../kit/src/check/values.js';
@@ -151,4 +151,32 @@ test('predict 的数也用同一个读法：十六进制、式子', () => {
   const r = judgeMachine(lru, { expects: { x1: 'AH', x2: '5/6' } });
   assert.equal(item(r, 'x1').ok, true);
   assert.equal(item(r, 'x2').ok, true);
+});
+
+// —— 裁定（第二次提交）：后缀的进制和单位分不清时待核；带撇号的量不拿来算 ——
+
+test('100B、5h：按进制对不上、当十进制对得上 → 待核 null；按进制对得上 → 对；都对不上 → 错', () => {
+  const r = (right, s) => item(judgeMachine(HEXQ(String(right)), { text: '…', result: s }), 'result');
+  assert.equal(r(100, '100B').ok, null);
+  assert.match(r(100, '100B').why, /「100B」是二进制还是 100 个字节？页面判不了，主讲会核/);
+  assert.equal(r(4, '100B').ok, true);
+  assert.equal(r(7, '100B').ok, false);
+  assert.equal(r(5, '5h').ok, null);
+  assert.match(r(5, '5h').why, /十六进制还是 5 小时/);
+  assert.equal(r(16, '10H').ok, true);
+  assert.equal(r(100, '0b100').ok, false, '带前缀的不含糊');
+  const lru = P('predict', `${HEAD}run r: paging algo=lru frames=3 refs="1 2 3 4 1 2 5 1 2 3 4 5"\nexpect 缺页次数: r.faults`);
+  assert.equal(item(judgeMachine(lru, { expects: { x1: '10B' } }), 'x1').ok, null);
+  assert.equal(item(judgeMachine(lru, { expects: { x1: '1010B' } }), 'x1').ok, true);
+});
+
+test('自检：r.final、r.pass#、r.round# 放进算式里报写法错误，整串比不报', () => {
+  const bad = P('predict', `${HEAD}run r: sort algo=select array="5 8 5′ 2 9"\nexpect 和: sum(r.final)`);
+  assert.ok(probeIssues(bad).hard.some((m) => /r\.final 有相同的数时带撇号，是一串字，不拿来算/.test(m)), JSON.stringify(probeIssues(bad)));
+  const bad2 = P('calc', `${HEAD}steps:\ns1 calc: 算\nrun r: sort algo=select array="5 8 5′ 2 9"\nresult: el(r.pass1, 2) + 1`);
+  assert.ok(probeIssues(bad2).hard.some((m) => /r\.pass1 有相同的数时带撇号/.test(m)));
+  const ok = P('predict', `${HEAD}run r: sort algo=select array="5 8 5′ 2 9"\nexpect 排完: r.final\nexpect 比较: r.cmp`);
+  assert.ok(!probeIssues(ok).hard.some((m) => /带撇号/.test(m)));
+  const k = P('construct', `${HEAD}slots: A=seq(5) B=seq(5)\nrun r: sort algo=select array=A\nif: B == r.final => 不是排完的样子\nexample: A=5 8 5 2 9 B=2 5′ 5 8 9`);
+  assert.ok(!probeIssues(k).hard.some((m) => /带撇号/.test(m)));
 });
