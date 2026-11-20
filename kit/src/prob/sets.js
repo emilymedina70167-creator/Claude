@@ -4,7 +4,7 @@
 // 概率：每一块一个未知数，给的条件都是它们的一次方程（P(A | B) = v 是 P(AB) − v·P(B) = 0），
 // 再加上「和是 1、每块 ≥ 0」。能取的值是一个多面体，问的量在它的顶点上取到最小最大：
 // 最小 = 最大就是定得下来，不一样就是条件不够（不替学生猜独立）。
-import { Q0, Q1, readQ } from './num.js';
+import { Q0, Q1, readQ, qReduce as reduce } from './num.js';
 
 export const MAX_EVENTS = 4;
 const fullOf = (n) => (1 << (1 << n)) - 1;
@@ -202,27 +202,6 @@ function rowOf(g, N) {
   if (g.cond == null) return { a: indicator(g.mask, N), b: g.value };
   const both = indicator(g.mask & g.cond, N), base = indicator(g.cond, N);
   return { a: both.map((x, k) => x.sub(g.value.mul(base[k]))), b: Q0 };
-}
-// 高斯消元（精确）：回 { rows（化简后非零的行）, pivots, ok（有没有 0 = 非零的矛盾行）}
-function reduce(rows, N) {
-  const M = rows.map((r) => [...r.a, r.b]);
-  const pivots = [];
-  let r = 0;
-  for (let c = 0; c < N && r < M.length; c++) {
-    const k = M.findIndex((row, i) => i >= r && !row[c].zero);
-    if (k < 0) continue;
-    [M[r], M[k]] = [M[k], M[r]];
-    const pv = M[r][c];
-    M[r] = M[r].map((x) => x.div(pv));
-    for (let i = 0; i < M.length; i++) {
-      if (i === r || M[i][c].zero) continue;
-      const f = M[i][c];
-      M[i] = M[i].map((x, j) => x.sub(f.mul(M[r][j])));
-    }
-    pivots.push(c); r++;
-  }
-  const ok = M.slice(r).every((row) => row[N].zero);
-  return { M: M.slice(0, r), pivots, ok };
 }
 function* choose(arr, k, from = 0, acc = []) {
   if (acc.length === k) { yield acc.slice(); return; }

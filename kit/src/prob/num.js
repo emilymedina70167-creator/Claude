@@ -40,3 +40,25 @@ export function qTeX(x, { maxDen = 1000 } = {}) {
   if (x.d <= BigInt(maxDen)) return x.d === 1n ? `${x.n}` : `${x.n < 0n ? '-' : ''}\\frac{${x.n < 0n ? -x.n : x.n}}{${x.d}}`;
   return String(Number(x.toNumber().toPrecision(4)));
 }
+
+/** 高斯消元（精确）。rows: [{ a: 系数, b: 右边 }]，N 个未知数。回 { M（化成最简的非零行，最后一列是右边）, pivots（每行的主元在第几列）, ok（没有 0 = 非零的矛盾行）} */
+export function qReduce(rows, N) {
+  const M = rows.map((r) => [...r.a, r.b]);
+  const pivots = [];
+  let r = 0;
+  for (let c = 0; c < N && r < M.length; c++) {
+    const k = M.findIndex((row, i) => i >= r && !row[c].zero);
+    if (k < 0) continue;
+    [M[r], M[k]] = [M[k], M[r]];
+    const pv = M[r][c];
+    M[r] = M[r].map((x) => x.div(pv));
+    for (let i = 0; i < M.length; i++) {
+      if (i === r || M[i][c].zero) continue;
+      const f = M[i][c];
+      M[i] = M[i].map((x, j) => x.sub(f.mul(M[r][j])));
+    }
+    pivots.push(c); r++;
+  }
+  const ok = M.slice(r).every((row) => row[N].zero);
+  return { M: M.slice(0, r), pivots, ok };
+}
