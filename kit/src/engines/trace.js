@@ -538,6 +538,22 @@ function structCard(v, where, changed, ptrNames, drawn) {
   return `<div class="tr-st"><div class="tr-st-h"><b>${esc(v.name)}</b>${v.ref ? '<small>&amp;</small>' : ''} <span>${esc(v.struct)}</span></div>${chips ? `<div class="tr-vars">${chips}</div>` : ''}${arrs}</div>`;
 }
 
+/**
+ * 调用栈（视觉第 6 批）：栈顶在前。每帧 { label: 'fact(2)', vars: ['n = 2', …]（这一层的标量变量）, top, ret }；
+ * 返回的那一步（kind: return），栈顶那一帧带着返回值 ret
+ */
+export function stackFrames(s) {
+  const frames = (s.frames || []).filter((f) => f.fn !== '全局');
+  const ret = s.kind === 'return' ? /返回 (.+?)(?:（|。|$)/.exec(String(s.msg || ''))?.[1] ?? null : null;
+  return frames.map((f, i) => ({
+    label: `${f.fn}(${f.args || ''})`,
+    // 参数已经写在名字后面的括号里（fact(n = 2)）：不再写一遍
+    vars: (f.vars || []).filter((v) => !v.data && !(v.ref && v.arr) && !v.fields).map((v) => `${v.name} = ${v.value ?? '?'}`).filter((t) => !String(f.args || '').includes(t)),
+    top: i === frames.length - 1,
+    ret: i === frames.length - 1 ? ret : null,
+  })).reverse();
+}
+
 export function view(s, input) {
   const lines = input.code.split('\n');
   const cur = s.line;
@@ -590,7 +606,11 @@ export function view(s, input) {
   }).join('');
   const vars = top >= 0 ? scal(frames[top].vars, `f${top}`) : '';
   const glob = scal(s.globals || [], 'g');
-  const stack = frames.length ? `<div class="tr-stack">${frames.map((f, i) => `<span class="${i === top ? 'tr-top' : ''}">${esc(f.fn)}${f.args ? `(${esc(f.args)})` : '()'}</span>`).join('<i>→</i>')}</div>` : '';
+  // 两层以上（递归、函数里调函数）：画成一摞帧，栈顶在上，每帧写这一层的变量，返回时写返回值；一层照旧一行
+  const sf = stackFrames(s);
+  const stack = sf.length >= 2
+    ? `<div class="tr-frames"><div class="tr-frames-h">调用栈（栈顶在上）</div>${sf.map((f) => `<div class="tr-frame${f.top ? ' tr-top' : ''}"><b>${esc(f.label)}</b>${f.vars.length ? `<span class="tr-frame-vars">${f.vars.map(esc).join('，')}</span>` : ''}${f.ret !== null ? `<span class="tr-frame-ret">返回 ${esc(f.ret)}</span>` : ''}</div>`).join('')}</div>`
+    : frames.length ? `<div class="tr-stack">${frames.map((f, i) => `<span class="${i === top ? 'tr-top' : ''}">${esc(f.fn)}${f.args ? `(${esc(f.args)})` : '()'}</span>`).join('<i>→</i>')}</div>` : '';
   const out = s.out ? `<div class="tr-out"><div class="tr-out-h">输出</div><pre>${esc(s.out)}</pre></div>` : '';
   // 代码里有结构体就一直用有堆的图的排版（第一次 malloc 时版面不跳）
   const heapy = !!heap.html || Object.keys(input.structs || {}).length > 0;

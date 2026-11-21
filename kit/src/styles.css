@@ -1770,6 +1770,14 @@ g.sv-order-badge text { fill: var(--board); font: 700 12px var(--sans); text-anc
 .tr-stack { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font: 13.5px var(--mono); color: var(--muted); }
 .tr-stack span.tr-top { color: var(--blue); font-weight: 600; }
 .tr-stack i { font-style: normal; color: var(--muted); }
+/* 调用栈画成一摞帧（视觉第 6 批）：栈顶在上、亮一点，下面的淡一点；返回值写在栈顶那一帧右边 */
+.tr-frames { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; font: 13.5px/1.3 var(--mono); }
+.tr-frames-h { font: 12px var(--sans); color: var(--muted); }
+.tr-frame { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 4px 10px; border: 1px solid rgb(var(--chalk-rgb) / 0.22); border-radius: 6px; color: var(--muted); }
+.tr-frame b { font-weight: 600; color: var(--body); }
+.tr-frame.tr-top { border-color: var(--blue); background: rgb(var(--blue-rgb) / 0.08); }
+.tr-frame.tr-top b { color: var(--blue); }
+.tr-frame-ret { margin-left: auto; color: var(--yellow); font-weight: 600; }
 .tr-vars { display: flex; flex-wrap: wrap; gap: 6px; }
 .tr-vars-h { font: 13px var(--sans); color: var(--muted); align-self: center; }
 .tr-var { font: 500 15px/1.5 var(--mono); padding: 2px 10px; border-radius: 999px; background: rgb(var(--shade-rgb) / calc(0.2 * var(--well-k, 1))); color: var(--yellow); border: 1.5px dashed rgb(var(--yellow-rgb) / 0.4); }
