@@ -93,6 +93,7 @@ export function venn(el, src) {
     if (!a || askBox.dataset.settled) return;
     if (a.kind === 'region') {
       const r = judgeRegion(a, [...state.picked]);
+      if (state.tries && names(state.picked) === state.checked) return; // 同样的几块又点了一次检查：不算一次新的尝试
       state.tries++;
       record(a, r.ok, { value: names(state.picked) || '（没点）', detail: r.text });
       state.checked = names(state.picked);
@@ -102,6 +103,7 @@ export function venn(el, src) {
       const input = askBox.querySelector('.vn-input').value;
       const r = judgeProb(a, input);
       if (r.ok === null) { askBox.querySelector('.vn-fb').className = 'vn-fb is-hint'; askBox.querySelector('.vn-fb').textContent = r.text; return; }
+      if (input.trim() === state.checked) return;
       state.tries++;
       record(a, r.ok, { value: input.trim(), detail: r.text, ...(r.tag ? { misread: r.tag } : {}) });
       state.checked = input.trim();

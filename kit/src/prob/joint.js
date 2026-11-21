@@ -157,7 +157,7 @@ function valueAt(src, x, y) {
     if (v instanceof Q) return v;
     throw new Error('要是一个数');
   } catch (e) {
-    if (e && e.name !== 'Inexact' && !/Inexact/.test(e?.constructor?.name || '')) throw e;
+    if (!e || !e.inexact) throw e; // 认「算不出精确值」靠错误上的 inexact 标记：类的名字压缩以后就没了
     const f = evaluate(src, { X: x.toNumber(), Y: y.toNumber(), x: x.toNumber(), y: y.toNumber() });
     if (typeof f !== 'number' || !Number.isFinite(f)) throw new Error('算出来不是一个数');
     return Number(f.toPrecision(12));

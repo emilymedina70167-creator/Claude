@@ -7,7 +7,7 @@ import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
 import { compile } from '../expr.js';
-import { parseSim, niceTicks, fillShow, varsOf, judgeSimAsk } from '../prob/simspec.js';
+import { parseSim, niceTicks, fillShow, varsOf, theoryVars, guessRange, judgeSimAsk } from '../prob/simspec.js';
 import { parseDist, sampler, rng, simulator, histogram, interval, STATS } from '../prob/sim.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -60,6 +60,11 @@ export function sim(el, src) {
   function go(k) {
     if (err || !draw1) return;
     const n = nNow(), v = vars();
+    // 抽的过程里出的错（σ 未知的区间样本不到两个……）写在图上，不让它成了没接住的页面错误
+    try { drawMany(k, n, v); } catch (e) { err = e.message; }
+    paint();
+  }
+  function drawMany(k, n, v) {
     for (let i = 0; i < k; i++) {
       if (spec.view === 'hist') {
         if (data.values.length >= MAX_REPS) break;
@@ -86,7 +91,6 @@ export function sim(el, src) {
         data.values.push(data.r); data.last = data.r;
       }
     }
-    paint();
   }
 
   // —— 画 ——
@@ -123,9 +127,8 @@ export function sim(el, src) {
     if (spec.view === 'hist') {
       // 横轴的范围：写了 x: 用它；没写的先按理论的 μ ± 4σ，攒够 30 个以后按数据定下来（之后不再跳）
       if (!spec.x && !range && data.values.length >= 30) { const a = [...data.values].sort((p, q) => p - q), lo = a[Math.floor(a.length * 0.01)], hi = a[Math.ceil(a.length * 0.99) - 1], pad = (hi - lo) * 0.35 || 1; range = [lo - pad, hi + pad]; }
-      // 还没攒够时先按这个统计量理论上的中心和散布猜一个（和、均值、标准化的各不一样）
-      const guess = spec.stat === 'sum' ? [n * v.mu - 4 * v.sigma * Math.sqrt(n), n * v.mu + 4 * v.sigma * Math.sqrt(n)] : spec.stat === 'mean' || spec.stat === 'median' ? [v.mu - 4 * v.sigma / Math.sqrt(n), v.mu + 4 * v.sigma / Math.sqrt(n)] : spec.stat === 'z' || spec.stat === 't' ? [-4, 4] : [v.mu - 4 * v.sigma, v.mu + 4 * v.sigma];
-      let xr = spec.x || range || guess;
+      // 还没攒够时先按这个统计量理论上的中心和散布猜一个（和、均值、标准化的、χ²、S² 各不一样：prob/simspec.js 的 guessRange）
+      let xr = spec.x || range || guessRange(spec.stat, v, n);
       if (!xr.every(Number.isFinite) || !(xr[1] > xr[0])) xr = [-4, 4];
       const h = spec.discrete ? histogram(data.values, { discrete: true }) : histogram(data.values, { bins: spec.bins, range: xr });
       const heights = spec.discrete ? h.freq : h.density;
@@ -209,11 +212,13 @@ export function sim(el, src) {
       if (last) { state.i = spec.asks.length; state.lastShown = true; gateDone?.(); }
       askBox.querySelector('.sm-next')?.addEventListener('click', () => { state.i++; state.tries = 0; state.checked = ''; paintAsk(); });
     };
-    const want = () => fillShow(`{${a.expr}}`, vars());
+    // 判对错、看答案只用理论上的量（滑块现在的值、n、mu、sigma）：模拟出来的数会抖，不拿来判
+    const want = () => fillShow(`{${a.expr}}`, theoryVars(spec, sl));
     const check = () => {
       if (askBox.dataset.settled) return;
-      const r = judgeSimAsk(a, input.value, vars());
+      const r = judgeSimAsk(a, input.value, theoryVars(spec, sl));
       if (r.ok === null) { fbEl.className = 'sm-fb is-hint'; fbEl.textContent = r.text; return; }
+      if (input.value.trim() === state.checked) return; // 同一个答案又点了一次检查：不算一次新的尝试
       state.tries++; state.checked = input.value.trim();
       session.record({ type: 'sim', title, q: a.q.replace(/\s+/g, ' ').slice(0, 120), ok: r.ok, value: input.value.trim(), detail: r.text, attempts: state.tries, el });
       if (r.ok) { settle('✓ 对。', 'is-ok'); return; }

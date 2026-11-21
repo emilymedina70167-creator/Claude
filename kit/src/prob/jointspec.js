@@ -2,7 +2,7 @@
 import { evaluateExact, Q } from '../exact.js';
 import { evaluate } from '../expr.js';
 import { parseJoint, checkJoint, completeJoint, independent, moments, distOf, expectOf, tidy } from './joint.js';
-import { Q0, readQ, judgeNumber, qInt } from './num.js';
+import { Q0, readQ, judgeNumber, decimalVerdict, qInt } from './num.js';
 
 const KEYS = ['title', 'q', 'note', 'x', 'y', 'p', 'px', 'py', 'independent', 'show', 'z', 'ask'];
 const COMMON = ['id', 'upload'];
@@ -13,17 +13,24 @@ const yes = (s) => /^(on|yes|true|是)$/i.test(String(s || '').trim());
 const condSrc = (s) => tidy(s.replace(/≤/g, '<=').replace(/≥/g, '>=').replace(/≠/g, '!=').replace(/(?<![<>=!])=(?!=)/g, '=='));
 const condTeX = (s) => s.trim().replace(/\s+/g, ' ').replace(/<=|≤/g, '\\le').replace(/>=|≥/g, '\\ge').replace(/!=|≠/g, '\\ne').replace(/==/g, '=').replace(/\*/g, '\\cdot ');
 const splitTop = (s, sep = /[,，]/) => { const out = []; let depth = 0, cur = ''; for (const c of s) { if ('(（['.includes(c)) depth++; if (')）]'.includes(c)) depth--; if (depth === 0 && sep.test(c)) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out.map((x) => x.trim()).filter(Boolean); };
-const allOf = (s) => splitTop(s.replace(/\s*(且|and|&&)\s*/g, ','));
+// 连着的不等号 0 < X <= 2 拆成两条
+const unchain = (c) => { const m = /^(.+?)(<=|>=|<|>)(.+?)(<=|>=|<|>)(.+)$/.exec(c); return m ? [`${m[1]}${m[2]}${m[3]}`, `${m[3]}${m[4]}${m[5]}`] : [c]; };
+const allOf = (s) => splitTop(s.replace(/≤/g, '<=').replace(/≥/g, '>=').replace(/\s*(且|and|&&)\s*/g, ',')).flatMap(unchain);
+// 表里满足条件的格：[i, k]。条件要是比较（X = 1、X + Y <= 2）；只写 X、X − Y 的不是事件
+function cellsWhere(j, cond) {
+  const cs = allOf(cond);
+  for (const c of cs) if (!/[<>=!≠]/.test(c)) throw new Error(`「${c.trim()}」不是一个比较：事件写成 X = 1、X + Y <= 2、X > Y 这样`);
+  const src = cs.map(condSrc), out = [];
+  j.xs.forEach((x, i) => j.ys.forEach((y, k) => {
+    for (const c of src) { const v = evaluateExact(c, { X: x, Y: y, x, y }); if (!(v instanceof Q) || v.zero) return; }
+    out.push([i, k]);
+  }));
+  return out;
+}
 
 /** 表里满足条件的那些格的概率加起来（条件用 X、Y 写，几个条件逗号隔开是都要成立） */
 export function probWhere(j, cond) {
-  const cs = allOf(cond).map(condSrc);
-  let sum = Q0;
-  j.xs.forEach((x, i) => j.ys.forEach((y, k) => {
-    for (const c of cs) { const v = evaluateExact(c, { X: x, Y: y, x, y }); if (!(v instanceof Q) || v.zero) return; }
-    sum = sum.add(j.p[i][k]);
-  }));
-  return sum;
+  return cellsWhere(j, cond).reduce((s, [i, k]) => s.add(j.p[i][k]), Q0);
 }
 
 /**
@@ -36,7 +43,18 @@ export function quantityOf(src, j) {
   const m = moments(j);
   const trap = (value, text, tag) => ({ value, text, tag });
   let r = /^E\s*[(（]([\s\S]+)[)）]$/.exec(s) || /^E\s*([XY])$/.exec(s);
-  if (r) return { exact: true, value: E(r[1]), tex: `E(${condTeX(r[1])})`, traps: [] };
+  if (r) {
+    const parts = r[1].split(/[|｜∣]/);
+    if (parts.length === 1) return { exact: true, value: E(r[1]), tex: `E(${condTeX(r[1])})`, traps: [] };
+    if (parts.length > 2) throw new Error('竖线太多：条件期望写成 E(X | Y = 0)');
+    // 条件期望：满足条件的那些格上按概率加权平均
+    const cells = cellsWhere(j, parts[1]), den = cells.reduce((acc, [i, k]) => acc.add(j.p[i][k]), Q0);
+    if (den.zero) throw new Error(`条件「${parts[1].trim()}」的概率是 0，条件期望没有定义`);
+    const g = tidy(parts[0]);
+    let num = Q0;
+    for (const [i, k] of cells) { const v = evaluateExact(g, { X: j.xs[i], Y: j.ys[k], x: j.xs[i], y: j.ys[k] }); if (!(v instanceof Q)) throw new Error('E( ) 里要是一个数'); num = num.add(v.mul(j.p[i][k])); }
+    return { exact: true, value: num.div(den), tex: `E(${condTeX(parts[0])} \\mid ${allOf(parts[1]).map(condTeX).join(',\\ ')})`, traps: [trap(num, '这是只在条件成立的那几格上加出来的：条件期望还要除以条件的概率。', 'joint-for-cond')] };
+  }
   r = /^(?:D|Var)\s*[(（]([\s\S]+)[)）]$/i.exec(s) || /^D\s*([XY])$/.exec(s);
   if (r) {
     const e2 = E(`(${tidy(r[1])})^2`), e1 = E(r[1]);
@@ -68,14 +86,9 @@ export function quantityOf(src, j) {
   throw new Error(`「${s}」读不懂：能问的是 E(X)、E(XY)、D(X)、Cov(X, Y)、rho、P(X + Y <= 1)、P(X = 1 | Y = 0)`);
 }
 
-// 小数：至少两位小数、三位有效数字，四舍五入对得上
-function decimalNear(input, value) {
-  const m = /^[+-]?(\d*)\.(\d+)$/.exec(input.replace(/\s+/g, ''));
-  if (!m) return null;
-  const places = m[2].length, sig = (m[1] + m[2]).replace(/^0+/, '').length;
-  if (places < 2 || sig < 3) return 'short';
-  return Math.abs(Number(input) - value) <= 0.5 / 10 ** places + 1e-12 ? 'ok' : 'off';
-}
+// 学生写的带根号的式子 → 表达式：√6、√(2/147)、2√6/42、(√6)/21
+const rootExpr = (s) => tidy(s.replace(/[−–]/g, '-')).replace(/√\s*(\d+(?:\.\d+)?)/g, 'sqrt($1)').replace(/√\s*\(/g, 'sqrt(')
+  .replace(/(\d|\))\s*(?=sqrt\()/g, '$1*').replace(/\)\s*\(/g, ')*(').replace(/(\d)\s*\(/g, '$1*(');
 /** 学生填的一个数对不对：{ ok: true | false | null, text, tag? } */
 export function judgeQuantity(q, input) {
   const s = String(input ?? '').trim();
@@ -85,16 +98,23 @@ export function judgeQuantity(q, input) {
     if (r.ok === false && !r.tag) { const v = readQ(s); if (v && !q.value.zero && v.cmp(q.value.neg()) === 0) return { ok: false, text: '数对了，符号反了。', tag: 'sign' }; }
     return r;
   }
+  // 开不尽的（相关系数）：小数按位数的规矩，别的当式子算
   if (!s) return { ok: null, text: '还没填。' };
-  const dec = decimalNear(s, q.approx);
-  if (dec === 'ok') return { ok: true, text: '对。' };
-  if (dec === 'short') return { ok: false, text: '小数的位数不够：至少三位有效数字，或者写成带根号的式子（sqrt(6)/21）。', tag: 'short' };
-  let v = null;
-  if (dec === null) { try { const e = evaluate(tidy(s).replace(/√\s*\(?(\d+)\)?/g, 'sqrt($1)')); if (typeof e === 'number' && Number.isFinite(e)) v = e; } catch { v = null; } if (v === null) return { ok: null, text: '这个读不懂：写小数（三位有效数字），或者带根号的式子（sqrt(6)/21）。' }; } else v = Number(s);
-  if (Math.abs(v - q.approx) <= 1e-9 * Math.max(1, Math.abs(q.approx)) && Number.isFinite(v)) return { ok: true, text: '对。' };
-  if (Math.abs(v + q.approx) <= 1e-4) return { ok: false, text: '数对了，符号反了。', tag: 'sign' };
-  const t = traps.find((x) => Math.abs(x.value.toNumber() - v) < 1e-9);
-  return t ? { ok: false, text: t.text, tag: t.tag } : { ok: false, text: '不对。' };
+  const want = q.approx;
+  const isDec = decimalVerdict(s, want) !== null;
+  let v;
+  if (isDec) v = Number(s.replace(/\s+/g, '').replace(/[−–]/g, '-').replace(/[%％]$/, '')) / (/[%％]$/.test(s) ? 100 : 1);
+  else { try { const e = evaluate(rootExpr(s)); v = typeof e === 'number' && Number.isFinite(e) ? e : null; } catch { v = null; } }
+  if (v === null || !Number.isFinite(v)) return { ok: null, text: '这个读不懂：写小数（三位有效数字），或者带根号的式子（sqrt(6)/21、√6/21）。' };
+  const same = (target) => (isDec ? decimalVerdict(s, target) === 'ok' : Math.abs(v - target) <= 1e-9 * Math.max(1, Math.abs(target)));
+  if (same(want)) return { ok: true, text: '对。' };
+  if (isDec ? decimalVerdict(s.replace(/^[+-]?/, (m) => (m === '-' ? '' : '-')).replace(/^[−–]/, ''), want) === 'ok' || same(-want) : same(-want)) return { ok: false, text: '数对了，符号反了。', tag: 'sign' };
+  const t = traps.find((x) => same(x.value.toNumber()) || Math.abs(x.value.toNumber() - v) < 1e-12);
+  if (t) return { ok: false, text: t.text, tag: t.tag };
+  const dec = isDec ? decimalVerdict(s, want) : null;
+  if (dec === 'short' && Math.abs(v - want) < 0.01) return { ok: false, text: '小数的位数不够：至少三位有效数字，或者写成带根号的式子（√6/21）。', tag: 'short' };
+  if (dec === 'cut') return { ok: false, text: '最后一位要四舍五入，不是把后面的截掉。', tag: 'cut' };
+  return { ok: false, text: '不对。' };
 }
 
 /** 一组格子逐格判（边缘、Z 的分布、空着的格）：expected 是分数（或者写成字的数），inputs 是学生填的。没填完、有读不懂的不判 */
@@ -103,11 +123,14 @@ export function judgeCells(expected, inputs) {
   const got = inputs.map((s) => String(s ?? '').trim());
   const empty = got.filter((s) => !s).length;
   if (empty) return { ok: null, marks: got.map(() => null), text: `还有 ${empty} 格没填。` };
-  const marks = got.map((s, i) => { const r = judgeNumber(want[i], s); return r.ok; });
+  const res = got.map((s, i) => judgeNumber(want[i], s));
+  const marks = res.map((r) => r.ok);
   const unread = marks.filter((x) => x === null).length;
   if (unread) return { ok: null, marks, text: `有 ${unread} 格读不懂：写分数（3/10）或小数（0.3）。` };
   const wrong = marks.filter((x) => !x).length;
-  return wrong ? { ok: false, marks, text: `错了 ${wrong} 格（标出来的）。` } : { ok: true, marks, text: '都对。' };
+  // 错的格里有的只是小数的位数不够、截断了：说出来（不然学生只看到「错」）
+  const short = res.filter((r) => r.tag === 'short' || r.tag === 'cut').length;
+  return wrong ? { ok: false, marks, text: `错了 ${wrong} 格（标出来的）${short ? `；其中 ${short} 格是小数的位数不够或者没有四舍五入：写成分数，或者至少三位有效数字` : ''}。` } : { ok: true, marks, text: '都对。' };
 }
 
 /** 读 joint 组件。写错的收进 problems（不抛） */

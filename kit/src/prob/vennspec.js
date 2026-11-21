@@ -88,6 +88,7 @@ export function parseVenn(src) {
   const solved = solveAtoms(out.givens, n);
   if (solved.status === 'conflict') problems.push('given 给的几个概率自相矛盾（比如交的概率比其中一个事件还大、加起来超过 1）');
   out.probs = out.givens.length ? solved : null;
+  if (solved.status !== 'conflict') for (const g of out.givens) { if (g.cond != null) { const pc = probOf(g.cond, out.givens, n); if (pc.status === 'ok' && pc.value.zero) problems.push(`given 的 ${g.src}：条件的概率是 0，这个条件概率没有定义`); } }
 
   for (const s of many.shade) {
     const ev = guard(`shade「${s}」`, () => parseEvent(s, names));

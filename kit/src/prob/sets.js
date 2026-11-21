@@ -39,9 +39,11 @@ function tokens(src, names) {
   while (i < s.length) {
     const c = s[i];
     if (/\s/.test(c)) { i++; continue; }
+    if (c === '\\' && /[,;!:]/.test(s[i + 1] || '')) { i += 2; continue; } // \, \; 这些是公式里的间距
     if (c === '\\' && /[A-Za-z]/.test(s[i + 1] || '')) {
       const w = WORDS.find(([t]) => s.startsWith(t, i) && !/[A-Za-z]/.test(s[i + t.length] || ''));
-      if (!w) fail(`「${s.slice(i, i + 12)}」读不懂`);
+      // 不是认得的词：这个反斜杠是差（A\B）
+      if (!w) { out.push({ t: 'minus', at: i }); i++; continue; }
       if (w[1]) out.push({ t: w[1], at: i });
       i += w[0].length; continue;
     }
@@ -49,8 +51,13 @@ function tokens(src, names) {
     if (name) { out.push({ t: 'name', i: names.indexOf(name), name, at: i }); i += name.length; continue; }
     if (c === '^' && /^\^\s*\{?\s*c\s*\}?/.test(s.slice(i))) { out.push({ t: 'post', at: i }); i += /^\^\s*\{?\s*c\s*\}?/.exec(s.slice(i))[0].length; continue; }
     if (c === '_') fail(`事件的名字里没有「${s.slice(Math.max(0, i - 1), i + 2)}」`);
-    if (c === 'S' || c === 'U') { out.push({ t: 'all', at: i }); i++; continue; }
-    if (c === '0') { out.push({ t: 'none', at: i }); i++; continue; }
+    // U：手写的并（A U B）。S：全集。0：空集——贴着字母、数字的不算（A0 多半是写错了名字）
+    if (c === 'U') { out.push({ t: 'or', at: i }); i++; continue; }
+    if (c === 'S') { out.push({ t: 'all', at: i }); i++; continue; }
+    if (c === '0') {
+      if (/[A-Za-z0-9]/.test(s[i - 1] || '') || /[A-Za-z0-9]/.test(s[i + 1] || '')) fail(`「${s.slice(Math.max(0, i - 1), i + 2)}」读不懂（空集写 ∅，单独的 0 也行）`);
+      out.push({ t: 'none', at: i }); i++; continue;
+    }
     if (Object.hasOwn(CHARS, c)) { out.push({ t: CHARS[c], at: i }); i++; continue; }
     if (/[A-Za-z]/.test(c)) fail(`这里没有叫 ${/^[A-Za-z]\d*/.exec(s.slice(i))[0]} 的事件（有的是 ${names.join('、')}）`);
     fail(`「${c}」读不懂`);
@@ -137,10 +144,11 @@ function texOf(t0) {
   const loose = (x) => ['or', 'minus'].includes(bare(x).op);
   switch (t.op) {
     case 'name': return nameTeX(t.name);
-    case 'all': return '\\Omega';
+    case 'all': return '\\Omega{}';
     case 'none': return '\\varnothing';
     case 'not': return `\\overline{${texOf(t.x)}}`;
-    case 'or': return `${texOf(t.l)} \\cup ${texOf(t.r)}`;
+    // 并和差同级、从左往右读：右边是差的话不加括号就成了 (A ∪ B) − C
+    case 'or': return `${texOf(t.l)} \\cup ${bare(t.r).op === 'minus' ? `(${texOf(t.r)})` : texOf(t.r)}`;
     case 'minus': return `${texOf(t.l)} - ${loose(t.r) ? `(${texOf(t.r)})` : texOf(t.r)}`;
     default: { // and：并排写；里面是并、差的加括号
       const side = (x) => (loose(x) ? `(${texOf(x)})` : texOf(x));
@@ -253,7 +261,11 @@ export function probOf(mask, givens, n) {
   const { min, max } = range(vs.map((v) => dot(v, mask)));
   return min.cmp(max) === 0 ? { status: 'ok', value: min } : { status: 'under', min, max };
 }
-/** P(a | b)：分母一定是 0 回 { status: 'undefined' }；分母可能是 0、或者比值定不下来回 under */
+/**
+ * P(a | b)：分母一定是 0 回 { status: 'undefined' }；比值定不下来回 under。
+ * 分母在有的顶点上是 0、别的顶点上比值都一样时算定得下来：那些顶点上分子也是 0（a∩b 在 b 里面），
+ * 「分子 − r·分母」在所有顶点上是 0，所以只要条件的概率不是 0，比值就是 r（给了 P(B | A) = 0.4 这种条件时就是这样）
+ */
 export function condOf(a, b, givens, n) {
   const vs = vertices(givens, n);
   if (!vs.length) return { status: 'conflict' };
@@ -261,7 +273,7 @@ export function condOf(a, b, givens, n) {
   if (den.every((d) => d.zero)) return { status: 'undefined' };
   const ratios = vs.map((v, i) => (den[i].zero ? null : dot(v, a & b).div(den[i]))).filter(Boolean);
   const { min, max } = range(ratios);
-  if (den.some((d) => d.zero) || min.cmp(max) !== 0) return { status: 'under', min, max };
+  if (min.cmp(max) !== 0) return { status: 'under', min, max };
   return { status: 'ok', value: min };
 }
 /** 一个读好的项（parseProbTerm 的结果）的值 */

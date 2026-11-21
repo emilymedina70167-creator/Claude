@@ -2750,7 +2750,10 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 @media (max-width: 720px) { .pt-body { grid-template-columns: 1fr; } }
 .pt-svg { width: 100%; height: auto; display: block; user-select: none; -webkit-tap-highlight-color: transparent; }
 .pt-body.is-single .pt-svg { max-width: 560px; }
-.pt-area-svg { max-width: 330px; margin: 0 auto; touch-action: none; }
+.pt-area-svg { max-width: 330px; margin: 0 auto; }
+.pt-area-svg.is-drag { touch-action: none; } /* 能拖的时候才拦手势：不能拖时手指落在图上照样能滑页面 */
+/* 概率几个组件的「看答案」：点得到（44px 高） */
+.vn-reveal, .pt-reveal, .jt-reveal, .sm-reveal { min-height: 44px; padding: 0 8px; }
 .pt-svg .pt-edge { stroke: rgb(var(--chalk-rgb) / 0.55); stroke-width: 1.8; fill: none; }
 .pt-svg .pt-edge.is-lit { stroke: var(--yellow); stroke-width: 3.2; }
 .pt-svg .pt-dot { fill: rgb(var(--chalk-rgb) / 0.8); }
@@ -2839,8 +2842,10 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .jt-table .jt-cell.is-lit { box-shadow: inset 0 0 0 2.4px var(--body); }
 .jt-table tbody tr:has(.jt-head.is-sel) .jt-cell, .jt-table .jt-cell.is-lit { background: color-mix(in srgb, var(--zc) 30%, rgb(var(--chalk-rgb) / 0.12)); }
 .jt-ztable .jt-cell { cursor: pointer; font-weight: 700; }
+/* 要填的格子挨得近一点（正文表格那条通用的留白权重高，这里把选择器写足盖过它）：竖屏 Z 有四个取值不用横着滑 */
+.la-lesson .jt-body .jt-main .jt-scroll .jt-table td:has(> .jt-in) { padding: 2px 4px; }
 .jt-num.is-q { color: var(--coral); font-weight: 700; }
-.jt-in { width: 58px; min-height: 40px; padding: 4px 4px; text-align: center; border-radius: 8px; border: 1px solid var(--field-edge, rgb(var(--chalk-rgb) / 0.35)); background: var(--field, transparent); color: var(--body); font: 500 16px/1.2 var(--sans); }
+.jt-in { width: 66px; min-height: 44px; padding: 4px 3px; text-align: center; border-radius: 8px; border: 1px solid var(--field-edge, rgb(var(--chalk-rgb) / 0.35)); background: var(--field, transparent); color: var(--body); font: 500 16px/1.2 var(--sans); }
 .jt-in:focus { outline: 2px solid var(--yellow); outline-offset: 1px; }
 .jt-in.is-right { border-color: var(--green); color: var(--green); }
 .jt-in.is-wrong { border-color: var(--coral); color: var(--coral); }

@@ -71,7 +71,9 @@ export function joint(el, src) {
     table.innerHTML = h;
     if (b.z) {
       const zOpen = asking('z');
-      zBox.innerHTML = `<div class="jt-zcap">${md(`$Z = ${escapeHtml(b.fields.z)}$ 的分布（取值相同的格子同一种颜色）`)}</div><div class="jt-scroll"><table class="jt-table jt-ztable"><tbody>
+      // 式子写成公式：max、min 是正体，乘号是点，abs(…) 是绝对值
+      const zTeX = escapeHtml(b.fields.z).replace(/\bmax\b/g, '\\max').replace(/\bmin\b/g, '\\min').replace(/\babs\(([^()]*)\)/g, '|$1|').replace(/\*/g, '\\cdot ');
+      zBox.innerHTML = `<div class="jt-zcap">${md(`$Z = ${zTeX}$ 的分布（取值相同的格子同一种颜色）`)}</div><div class="jt-scroll"><table class="jt-table jt-ztable"><tbody>
         <tr><th>Z</th>${b.z.rows.map((r, n) => `<td class="jt-cell z${n % 6}${hot === n ? ' is-lit' : ''}" data-z="${n}">${numText(r.z)}</td>`).join('')}</tr>
         <tr><th>P</th>${b.z.rows.map((r, n) => `<td class="jt-marg">${slot(`z${n}`, r.p, zOpen)}</td>`).join('')}</tr></tbody></table></div>`;
     }
@@ -101,6 +103,8 @@ export function joint(el, src) {
     state.sel = { type, i };
     const yx = type === 'row', cond = conditional(j, yx ? 'Y|X' : 'X|Y', i), base = yx ? px[i] : py[i];
     const A = yx ? 'X' : 'Y', Bv = yx ? 'Y' : 'X', a = f(yx ? j.xs[i] : j.ys[i]), vals = yx ? j.ys : j.xs;
+    // 还有题没答完：只亮出这一行 / 列、说怎么算，不把边缘和条件分布的数写出来（正在问的可能就是它）
+    if (cur() && !state.settled) { state.said = `已知 $${A} = ${a}$：看亮着的这一${yx ? '行' : '列'}，每格除以这一${yx ? '行' : '列'}的和，就是这个条件下 $${Bv}$ 的分布。`; paint(); return; }
     state.said = cond ? `已知 $${A} = ${a}$（概率 $${ft(base)}$）：这一${yx ? '行' : '列'}每格除以它，$${vals.map((v, k) => `P(${Bv} = ${f(v)} \\mid ${A} = ${a}) = ${ft(cond[k])}`).join('$，$')}$。`
       : `$P(${A} = ${a}) = 0$，这个条件下的分布没有定义。`;
     paint();
@@ -148,6 +152,7 @@ export function joint(el, src) {
       const input = askBox.querySelector('.jt-input').value, q = a.quantity, r = judgeQuantity(q, input);
       const ans = `$${q.tex} = ${q.exact ? ft(q.value) : `${q.valueTeX} \\approx ${Number(q.approx.toPrecision(4))}`}$`;
       if (r.ok === null) { fb().className = 'jt-fb is-hint'; fb().textContent = r.text; return; }
+      if (input.trim() === state.checked) return; // 同一个答案又点了一次检查：不算一次新的尝试
       state.tries++; state.checked = input.trim();
       record(a, r.ok, { value: input.trim(), detail: r.text, ...(r.tag ? { misread: r.tag } : {}) });
       if (r.ok) { settle(a, `✓ ${md(ans)}`, 'is-ok'); return; }
@@ -159,6 +164,7 @@ export function joint(el, src) {
     for (const inp of body.querySelectorAll('.jt-in')) state.inputs[inp.dataset.slot] = inp.value;
     const got = slots.map(([id]) => state.inputs[id] || ''), r = judgeCells(slots.map(([, v]) => v), got);
     if (r.ok === null) { fb().className = 'jt-fb is-hint'; fb().textContent = r.text; return; }
+    if (got.join(' ') === state.checked) return;
     state.tries++; state.checked = got.join(' ');
     slots.forEach(([id], n) => { state.marks[id] = r.marks[n]; });
     record(a, r.ok, { value: got.join('、'), detail: r.text });
@@ -174,7 +180,11 @@ export function joint(el, src) {
     const right = saysYes === a.answer;
     // 说对了「不独立」还要点出一格才算完：这一下先不记，和点的那一格一起记
     if (!right || a.answer) record(a, right, { value: saysYes ? '独立' : '不独立', detail: right ? '对' : '不对' });
-    if (!right) { fail(a, saysYes ? '不对：看看每一格是不是都等于它那一行、那一列两个边缘的乘积。' : '不对：每一格都正好等于两个边缘的乘积。', () => { record(a, false, { value: saysYes ? '独立' : '不独立', giveup: true, expected: a.answer ? '独立' : '不独立' }); showWhy(a, a.cells[0]); }); return; }
+    if (!right) { fail(a, saysYes ? '不对：看看每一格是不是都等于它那一行、那一列两个边缘的乘积。' : '不对：每一格都正好等于两个边缘的乘积。', () => {
+      record(a, false, { value: saysYes ? '独立' : '不独立', giveup: true, expected: a.answer ? '独立' : '不独立' });
+      // 独立的表没有「对不上的那一格」可指：直接说结论
+      if (a.answer) settle(a, '答案：独立——每一格都等于它那一行、那一列两个边缘的乘积。', 'is-reveal'); else showWhy(a, a.cells[0]);
+    }); return; }
     if (a.answer) { settle(a, '✓ 独立：每一格都等于两个边缘的乘积。', 'is-ok'); return; }
     state.indepStage = 1;
     fb().className = 'jt-fb is-hint';

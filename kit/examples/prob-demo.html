@@ -261,9 +261,9 @@ slider n 50 800 = 100 step=50
 view: path
 band: 0.1
 seed: 8
-show 画了 {reps} 条，落在带子里的占 {dec(inband, 3)}；切比雪夫保证至少 $1 - \dfrac{\sigma^2}{n\varepsilon^2}$ = {dec(1 - sigma^2/(n*band^2), 3)}
+show 画了 {reps} 条，落在带子里的占 {dec(inband, 3)}；切比雪夫保证的下界是 $1 - \dfrac{\sigma^2}{n\varepsilon^2}$（算一算，填在下面）
 note: 切比雪夫的界很保守：真实的比例比它保证的高得多。
-ask: "切比雪夫保证的下界是多少（按现在的 $n$，$\varepsilon = 0.1$）？" = 1 - sigma^2/(n*band^2)
+ask: "切比雪夫保证的下界是多少（按现在的 $n$，$\varepsilon = 0.1$）？" = max(0, 1 - sigma^2/(n*band^2))
 ```
 
 ```sim

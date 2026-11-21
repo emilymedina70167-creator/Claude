@@ -63,17 +63,29 @@ export function qReduce(rows, N) {
   return { M: M.slice(0, r), pivots, ok };
 }
 
-// 小数：至少两位小数、三位有效数字，四舍五入对得上才算
-function decimalOk(input, value) {
-  const m = /^[+-]?(\d*)\.(\d+)$/.exec(input.replace(/\s+/g, ''));
-  if (!m) return null;
-  const places = m[2].length, sig = (m[1] + m[2]).replace(/^0+/, '').length;
+// 学生写的小数、百分数 → 照写的那几位的小数（'52.6%' → '0.526'，Unicode 的减号换成普通的）；不是这两种写法回 null
+function asDecimal(input) {
+  const s = String(input).replace(/\s+/g, '').replace(/[−–]/g, '-').replace(/％/g, '%');
+  const m = /^([+-]?)(\d*)(?:\.(\d+))?(%?)$/.exec(s);
+  if (!m || (!m[2] && !m[3]) || (!m[3] && !m[4])) return null; // 整数不算小数（3 对 3 是精确比的）
+  if (!m[4]) return `${m[1]}${m[2] || '0'}.${m[3]}`;
+  const whole = (m[2] || '').padStart(3, '0'), frac = m[3] || '';
+  return `${m[1]}${whole.slice(0, -2).replace(/^0+(?=\d)/, '')}.${whole.slice(-2)}${frac}`;
+}
+// 小数（百分数换成小数以后）：至少两位小数、三位有效数字，四舍五入对得上才算。回 'ok' | 'short'（位数不够）| 'cut'（是截断的，不是四舍五入）| 'off' | null（不是小数）
+export function decimalVerdict(input, value) {
+  const d = asDecimal(input);
+  if (d === null) return null;
+  const [, int, frac] = /^[+-]?(\d*)\.(\d+)$/.exec(d);
+  const places = frac.length, sig = (int + frac).replace(/^0+/, '').length, x = Number(d), k = 10 ** places;
   if (places < 2 || sig < 3) return 'short';
-  const k = 10 ** places;
-  return Math.abs(Number(input) - value.toNumber()) <= 0.5 / k + 1e-12 ? 'ok' : 'off';
+  if (Math.abs(x - value) <= 0.5 / k + 1e-12) return 'ok';
+  // 截掉后面的（2/3 写 0.666）：往 0 的方向差不到一位
+  if (Math.abs(x) < Math.abs(value) && Math.abs(value) - Math.abs(x) < 1 / k && Math.sign(x) === Math.sign(value)) return 'cut';
+  return 'off';
 }
 /**
- * 学生填的一个数对不对（概率组件共用）：分数、小数、百分数都认，精确比；小数要位数够、四舍五入对得上。
+ * 学生填的一个数对不对（概率组件共用）：分数、小数、百分数都认，精确比；小数、百分数要位数够、四舍五入对得上。
  * traps：[{ value, text, tag }] 常见错法算出来的值，填了它就说那一句。回 { ok: true | false | null（读不懂，不判）, text, tag? }
  */
 export function judgeNumber(value, input, traps = []) {
@@ -83,9 +95,10 @@ export function judgeNumber(value, input, traps = []) {
   if (v.cmp(value) === 0) return { ok: true, text: '对。' };
   const trap = traps.find((t) => t.value.cmp(v) === 0);
   if (trap) return { ok: false, text: trap.text, tag: trap.tag };
-  const dec = decimalOk(s, value);
+  const dec = decimalVerdict(s, value.toNumber());
   if (dec === 'ok') return { ok: true, text: '对。' };
   if (dec === 'short' && Math.abs(v.toNumber() - value.toNumber()) < 0.01) return { ok: false, text: '小数的位数不够：写成分数，或者至少三位有效数字。', tag: 'short' };
+  if (dec === 'cut') return { ok: false, text: '最后一位要四舍五入，不是把后面的截掉（写成分数最稳）。', tag: 'cut' };
   return { ok: false, text: '不对。' };
 }
 

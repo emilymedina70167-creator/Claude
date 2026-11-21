@@ -12,7 +12,7 @@ const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
 const TRIES = 3;
 const isTerminating = (q) => { let d = q.d; while (d % 2n === 0n) d /= 2n; while (d % 5n === 0n) d /= 5n; return d === 1n; };
-const ROW = 36, COL = 138, PAD = 22;
+const ROW = 44, COL = 138, PAD = 24; // 一行 44px：整行能点
 const SIDE = 240, AX = 44, AY = 30; // 面积图：正方形的边长、左上角
 
 export function ptree(el, src) {
@@ -43,7 +43,7 @@ export function ptree(el, src) {
       <div class="pt-finds"></div>
       <div class="pt-tip" hidden></div>
       <div class="pt-ask" hidden></div>
-      ${spec.drag ? '<div class="w-hint">面积图上的分界线可以拖：竖的改每个原因占多少，横的改这一列里结果占多少。</div>' : ''}
+      ${spec.drag ? `<div class="w-hint">${spec.blanks.length + spec.asks.length ? '答完上面的题以后，' : ''}面积图上的分界线可以拖：竖的改每个原因占多少，横的改这一列里结果占多少。</div>` : ''}
       ${spec.fields.note ? `<div class="w-note">${mdToHtml(spec.fields.note)}</div>` : ''}
     </div>`;
   const treeBox = body.querySelector('.pt-tree'), areaBox = body.querySelector('.pt-area'), postBox = body.querySelector('.pt-post');
@@ -58,6 +58,11 @@ export function ptree(el, src) {
   const gateDone = todo.length ? session.gate(el, title) : null;
   const cur = () => (state.i < todo.length ? todo[state.i] : null);
   const blankOpen = (where) => spec.blanks.some((b) => b.where === where) && !state.filled.has(where);
+  const allDone = () => state.i >= todo.length;
+  // 还有没答的题问的是「已知结果、倒推原因」：后验那一条先不画（画了就是答案）
+  const postAsked = () => todo.slice(state.i).some((x) => x.kind === 'ask' && x.term.b);
+  // 题没答完不让拖：拖了树上的数就变了，和题目说的那组数对不上
+  const canDrag = () => spec.drag && allDone();
 
   // —— 树 ——
   function drawTree() {
@@ -108,6 +113,13 @@ export function ptree(el, src) {
     const parts = []; let kids = tree.children, prod = Q1; const names = [];
     for (const i of path) { const k = kids[i]; parts.push(tx(k.p)); prod = prod.mul(k.p); names.push(label(k.name, k.not)); kids = k.children; }
     tip.hidden = false;
+    // 这条路上有还空着的数（先验、这一支、叶子上的乘积）：只说怎么算，不把数写出来
+    const eff = bayes && path.length === 2 ? (path[1] === 0 ? 'yes' : 'not') : null;
+    if (bayes && (blankOpen(`prior:${path[0]}`) || (eff && (blankOpen(`edge:${path[0]}:${eff}`) || blankOpen(`leaf:${path[0]}:${eff}`))))) {
+      tip.innerHTML = mdToHtml(`${names.join(' → ')}：沿着这条路把边上的概率乘起来（这条路上有还没填的数）。`, { inline: true });
+      repaint();
+      return;
+    }
     tip.innerHTML = mdToHtml(`${names.join(' → ')}：沿着这条路把概率乘起来，$${parts.join(' \\times ')} = ${tx(prod)}$`, { inline: true });
     repaint();
   }
@@ -141,17 +153,19 @@ export function ptree(el, src) {
     svgEl('rect', { x: AX, y: AY, width: SIDE, height: SIDE, class: 'pt-square' }, g);
     svgEl('text', { x: AX - 8, y: AY + SIDE - 4, class: 'pt-axis' }, g).textContent = label(tree.effect);
     svgEl('text', { x: AX - 8, y: AY + 12, class: 'pt-axis' }, g).textContent = label(tree.effect, true);
-    if (spec.drag) {
-      // 把手：竖的分界（两列之间）、每列里横的分界。看得见的是一小段粗线，能抓的地方宽 44px
-      tree.causes.forEach((c, i) => {
-        const w = c.p.toNumber() * SIDE, yB = AY + SIDE - tree.cond[i].toNumber() * SIDE;
-        if (w > 18) { svgEl('line', { x1: xs[i] + w / 2 - Math.min(14, w / 3), y1: yB, x2: xs[i] + w / 2 + Math.min(14, w / 3), y2: yB, class: 'pt-grip' }, g); svgEl('rect', { x: xs[i] + 3, y: yB - 22, width: Math.max(0, w - 6), height: 44, class: 'pt-handle is-h', 'data-cond': i }, g); }
-      });
+    areaSvg.classList.toggle('is-drag', !!canDrag());
+    if (canDrag()) {
+      // 把手：竖的分界（两列之间）、每列里横的分界。看得见的是一小段粗线，能抓的地方宽 44px。
+      // 先画竖的、再画横的：窄的列里两种把手叠在一起，横线附近归横的，别处归竖的
       for (let i = 0; i < tree.causes.length - 1; i++) {
         const bx = xs[i + 1];
         svgEl('line', { x1: bx, y1: AY + SIDE / 2 - 16, x2: bx, y2: AY + SIDE / 2 + 16, class: 'pt-grip' }, g);
         svgEl('rect', { x: bx - 22, y: AY, width: 44, height: SIDE, class: 'pt-handle is-v', 'data-bound': i }, g);
       }
+      tree.causes.forEach((c, i) => {
+        const w = c.p.toNumber() * SIDE, yB = AY + SIDE - tree.cond[i].toNumber() * SIDE;
+        if (w > 18) { svgEl('line', { x1: xs[i] + w / 2 - Math.min(14, w / 3), y1: yB, x2: xs[i] + w / 2 + Math.min(14, w / 3), y2: yB, class: 'pt-grip' }, g); svgEl('rect', { x: xs[i] + 3, y: yB - 22, width: Math.max(0, w - 6), height: 44, class: 'pt-handle is-h', 'data-cond': i }, g); }
+      });
     }
     // 后验：把结果发生的那几块抽出来排成一条
     const strip = (post, joint, name) => {
@@ -161,7 +175,8 @@ export function ptree(el, src) {
       const vals = post.map((p, i) => `<span class="pt-val"><i class="pt-key c${i % 4}"></i>${escapeHtml(label(tree.causes[i].name))} ${fmt(p)}</span>`).join('');
       return `<div class="pt-strip-row"><span class="pt-strip-name">已知${escapeHtml(name)}</span><span class="pt-strip">${bar}</span><span class="pt-strip-vals">${vals}</span></div>`;
     };
-    postBox.innerHTML = strip(n.post, n.joint, label(tree.effect)) + strip(n.postNot, n.jointNot, label(tree.effect, true));
+    postBox.innerHTML = postAsked() ? '<div class="pt-strip-row"><span class="pt-strip-name">后验</span><span class="pt-strip is-none">答完上面的题再看</span></div>'
+      : strip(n.post, n.joint, label(tree.effect)) + strip(n.postNot, n.jointNot, label(tree.effect, true));
   }
   function wireDrag(svg, W) {
     let drag = null;
@@ -209,6 +224,7 @@ export function ptree(el, src) {
     state.i++; state.tries = 0; state.checked = '';
     if (state.i >= todo.length) gateDone?.();
     paintAsk();
+    repaint(); // 后验那一条、能拖的把手跟着答题的进度出来
   }
   function settle(item, html, cls) {
     const last = state.i >= todo.length - 1;
@@ -218,7 +234,7 @@ export function ptree(el, src) {
     askBox.querySelector('.pt-actions').innerHTML = last ? '' : '<button type="button" class="btn btn-primary pt-next">下一问 ›</button>';
     askBox.querySelector('.pt-input').setAttribute('disabled', '');
     askBox.dataset.settled = '1';
-    if (last) { state.i = todo.length; state.lastShown = true; gateDone?.(); }
+    if (last) { state.i = todo.length; state.lastShown = true; gateDone?.(); repaint(); }
     askBox.querySelector('.pt-next')?.addEventListener('click', next);
   }
   function check() {
@@ -228,6 +244,7 @@ export function ptree(el, src) {
     const r = item.kind === 'blank' ? judgeNumber(item.blank.value(tree), input) : judgeTreeProb(item.term, tree, input);
     const fb = askBox.querySelector('.pt-fb');
     if (r.ok === null) { fb.className = 'pt-fb is-hint'; fb.textContent = r.text; return; }
+    if (input.trim() === state.checked) return; // 同一个答案又点了一次检查：不算一次新的尝试
     state.tries++;
     state.checked = input.trim();
     record(item, r.ok, { value: input.trim(), detail: r.text, ...(r.tag ? { misread: r.tag } : {}) });
@@ -247,7 +264,7 @@ export function ptree(el, src) {
     const count = todo.length > 1 ? `<span class="pt-count">${state.i + 1} / ${todo.length}</span>` : '';
     askBox.innerHTML = `
       <div class="pt-q">${count}${mdToHtml(item.q, { inline: true })}</div>
-      <div class="pt-fill"><input class="pt-input" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="分数或小数，如 10/19" aria-label="填概率"></div>
+      <div class="pt-fill"><input class="pt-input" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="分数或小数" aria-label="填概率"></div>
       <div class="pt-actions"><button type="button" class="btn btn-primary pt-check">检查</button></div>
       <div class="pt-fb" aria-live="polite"></div>`;
     askBox.querySelector('.pt-check').addEventListener('click', check);
