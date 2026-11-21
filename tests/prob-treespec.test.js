@@ -44,8 +44,8 @@ test('问的量：先验、条件、联合、全概率、后验、对立；写�
   assert.equal(v('P(A3 | B)'), '6/19');
   assert.equal(v('P(A3 | ~B)'), '194/981');
   assert.equal(v('P(A1 + A2 | B)'), '13/19', '几个原因并起来');
-  assert.equal(termOf('P(A1 | B)', t).tex, 'P(A_1 \\mid B)');
-  assert.equal(termOf('P(~B | A2)', t).tex, 'P(\\overline{B} \\mid A_2)');
+  assert.equal(termOf('P(A1 | B)', t).tex, 'P(A_{1} \\mid B)');
+  assert.equal(termOf('P(~B | A2)', t).tex, 'P(\\overline{B} \\mid A_{2})');
   assert.throws(() => termOf('P(C)', t), /没有叫 C 的/);
   assert.throws(() => termOf('A1', t), /P\(/);
   // 分母是 0

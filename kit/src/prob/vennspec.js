@@ -1,6 +1,6 @@
 // 文氏图 venn 的写法和判法（概率第 4 批）。纯函数，不碰 DOM。
 import { parseEvent, parseGiven, parseProbTerm, solveAtoms, termValue, probOf, atomsOf } from './sets.js';
-import { qTeX, judgeNumber } from './num.js';
+import { qTeX, judgeNumber, splitAsk } from './num.js';
 
 const KEYS = ['title', 'q', 'note', 'sets', 'given', 'shade', 'ask', 'find', 'probs'];
 const COMMON = ['id', 'upload']; // 每个组件都能写的（render.js 认），这里不管
@@ -11,14 +11,6 @@ const JOIN = new Set(['given', 'find']);
 export const atomName = (k, names) => names.map((nm, i) => ((k >> i) & 1 ? nm : `${nm}'`)).join('');
 
 // 「"题目" 式子」「题目 => 式子」「式子」
-function splitAsk(src) {
-  const s = src.trim();
-  const q = /^["“]([^"”]*)["”]\s*([\s\S]+)$/.exec(s);
-  if (q) return { q: q[1].trim(), expr: q[2].trim() };
-  const k = s.lastIndexOf('=>');
-  if (k >= 0) return { q: s.slice(0, k).trim(), expr: s.slice(k + 2).trim() };
-  return { q: '', expr: s };
-}
 function splitTop(src) {
   const out = [];
   let depth = 0, cur = '';

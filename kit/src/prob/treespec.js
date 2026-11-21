@@ -1,6 +1,7 @@
 // 概率树 ptree 的写法、问的量、判法、能空的地方（概率第 4 批）。纯函数，不碰 DOM。
 import { parseTree, checkTree, leaves } from './tree.js';
-import { Q0, Q1, qSum, qInt, judgeNumber } from './num.js';
+import { Q0, Q1, qSum, qInt, judgeNumber, splitAsk } from './num.js';
+import { eventTree, evalEvent, eventTeX } from './sets.js';
 
 const KEYS = ['title', 'q', 'note', 'labels', 'drag', 'ask', 'find', 'blank'];
 const COMMON = ['id', 'upload'];
@@ -16,52 +17,20 @@ const causeMask = (i) => 3 << (2 * i);
 const effectMask = (t, yes) => { let m = 0; for (let i = 0; i < t.causes.length; i++) m |= 1 << (2 * i + (yes ? 0 : 1)); return m; };
 const fullMask = (t) => (1 << (2 * t.causes.length)) - 1;
 
-// bayes 的一边：式子 → { mask, tex }。并 + ∪，交并排写（空格、逗号、∩ 也行），对立 ~X、X'、\overline{…}，能加括号
+// bayes 的一边：式子 → { mask, tex }。和 venn 同一套写法（prob/sets.js 的 eventTree：并 + ∪ U、交并排写或 ∩ 逗号、
+// 差 − \setminus、对立 ~X X' \overline{…}、全集 Ω、空集 ∅，能加括号；2026-11-21 统一，以前这里少差和全集）。
+// 树上的事件不是 2ⁿ 块，是 2n 格（第 i 个原因 × 结果发生 / 不发生），叶子换成这里的掩码
 function sideBayes(src, t) {
-  const names = [...t.causes.map((c) => c.name), t.effect].sort((a, b) => b.length - a.length);
-  // 页面自己显示的 A_1、A_{1}、\bar{B} 也认
-  const s = String(src).replace(/\\overline\s*\{/g, '~(').replace(/\\bar\s*\{/g, '~(').replace(/\}/g, ')').replace(/\\bar\s*/g, '~')
-    .replace(/\\cup/g, '+').replace(/\\cap/g, ' ').replace(/([A-Za-z])_\(?(\d+)\)?/g, '$1$2').replace(/\s+/g, ' ').trim();
-  let i = 0;
-  const skip = () => { while (i < s.length && /[\s,，∩*·]/.test(s[i])) i++; };
-  const list = () => [...t.causes.map((c) => c.name), t.effect].join('、');
-  const union = () => {
-    let l = inter();
-    for (;;) { skip(); if (i < s.length && /[+∪]/.test(s[i])) { i++; const r = inter(); l = { mask: l.mask | r.mask, tex: `${l.tex} \\cup ${r.tex}`, loose: true }; } else return l; }
-  };
-  const inter = () => {
-    let l = factor();
-    for (;;) {
-      skip();
-      if (i >= s.length || /[+∪)]/.test(s[i])) return l;
-      const r = factor();
-      const side = (x) => (x.loose ? `(${x.tex})` : x.tex);
-      l = { mask: l.mask & r.mask, tex: `${side(l)}${side(r)}` };
-    }
-  };
-  const factor = () => {
-    skip();
-    if (i >= s.length) throw new Error('P( ) 里的式子没写完');
-    if (/[~!¬～！]/.test(s[i])) { i++; const x = factor(); return { mask: fullMask(t) & ~x.mask, tex: `\\overline{${x.tex}}` }; }
-    let node;
-    if (s[i] === '(' || s[i] === '（') {
-      i++; node = union(); skip();
-      if (!/[)）]/.test(s[i] || '')) throw new Error('括号没有合上');
-      i++; node = { ...node, loose: !!node.loose };
-    } else {
-      const nm = names.find((n) => s.startsWith(n, i));
-      if (!nm) { const bad = (/^[^\s,，|+∪∩*·'′()（）]+/.exec(s.slice(i)) || [s.slice(i)])[0]; throw new Error(`树上没有叫 ${bad} 的（有的是 ${list()}）`); }
-      i += nm.length;
-      node = { mask: nm === t.effect ? effectMask(t, true) : causeMask(t.causes.findIndex((c) => c.name === nm)), tex: nameTeX(nm) };
-    }
-    while (i < s.length && (/['′’]/.test(s[i]) || s[i] === '̄')) { i++; node = { mask: fullMask(t) & ~node.mask, tex: `\\overline{${node.tex}}` }; }
-    return node;
-  };
+  const names = [...t.causes.map((c) => c.name), t.effect];
+  const s = String(src).trim();
   if (!s) throw new Error('P( ) 里是空的');
-  const out = union();
-  skip();
-  if (i < s.length) throw new Error(`「${s.slice(i)}」读不懂`);
-  return { mask: out.mask, tex: out.tex };
+  let tree;
+  try { tree = eventTree(s, names); } catch (e) {
+    const bad = /没有叫 (\S+) 的事件/.exec(e.message);
+    throw new Error(bad ? `树上没有叫 ${bad[1]} 的（有的是 ${names.join('、')}）` : e.message);
+  }
+  const leaf = (i) => (i === names.length - 1 ? effectMask(t, true) : causeMask(i));
+  return { mask: evalEvent(tree, leaf, fullMask(t)), tex: eventTeX(tree) };
 }
 // 多层的树的一边：每层一个名字或 null（哪个都行）
 function sideLevels(src, t, names) {
@@ -224,8 +193,7 @@ export function parsePtree(src) {
   const sound = !checkTree(t).length;
   const split = (s) => { const res = []; let depth = 0, cur = ''; for (const ch of s) { if ('(（'.includes(ch)) depth++; if (')）'.includes(ch)) depth--; if (depth === 0 && /[;；]/.test(ch)) { res.push(cur); cur = ''; } else if (depth === 0 && /[,，]/.test(ch)) { res.push(cur); cur = ''; } else cur += ch; } res.push(cur); return res.map((x) => x.trim()).filter(Boolean); };
   for (const s of asks0) {
-    const q = /^["“]([^"”]*)["”]\s*([\s\S]+)$/.exec(s), k = s.lastIndexOf('=>');
-    const [text, expr] = q ? [q[1].trim(), q[2].trim()] : k >= 0 ? [s.slice(0, k).trim(), s.slice(k + 2).trim()] : ['', s.trim()];
+    const { q: text, expr } = splitAsk(s);
     const term = guard(`ask「${expr}」`, () => termOf(expr, t));
     if (!term) continue;
     if (sound && valueOf(term, t).status !== 'ok') { problems.push(`ask 的 ${expr} 没有定义（条件的概率是 0）`); continue; }

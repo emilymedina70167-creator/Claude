@@ -95,5 +95,6 @@ test('切比雪夫的界；判学生填的数（按现在滑块的值算）', ()
   assert.equal(judgeSimAsk(third, '1/48', vv).ok, true);
   assert.equal(judgeSimAsk(third, '0.0208', vv).ok, true);
   assert.equal(judgeSimAsk(third, '0.02', vv).ok, false);
-  assert.match(parseSim('draw: X ~ N(0, 1)\nask: "方差" sigma^2/n').problems.join('；'), /ask/);
+  // 2026-11-21 统一：sim 也认 venn / ptree / joint 的写法「"题目" 式子」（以前这里报写法错误）
+  assert.deepEqual(parseSim('draw: X ~ N(0, 1)\nask: "方差" sigma^2/n').problems, []);
 });

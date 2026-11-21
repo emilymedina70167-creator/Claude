@@ -23,7 +23,7 @@ const WORDS = [
   ['\\left', null], ['\\right', null],
 ];
 const CHARS = {
-  '∪': 'or', '+': 'or', '∨': 'or', '∩': 'and', '*': 'and', '·': 'and', '∧': 'and', '×': 'and',
+  '∪': 'or', '+': 'or', '∨': 'or', '∩': 'and', '*': 'and', '·': 'and', '∧': 'and', '×': 'and', ',': 'and', '，': 'and',
   '-': 'minus', '−': 'minus', '–': 'minus', '\\': 'minus', '∖': 'minus',
   '~': 'not', '!': 'not', '¬': 'not', '～': 'not', '！': 'not',
   "'": 'post', '′': 'post', '’': 'post', 'ᶜ': 'post', '̄': 'post', '̅': 'post',
@@ -32,7 +32,9 @@ const CHARS = {
 };
 function tokens(src, names) {
   // Ā 这样拼好的字拆成「A + 上划线」；全角字母转半角
-  const s = String(src ?? '').normalize('NFD').replace(/[Ａ-Ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+  // A_1、A_{1}、A_(1) 是页面自己显示的写法：读成 A1（ptree 以前就认，2026-11-21 两个组件一套写法）
+  const s = String(src ?? '').normalize('NFD').replace(/[Ａ-Ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/([A-Za-z])_\s*(?:\{\s*(\d+)\s*\}|\(\s*(\d+)\s*\)|(\d+))/g, (_, a, b, c, d) => a + (b ?? c ?? d));
   const byLen = [...names].sort((a, b) => b.length - a.length);
   const out = [];
   let i = 0;
@@ -138,7 +140,7 @@ function maskOf(t, n) {
 }
 
 const bare = (t) => (t.op === 'group' ? bare(t.x) : t);
-const nameTeX = (s) => s.replace(/^([A-Za-z])(\d+)$/, '$1_{$2}');
+const nameTeX = (s) => (/^[A-Za-z]\d*$/.test(s) ? s.replace(/^([A-Za-z])(\d+)$/, '$1_{$2}') : `\\text{${s}}`); // 中文的名字放进 \text（照 ptree）
 function texOf(t0) {
   const t = bare(t0);
   const loose = (x) => ['or', 'minus'].includes(bare(x).op);
@@ -158,6 +160,22 @@ function texOf(t0) {
     }
   }
 }
+
+/** 只读成语法树（ptree 也用：它的事件不是 2ⁿ 块，叶子换成自己的掩码） */
+export const eventTree = (src, names) => parse(tokens(src, names), names.length);
+export function evalEvent(t, leaf, full) {
+  switch (t.op) {
+    case 'name': return leaf(t.i);
+    case 'all': return full;
+    case 'none': return 0;
+    case 'group': return evalEvent(t.x, leaf, full);
+    case 'not': return full & ~evalEvent(t.x, leaf, full);
+    case 'or': return evalEvent(t.l, leaf, full) | evalEvent(t.r, leaf, full);
+    case 'and': return evalEvent(t.l, leaf, full) & evalEvent(t.r, leaf, full);
+    default: return evalEvent(t.l, leaf, full) & ~evalEvent(t.r, leaf, full); // minus
+  }
+}
+export const eventTeX = (t) => texOf(t);
 
 /** 事件的式子 → { mask, atoms, tex }；读不懂抛出（说哪里、怎么写） */
 export function parseEvent(src, names) {

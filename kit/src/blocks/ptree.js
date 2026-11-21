@@ -7,7 +7,7 @@ import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
 import { parsePtree, valueOf, judgeTreeProb } from '../prob/treespec.js';
 import { treeNumbers, leaves, moveBoundary, setCond } from '../prob/tree.js';
-import { qTeX, judgeNumber, Q1 } from '../prob/num.js';
+import { qTeX, qShow, judgeNumber, Q1 } from '../prob/num.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
@@ -25,10 +25,7 @@ export function ptree(el, src) {
   const bayes = tree.form === 'bayes';
   // 主讲写的是小数就照小数写（除得尽的），不然写分数
   const decimalStyle = /[.%]/.test(src) && !/\d\s*\/\s*\d/.test(src.replace(/^(title|q|note|ask|find|labels|blank)\s*[:：].*$/gim, ''));
-  const fmt = (q) => {
-    if (decimalStyle) { let d = q.d; while (d % 2n === 0n) d /= 2n; while (d % 5n === 0n) d /= 5n; const s = String(Number(q.toNumber().toPrecision(12))); if (d === 1n && s.length <= 8) return s; }
-    return q.d > 9999n ? String(Number(q.toNumber().toPrecision(4))) : q.toString();
-  };
+  const fmt = (q) => qShow(q, decimalStyle); // 和 joint 的表同一个写法（prob/num.js）
   // 写进公式里的数：主讲写小数、这个数又除得尽的写小数，别的写分数（和树上的写法一个风格）
   const tx = (q) => (decimalStyle && q.d !== 1n && isTerminating(q) && fmt(q).length <= 8 ? fmt(q) : qTeX(q));
   const label = (name, not) => { const l = spec.labels[name] || name; return not ? (/^[A-Za-z]\d*$/.test(l) ? `${l[0]}̄${l.slice(1)}` : `非${l}`) : l; };

@@ -40,9 +40,9 @@ test('C2 概率树：并（+、∪）两边有结果时照并算；带括号、�
   assert.equal(v('P(\\bar{B} | A2)'), '99/100');
   // 原来就对的不许坏
   assert.equal(v('P(A1 + A2 | B)'), '13/19'); assert.equal(v('P(A2 B)'), '3/1000'); assert.equal(v('P(~B)'), '981/1000');
-  assert.equal(termOf('P(A1 + B)', t).tex, 'P(A_1 \\cup B)');
-  assert.equal(termOf('P(A1 | B)', t).tex, 'P(A_1 \\mid B)');
-  assert.equal(termOf('P(~B | A2)', t).tex, 'P(\\overline{B} \\mid A_2)');
+  assert.equal(termOf('P(A1 + B)', t).tex, 'P(A_{1} \\cup B)');
+  assert.equal(termOf('P(A1 | B)', t).tex, 'P(A_{1} \\mid B)');
+  assert.equal(termOf('P(~B | A2)', t).tex, 'P(\\overline{B} \\mid A_{2})');
   // 认错法、能空的地方照旧
   assert.equal(judgeTreeProb(termOf('P(A1 | B)', t), t, '0.02').tag, 'cond-reversed');
   assert.equal(judgeTreeProb(termOf('P(B)', t), t, '0.06').tag, 'sum-cond');

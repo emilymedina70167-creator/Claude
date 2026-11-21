@@ -2,7 +2,7 @@
 import { evaluateExact, Q } from '../exact.js';
 import { evaluate } from '../expr.js';
 import { parseJoint, checkJoint, completeJoint, independent, moments, distOf, expectOf, tidy } from './joint.js';
-import { Q0, readQ, judgeNumber, decimalVerdict, qInt } from './num.js';
+import { Q0, readQ, judgeNumber, decimalVerdict, qInt, splitAsk } from './num.js';
 
 const KEYS = ['title', 'q', 'note', 'x', 'y', 'p', 'px', 'py', 'independent', 'show', 'z', 'ask'];
 const COMMON = ['id', 'upload'];
@@ -170,8 +170,7 @@ export function parseJointBlock(src) {
   for (const s of (fields.show || '').split(/[\s,，]+/).filter(Boolean)) { if (SHOWS.includes(s.toLowerCase())) out.show.add(s.toLowerCase()); else problems.push(`show 里的 ${s} 不认识（能写的：${SHOWS.join(' ')}）`); }
   if (fields.z) { try { out.z = distOf(j, fields.z); } catch (e) { problems.push(`z：${e.message}`); } }
   for (const s of asks0) {
-    const q = /^["“]([^"”]*)["”]\s*([\s\S]+)$/.exec(s), k = s.lastIndexOf('=>');
-    const [text, expr] = q ? [q[1].trim(), q[2].trim()] : k >= 0 ? [s.slice(0, k).trim(), s.slice(k + 2).trim()] : ['', s.trim()];
+    const { q: text, expr } = splitAsk(s);
     const kind = expr.toLowerCase();
     if (kind === 'margins') out.asks.push({ kind, q: text || '把边缘分布填出来：每一行、每一列各加起来。' });
     else if (kind === 'cells') { if (!raw.blanks.length) problems.push('ask: cells 要表里有空着的格（p 里写 ?）；现在没有空着的格'); else out.asks.push({ kind, q: text || '把表里空着的格填出来。', cells: raw.blanks }); } else if (kind === 'z') { if (!out.z) problems.push('ask: z 要先写 z:（Z 的式子）'); else out.asks.push({ kind, q: text || `把 $Z = ${tidy(fields.z).replace(/\*/g, '')}$ 的分布填出来。` }); } else if (kind === 'independent') out.asks.push({ kind, q: text || '$X$ 和 $Y$ 独立吗？', answer: out.indep.ok, cells: out.indep.cells });

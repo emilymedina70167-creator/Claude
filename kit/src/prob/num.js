@@ -31,12 +31,15 @@ export const qSum = (xs) => xs.reduce((s, x) => s.add(x), Q0);
 export const qMin = (xs) => xs.reduce((m, x) => (x.cmp(m) < 0 ? x : m));
 export const qMax = (xs) => xs.reduce((m, x) => (x.cmp(m) > 0 ? x : m));
 
+/** 分母超过它就写小数（4 位有效数字）：读数、题面、表、树一个门槛（以前读数 1000、表 9999，2026-11-21 统一；
+ *  9999 放得下掷四次骰子的 1296、抽牌的 2652 这种考试里常见的分母） */
+export const BIG_DEN = 9999;
 /** 给人看的：分母不大的写分数，大的写小数（4 位有效数字） */
-export function qText(x, { maxDen = 1000 } = {}) {
+export function qText(x, { maxDen = BIG_DEN } = {}) {
   if (x.d <= BigInt(maxDen)) return x.toString();
   return String(Number(x.toNumber().toPrecision(4)));
 }
-export function qTeX(x, { maxDen = 1000 } = {}) {
+export function qTeX(x, { maxDen = BIG_DEN } = {}) {
   if (x.d <= BigInt(maxDen)) return x.d === 1n ? `${x.n}` : `${x.n < 0n ? '-' : ''}\\frac{${x.n < 0n ? -x.n : x.n}}{${x.d}}`;
   return String(Number(x.toNumber().toPrecision(4)));
 }
@@ -105,7 +108,18 @@ export function judgeNumber(value, input, traps = []) {
 /** 表、树上写的数：decimal 为真（主讲写的是小数）而且除得尽的写小数，别的写分数；分母太大的写四位有效数字 */
 export function qShow(q, decimal = false) {
   if (decimal) { let d = q.d; while (d % 2n === 0n) d /= 2n; while (d % 5n === 0n) d /= 5n; const s = String(Number(q.toNumber().toPrecision(12))); if (d === 1n && s.length <= 8) return s; }
-  return q.d > 9999n ? String(Number(q.toNumber().toPrecision(4))) : q.toString();
+  return q.d > BigInt(BIG_DEN) ? String(Number(q.toNumber().toPrecision(4))) : q.toString();
 }
 /** 写进公式里的数：同上，分数用 \frac */
 export const qShowTeX = (q, decimal = false) => (decimal && /^-?\d+(\.\d+)?$/.test(qShow(q, true)) ? qShow(q, true) : qTeX(q));
+
+// ask 的写法（venn、ptree、joint、sim 同一套，2026-11-21 统一）：
+//   "题目" 式子、"题目" = 式子（以前 sim 的写法）、题目 => 式子、只写式子（题目由组件自己补）
+export function splitAsk(src) {
+  const s = String(src ?? '').trim();
+  const q = /^["“]([^"”]*)["”]\s*(?:=(?!=)\s*)?([\s\S]+)$/.exec(s);
+  if (q) return { q: q[1].trim(), expr: q[2].trim() };
+  const k = s.lastIndexOf('=>');
+  if (k >= 0) return { q: s.slice(0, k).trim(), expr: s.slice(k + 2).trim() };
+  return { q: '', expr: s };
+}

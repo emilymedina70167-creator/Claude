@@ -1,7 +1,7 @@
 // 抽样模拟 sim 的写法、读数、坐标刻度、判一个数（概率第 4 批）。纯函数，不碰 DOM。
 import { compile, evaluate, names } from '../expr.js';
 import { parseDist, theory, simulator } from './sim.js';
-import { readQ, decimalVerdict } from './num.js';
+import { readQ, decimalVerdict, splitAsk } from './num.js';
 
 const KEYS = ['title', 'q', 'note', 'draw', 'n', 'stat', 'view', 'curve', 'x', 'y', 'bins', 'seed', 'level', 'sigma', 'band', 'discrete', 'ask'];
 const COMMON = ['id', 'upload'];
@@ -145,15 +145,14 @@ export function parseSim(src) {
     try { compile(body)(probe); out.curves.push({ src: body, label: mods.label || '' }); } catch (e) { problems.push(`curve「${body}」：${e.message}`); }
   }
   for (const s of asks0) {
-    const m = /^["“]([^"”]*)["”]\s*=\s*([\s\S]+)$/.exec(s) || /^([\s\S]*?)\s*=>\s*([\s\S]+)$/.exec(s);
-    if (!m) { problems.push(`ask 的写法：ask: "题目" = 式子（式子里能用 n、mu、sigma 和滑块；「${s}」读不懂）`); continue; }
-    const expr = m[2].trim();
+    const { q, expr } = splitAsk(s);
+    if (!expr) { problems.push(`ask 的写法：ask: "题目" 式子（式子里能用 n、mu、sigma 和滑块；「${s}」读不懂）`); continue; }
     try {
       const used = names(expr).filter((nm) => SIM_NAMES.includes(nm));
       if (used.length) throw new Error(`用到了模拟出来的量（${used.join('、')}）：判对错只按理论值，式子里用 n、mu、sigma 和滑块`);
       const v = evaluate(expr, theoryVars(out, sl));
       if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('按理论值算不出一个有限的数（这个分布的期望或方差不存在？）');
-      out.asks.push({ q: m[1].trim(), expr });
+      out.asks.push({ q: q || `${expr} 是多少？`, expr });
     } catch (e) { problems.push(`ask「${expr}」：${e.message}`); }
   }
   return out;
