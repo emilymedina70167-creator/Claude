@@ -588,7 +588,7 @@ function blkView(s, input) {
   if (s.found) cls[s.found] += ' sv-done';
   if (s.low !== undefined) { /* 折半找块：low、high 写在索引表下面 */ }
   const ptrIdx = s.low !== undefined ? index.map((_, k) => [k === s.low ? 'low' : '', k === s.high ? 'high' : '', k === s.at ? 'mid' : ''].filter(Boolean).join(',')) : null;
-  return `<div class="bk"><div class="bk-h muted">索引表（最大关键字 / 起始位置）</div><div class="bk-row">${idx}</div>${ptrIdx ? `<div class="bk-ptr">${ptrIdx.map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : ''}<div class="bk-h muted">查找表</div>${arrayView(items.map((x) => x.text), { cls, ptr })}</div>${chips([['查找', input.keyText]])}`;
+  return `<div class="bk"><div class="bk-h muted">索引表（最大关键字 / 起始位置）</div><div class="bk-row">${idx}</div>${ptrIdx ? `<div class="bk-ptr">${ptrIdx.map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : ''}<div class="bk-h muted">查找表</div><div class="bk-scroll">${arrayView(items.map((x) => x.text), { cls, ptr })}</div></div>${chips([['查找', input.keyText]])}`;
 }
 
 export const blocksearchEngine = {

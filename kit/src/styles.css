@@ -1981,6 +1981,11 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 /* 分块查找 blocksearch：上面索引表（最大关键字，小字是起始位置），下面查找表按块染色 */
 .bk { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .bk-h { font: 14px var(--sans); }
+/* 查找表长（18 个）时竖屏放不下：放进能横着滑的框，居中用 auto 边距（放不下时边距是 0，不会把左边切掉） */
+.bk-scroll { align-self: stretch; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.bk-scroll > .sv-arr { margin: 0 auto; }
+.bk-scroll > .sv-arr.sv-dense { --cell: 33px; }
+.bk-scroll > .sv-arr.sv-dense .sv-cell { font-size: 15px; }
 .bk-row { display: flex; gap: 6px; }
 .bk-idx { display: flex; flex-direction: column; align-items: center; min-width: 44px; }
 .bk-idx small { font-size: 11px; color: var(--muted); }
