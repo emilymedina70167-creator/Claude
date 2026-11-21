@@ -2,6 +2,7 @@
 // mode: show 一步一步播：一个成分带着颜色到新位置，原来的位置留一个虚线的影子，变了的词标出来、新加的框架词另一种底色；
 // mode: do 学生自己排：点一个成分放进下一个空位（或者拖到某个空位上），点已经放好的拿回去；排完检查，只说第几个位置不对。
 // 两行怎么配、谁变了在 enshift.js（纯函数）。
+import { REVEAL_TRIES, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
@@ -10,7 +11,6 @@ import { parseShift, shiftPlan, judgeOrder, lineText, shiftFieldProblems, shiftD
 import { roleName, fixOptions } from '../entext.js';
 import { figureControls } from '../plot.js';
 
-const TRIES = 3;
 const short = (s, n = 160) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
 export function shift(el, src) {
@@ -124,6 +124,7 @@ export function shift(el, src) {
   const done = session.gate(el, title);
   const placed = Array(plan.order.length).fill(undefined);
   // 排顺序是第 1 步、选形式是第 2 步：记录里分开算两道题，次数各数各的
+  const again = sameWrong(), formAgain = sameWrong();
   let attempts = 0, formTries = 0, closed = false, bad = -1, tried = '', stage = 'order', formAt = 0;
   const forms = plan.changed.filter((c) => decoys[c.key]).map((c) => ({ ...c, opts: fixOptions({ fix: c.after, decoys: decoys[c.key] }, `${lineText(s.to)}|${c.key}`) }));
   body.innerHTML = `${head}<div class="sh-cap">原句</div><div class="sh-row sh-from"></div>
@@ -177,12 +178,13 @@ export function shift(el, src) {
     if (closed || stage !== 'order') return;
     const r = judgeOrder(placed, s);
     if (r.ok === null) return;
-    if (!r.ok && said() === tried) return; // 同一个排法连点检查：不算新的一次
+    if (again.repeat(said())) return; // 同一个排法连点检查：不算新的一次
+    again.after(said(), r.ok);
     attempts++; tried = said();
     rec({ liveOnly: true, ok: r.ok, attempts, value: tried, detail: r.ok ? '' : r.text, more: (r.ok && forms.length > 0) || undefined });
     if (r.ok) { bad = -1; say(true, forms.length ? '顺序对了。' : '顺序对了：看看哪些词变了。'); askForm(); return; }
     bad = r.firstWrong; paint();
-    say(false, r.text, attempts >= TRIES ? ' <button type="button" class="link-btn sh-show">看答案</button>' : '');
+    say(false, r.text, attempts >= REVEAL_TRIES ? ' <button type="button" class="link-btn sh-show">看答案</button>' : '');
   });
   fb.addEventListener('click', (e) => {
     if (!e.target.closest('.sh-show') || closed) return;
@@ -193,6 +195,8 @@ export function shift(el, src) {
     const b = e.target.closest('.sh-opt');
     if (!b || closed) return;
     const f = forms[formAt], i = Number(b.dataset.i), ok = i === f.opts.right;
+    if (formAgain.repeat(`${formAt}:${i}`)) return; // 点错的选项已经按不了；万一按到了也不算新的一次
+    formAgain.after(`${formAt}:${i}`, ok);
     formTries++;
     rec({ liveOnly: true, ok, attempts: formTries, value: `${roleName(fromOf(f.key).role)}写成 ${f.opts.options[i]}`, detail: ok ? '第 2 步：形式' : '第 2 步：形式不对' });
     if (ok) { formAt++; say(true, `${f.before} → ${f.after}`); askForm(); } else { b.disabled = true; b.classList.add('is-wrong'); say(false, '形式不对：看它在新句子里和谁搭配。'); }

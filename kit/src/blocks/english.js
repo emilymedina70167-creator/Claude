@@ -1,6 +1,7 @@
 // 英语（语法）组件：cloze（填空）、errfind（点出用错的词再改）、parse（句子成分标注，能套从句）、drill（句型操练）。
 // 判分都在 entext.js（纯函数）；这里是画面、作答记录（session.record，课堂里自动发给课堂 Claude）、草稿（drafts.js）。
 // 答错两次以后才出现「看答案」；不对时只说哪里不对（第几个词、哪一处），不说应该是什么。
+import { canReveal, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { markDraft } from '../drafts.js';
 import { parseFields } from '../parse.js';
@@ -66,15 +67,19 @@ export function cloze(el, src) {
     inputs.forEach((x) => { x.readOnly = true; if (x.tagName === 'SELECT') x.disabled = true; });
     session.record({ type: 'cloze', final: true, title, q, ok, attempts, revealed: revealed || undefined, value: values().join(' | '), expected: blanks.map((b) => b[0]).join(' | '), el });
   };
+  const rep = sameWrong();
   const check = () => {
     if (closed) return;
+    const sig = values().join(' | ');
+    if (rep.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
     attempts++;
-    lastChecked = values().join(' | ');
+    lastChecked = sig;
     const res = inputs.map((x, i) => matchText(x.value, blanks[i], opts));
     // 常见错答：学生看到针对的那句提示，记录里写给老师「页面看出来」
     const diags = inputs.map((x, i) => (res[i].ok ? null : diagnose(x.value, specs[i].wrongs, opts)));
     res.forEach((r, i) => { inputs[i].classList.toggle('is-right', r.ok); inputs[i].classList.toggle('is-wrong', !r.ok); });
     const ok = res.every((r) => r.ok);
+    rep.after(sig, ok);
     const why = (r, i) => (diags[i]?.why ? diags[i].why : specs[i].choices ? (r.empty ? '还没选' : '选得不对') : textHint(r, { what: '' }) || '不对');
     const misread = diags.map((d, i) => (d ? `第 ${i + 1} 空写成「${d.text}」${d.why ? `：${d.why}` : '（常见错答）'}` : '')).filter(Boolean).join('；');
     session.record({ type: 'cloze', liveOnly: true, title, q, value: lastChecked, ok, attempts, detail: ok ? '' : res.map((r, i) => (r.ok ? '' : `第 ${i + 1} 空${specs[i].choices || diags[i] ? `：${why(r, i)}` : textHint(r, { what: '' })}`)).filter(Boolean).join('；'), misread: misread || undefined, el });
@@ -82,7 +87,7 @@ export function cloze(el, src) {
     fb.className = `q-feedback ${ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = verdict(ok, ok ? '' : res.map((r, i) => (r.ok ? '' : `第 ${i + 1} 空：${why(r, i)}`)).filter(Boolean).join('；')) + (ok && fields.explain ? mdToHtml(fields.explain) : '');
     if (ok) finish(true);
-    else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
+    else if (canReveal(attempts)) body.querySelector('.en-show').hidden = false;
   };
   body.querySelector('.en-check').addEventListener('click', check);
   inputs.forEach((x) => x.addEventListener('keydown', (e) => { if (e.key === 'Enter' && x.tagName !== 'SELECT') check(); }));
@@ -141,13 +146,17 @@ export function errfind(el, src) {
     words.lock();
     session.record({ type: 'errfind', final: true, title, q: short(text, 200), ok, attempts, revealed: revealed || undefined, value: pick >= 0 ? now() : '', expected: `${word(wrongAt)}${fixes.length ? ` → ${fixes[0]}` : ''}`, el });
   };
+  const rep = sameWrong();
   const check = () => {
     if (closed || pick < 0) return;
+    const sig = `${pick}|${fixIn?.value.trim() ?? ''}`;
+    if (rep.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
     attempts++;
     tried = now();
     const spot = pick === wrongAt;
     const fixR = spot && fixIn ? matchText(delNorm(fixIn.value), fixes) : { ok: true };
     const ok = spot && fixR.ok;
+    rep.after(sig, ok);
     const decoy = spot ? null : decoys.find((d) => d.i === pick);
     const badFix = spot && !fixR.ok && fixIn ? diagnose(fixIn.value, fixWrongs) : null;
     const misread = decoy ? `点了常见的错处「${decoy.w}」：${decoy.why}` : badFix ? `改成了常见的错法「${badFix.text}」${badFix.why ? `：${badFix.why}` : ''}` : '';
@@ -158,7 +167,7 @@ export function errfind(el, src) {
     fb.className = `q-feedback ${ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = verdict(ok, ok ? '' : !spot ? `「${word(pick)}」用得没错${decoy ? `：${decoy.why}` : '，错的是别的词'}` : fixR.empty ? '找对了，写一下改成什么' : `找对了，改得不对${badFix?.why ? `：${badFix.why}` : ''}`) + (ok && fields.explain ? mdToHtml(fields.explain) : '');
     if (ok) finish(true);
-    else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
+    else if (canReveal(attempts)) body.querySelector('.en-show').hidden = false;
   };
   body.querySelector('.en-check').addEventListener('click', check);
   fixIn?.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
@@ -226,7 +235,7 @@ function joinStage(host, { ans, roles, title, el, onDone, step = 0 }) {
         return;
       }
       fb.className = 'pz-join-fb is-bad';
-      fb.innerHTML = `✗ 这两段不是一家。${attempts >= 3 ? ' <button type="button" class="link-btn pz-join-show">看答案</button>' : ''}`;
+      fb.innerHTML = `✗ 这两段不是一家。${canReveal(attempts) ? ' <button type="button" class="link-btn pz-join-show">看答案</button>' : ''}`;
       fb.querySelector('.pz-join-show')?.addEventListener('click', () => { fb.className = 'pz-join-fb'; fb.textContent = '连起来的就是本来挨着的两段。'; finish(false, true); });
     },
   });
@@ -309,11 +318,15 @@ export function parse(el, src) {
     if (askJoin && ok) { body.querySelector('.pz-layers')?.remove(); joinStage(body, { ans, roles, title, el, onDone: () => done(), step: 2 }); }
     else layers.show(ans.spans);
   };
+  const rep = sameWrong();
   body.querySelector('.en-check').addEventListener('click', () => {
     if (closed || pick.empty()) return;
+    const sig = markup(mine());
+    if (rep.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
     attempts++;
-    tried = markup(mine());
+    tried = sig;
     last = judgeSpans(mine(), ans.spans);
+    rep.after(sig, last.ok);
     session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), value: tried, ok: last.ok, attempts, detail: spansHint(last, roles), el });
     fb.hidden = false;
     fb.className = `q-feedback ${last.ok ? 'is-ok' : 'is-bad'}`;
@@ -322,7 +335,7 @@ export function parse(el, src) {
     pick.mark((s) => (res.right.includes(s) ? 'is-right' : 'is-wrong'));
     if (!last.ok) layers.show(res.right);
     if (last.ok) finish(true);
-    else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
+    else if (canReveal(attempts)) body.querySelector('.en-show').hidden = false;
   });
   body.querySelector('.en-show').addEventListener('click', () => {
     fb.hidden = false;
@@ -417,11 +430,15 @@ function parseByStep(el, fields, ans, roles, groups) {
     if (/^join$/i.test(fields.ask || '')) { body.querySelector('.pz-layers')?.remove(); joinStage(body, { ans, roles, title, el, onDone: () => done(), step: groups.length + 1 }); }
     else done();
   }
+  const rep = sameWrong();
   body.querySelector('.en-check').addEventListener('click', () => {
     if (closed || !mine.length) return;
+    const sig = `${k}|${markup(mine)}`;
+    if (rep.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
     attempts++;
     tried = markup(mine);
     last = judgeSpans(mine, target());
+    rep.after(sig, last.ok);
     const hint = spansHint(last, roles);
     // more：这一步对了、后面还有步（课堂里不为它单独叫老师：学生接着做下一步，跟着下一条一起告诉老师）
     session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: `第 ${k + 1} 步（${stepName(k)}）`, value: tried, ok: last.ok, attempts, check: last.ok ? undefined : hint, more: (last.ok && k < groups.length - 1) || undefined, el });
@@ -430,7 +447,7 @@ function parseByStep(el, fields, ans, roles, groups) {
     fb.innerHTML = verdict(last.ok, last.ok ? '' : hint);
     draw();
     if (last.ok) nextStep(true);
-    else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
+    else if (canReveal(attempts)) body.querySelector('.en-show').hidden = false;
   });
   body.querySelector('.en-show').addEventListener('click', () => {
     fb.hidden = false;
@@ -501,11 +518,15 @@ export function chunk(el, src) {
       done();
     });
   }
+  const rep = sameWrong();
   body.querySelector('.en-check').addEventListener('click', () => {
     if (closed) return;
+    const sig = now();
+    if (rep.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
     attempts++;
-    tried = now();
+    tried = sig;
     const r = judgeChunks([...cuts], spec);
+    rep.after(sig, r.ok);
     const hint = chunkHint(r, spec.tokens);
     session.record({ type: 'chunk', liveOnly: true, title, q: short(spec.text, 200), value: tried, ok: r.ok, attempts, detail: r.ok ? '' : hint, el });
     paint(r.ok ? null : { missing: [], extra: r.extra });
@@ -513,7 +534,7 @@ export function chunk(el, src) {
     fb.className = `q-feedback ${r.ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = verdict(r.ok, r.ok ? '' : hint) + (r.ok && fields.explain ? mdToHtml(fields.explain) : '');
     if (r.ok) finish(true);
-    else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
+    else if (canReveal(attempts)) body.querySelector('.en-show').hidden = false;
   });
   body.querySelector('.en-show').addEventListener('click', () => {
     cuts.clear();
@@ -596,11 +617,15 @@ export function link(el, src) {
     done();
     session.record({ type: 'link', final: true, title, q: short(text, 200), ok, attempts, revealed: revealed || undefined, value: now(), expected: now(spec.pairs), el });
   };
+  const rep = sameWrong();
   body.querySelector('.en-check').addEventListener('click', () => {
     if (closed || !mine.length) return;
+    const sig = now();
+    if (rep.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
     attempts++;
-    tried = now();
+    tried = sig;
     last = judgeLinks(mine, spec);
+    rep.after(sig, last.ok);
     const hint = linkHint(last, spec.tokens);
     const misread = last.wrong.filter((x) => x.why).map((x) => `把「${w(x.from)}」连到了「${w(x.to)}」：${x.why}`).join('；');
     session.record({ type: 'link', liveOnly: true, title, q: short(text, 200), value: tried, ok: last.ok, attempts, detail: hint, misread: misread || undefined, el });
@@ -609,7 +634,7 @@ export function link(el, src) {
     fb.innerHTML = verdict(last.ok, hint) + (last.ok && fields.explain ? mdToHtml(fields.explain) : '');
     draw();
     if (last.ok) finish(true);
-    else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
+    else if (canReveal(attempts)) body.querySelector('.en-show').hidden = false;
   });
   body.querySelector('.en-show').addEventListener('click', () => {
     last = null;
@@ -681,8 +706,11 @@ export function drill(el, src) {
     }
   };
   let checking = false;
+  const rep = sameWrong();
   const check = async () => {
     if (settled || checking) return;
+    const sig = `${k}|${input.value.trim()}`;
+    if (rep.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
     attempts++;
     lastChecked = input.value.trim();
     let r = matchText(input.value, items[k].alts, opts);
@@ -701,6 +729,7 @@ export function drill(el, src) {
       btn.disabled = false;
       if (review?.ok) r = { ok: true };
     }
+    rep.after(sig, r.ok);
     input.classList.toggle('is-right', r.ok);
     input.classList.toggle('is-wrong', !r.ok);
     session.record({ type: 'drill', liveOnly: true, title, q: short(items[k].q, 200), value: lastChecked, ok: r.ok, attempts, detail: review ? `Claude 复核：${review.why}` : r.ok ? '' : textHint(r), misread: d ? `写成了常见的错法${d.why ? `：${d.why}` : ''}` : undefined, el });
@@ -708,7 +737,7 @@ export function drill(el, src) {
     fb.className = `q-feedback ${r.ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = verdict(r.ok, review?.why ? `${review.ok ? '和标准答案写法不同，' : ''}${review.why}` : r.ok ? '' : d?.why || textHint(r)) + (r.ok && items[k].alts.length > 1 ? `<div class="muted">也可以：${items[k].alts.filter((a) => matchText(a, [input.value], opts).ok === false).map(escapeHtml).join(' / ')}</div>` : '');
     if (r.ok) settle(true);
-    else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
+    else if (canReveal(attempts)) body.querySelector('.en-show').hidden = false;
   };
   body.querySelector('.en-check').addEventListener('click', check);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); check(); } });
@@ -758,12 +787,16 @@ export function translate(el, src) {
     session.record({ type: 'translate', final: true, title, q: short(text, 200), ok, attempts, revealed: revealed || undefined, value: input.value.trim(), text: input.value.trim(), expected: fields.answer ? short(fields.answer, 200) : undefined, el });
     done();
   };
+  const rep = sameWrong();
   const check = () => {
     if (closed) return;
     const r = judgeTranslation(input.value, spec);
     if (r.empty) { fb.hidden = false; fb.className = 'q-feedback is-bad'; fb.innerHTML = verdict(false, '先写出译文。'); return; }
+    const sig = input.value.trim();
+    if (rep.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
+    rep.after(sig, r.ok);
     attempts++;
-    tried = input.value.trim();
+    tried = sig;
     const hint = translationHint(r, n);
     input.classList.toggle('is-right', r.ok);
     input.classList.toggle('is-wrong', !r.ok);
@@ -774,7 +807,7 @@ export function translate(el, src) {
       ? `<div class="q-verdict">✓ 要点都译出来了</div><div class="muted">通不通顺、像不像中文，老师会看。</div>${ref}${fields.explain ? mdToHtml(fields.explain) : ''}`
       : verdict(false, hint);
     if (r.ok) settle(true);
-    else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
+    else if (canReveal(attempts)) body.querySelector('.en-show').hidden = false;
   };
   body.querySelector('.en-check').addEventListener('click', check);
   body.querySelector('.en-show').addEventListener('click', () => {

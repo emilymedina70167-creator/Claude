@@ -1,6 +1,7 @@
 // 平行结构 parallel（视觉第 5 批）：并列的几项上下对齐——公共的开头在左边，每一项另起一行、开头的词加粗，连接词标出来。
 // ask: starts 学生在一行的句子上点出每一项的第一个词（点对了才排成对齐的样子）；ask: odd 挑出不平行的那一项、再选改法。
 // 写法、排行、判法在 entext.js（纯函数）。
+import { canReveal, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
@@ -41,6 +42,7 @@ export function parallel(el, src) {
   const done = session.gate(el, title);
   const rec = (extra) => session.record({ type: 'parallel', title, q: short(p.text), el, ...extra });
   let attempts = 0, closed = false;
+  const again = sameWrong(), fixAgain = sameWrong();
 
   if (ask === 'starts') {
     const picked = new Set();
@@ -70,12 +72,13 @@ export function parallel(el, src) {
     body.querySelector('.pl-check').addEventListener('click', () => {
       if (closed || !picked.size) return;
       const r = judgeStarts([...picked], p);
-      if (!r.ok && said() === tried) return; // 同一个答案连点检查：不算新的一次
+      if (again.repeat(said())) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
+      again.after(said(), r.ok);
       attempts++; tried = said();
       rec({ liveOnly: true, ok: r.ok, attempts, value: tried, detail: r.text });
       fb.hidden = false; fb.className = `q-feedback ${r.ok ? 'is-ok' : 'is-bad'}`;
       fb.innerHTML = `<div class="q-verdict">${r.ok ? '✓ 对了' : '✗ 再想想'}</div><div>${escapeHtml(r.text)}</div>${r.ok ? explain : ''}`;
-      if (r.ok) finish(true); else if (attempts >= 2) body.querySelector('.pl-show').hidden = false;
+      if (r.ok) finish(true); else if (canReveal(attempts)) body.querySelector('.pl-show').hidden = false;
     });
     body.querySelector('.pl-show').addEventListener('click', () => {
       fb.hidden = false; fb.className = 'q-feedback is-reveal';
@@ -116,13 +119,14 @@ export function parallel(el, src) {
     const b = e.target.closest('.pl-item[data-k]');
     if (!b || closed || stage !== 'pick') return;
     const k = Number(b.dataset.k), r = judgeOdd(k, { answer });
-    if (!r.ok && state[k]?.cls === 'is-wrong') return; // 再点刚点错的那一项：不算新的一次
+    if (again.repeat(k)) return; // 再点刚点错的那一项：不算新的一次
+    again.after(k, r.ok);
     attempts++;
     rec({ liveOnly: true, ok: r.ok, attempts, value: `点了${nth(k)}`, detail: r.text, more: (r.ok && !!opts) || undefined });
     for (const key of Object.keys(state)) delete state[key];
     state[k] = { cls: r.ok ? 'is-right' : 'is-wrong' };
     say(r.ok, r.text);
-    if (r.ok) askFix(); else { paint(); if (attempts >= 2 && !body.querySelector('.pl-show')) { fb.insertAdjacentHTML('beforeend', ' <button type="button" class="link-btn pl-show">看答案</button>'); } }
+    if (r.ok) askFix(); else { paint(); if (canReveal(attempts) && !body.querySelector('.pl-show')) { fb.insertAdjacentHTML('beforeend', ' <button type="button" class="link-btn pl-show">看答案</button>'); } }
   });
   fb.addEventListener('click', (e) => {
     if (!e.target.closest('.pl-show') || closed) return;
@@ -134,10 +138,12 @@ export function parallel(el, src) {
     const b = e.target.closest('.pl-opt');
     if (!b || closed) return;
     const i = Number(b.dataset.i), ok = i === opts.right;
+    if (fixAgain.repeat(i)) return; // 点错的选项已经按不了；万一按到了也不算新的一次
+    fixAgain.after(i, ok);
     fixTries++;
     rec({ liveOnly: true, ok, attempts: fixTries, value: `改成 ${opts.options[i]}`, detail: ok ? '第 2 步：改法' : '第 2 步：改法，改得不对' });
     b.classList.add(ok ? 'is-right' : 'is-wrong');
-    if (ok) { say(true, '改成这样就和另外几项的形式一样了。', explain); finish(true); } else { b.disabled = true; say(false, '这样改还是不平行：看别的几项开头的那个词是什么形式。'); if (fixTries >= 2) { fb.insertAdjacentHTML('beforeend', ' <button type="button" class="link-btn pl-show">看答案</button>'); } }
+    if (ok) { say(true, '改成这样就和另外几项的形式一样了。', explain); finish(true); } else { b.disabled = true; say(false, '这样改还是不平行：看别的几项开头的那个词是什么形式。'); if (canReveal(fixTries)) { fb.insertAdjacentHTML('beforeend', ' <button type="button" class="link-btn pl-show">看答案</button>'); } }
   });
   paint();
 }

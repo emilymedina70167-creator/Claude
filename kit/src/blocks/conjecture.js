@@ -1,5 +1,6 @@
 // conjecture：用自己的话写下发现的规律，Claude 按要点批改并追问。
 // 页面没有调用 Claude 的权限时，改为对照参考答案自评。
+import { canReveal, sameWrong } from '../tries.js';
 import { parseFields } from '../parse.js';
 import { getAI, errorText, AI_PERMANENT } from '../ai.js';
 import { createPad } from '../ink/pad.js';
@@ -127,9 +128,11 @@ export function conjecture(el, src) {
 
   btnRef.addEventListener('click', () => showReference(false));
 
+  const again = sameWrong();
   btn.addEventListener('click', async () => {
     const text = ta.value.trim();
     if (text.length < 4) { fb.hidden = false; fb.className = 'cj-feedback is-bad'; fb.textContent = '先写下你的想法，哪怕不确定也没关系。'; return; }
+    if (again.repeat(text)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在（也不再问一次 Claude）
     attempts++;
     sent = text;
     // grade: off（live 模式默认）：只交给对话里的 Claude 看，页面不批改
@@ -168,12 +171,14 @@ ${(session.stages[session.stageOf(el)]?.src || '').slice(0, 2500)}
       fb.className = `cj-feedback ${verdict === 'correct' ? 'is-ok' : verdict === 'partial' ? 'is-mid' : 'is-bad'}`;
       fb.innerHTML = `<div class="q-verdict">${label}</div>${mdToHtml(String(r?.feedback || ''))}${r?.followup ? `<div class="cj-follow"><strong>想一想：</strong>${mdToHtml(String(r.followup), { inline: true })}</div>` : ''}`;
       if (verdict === 'correct') {
+        again.after(text, true);
         finish({ answer: text, verdict: 'Claude：正确', feedback: r.feedback });
         btnRef.hidden = !(fields.answer || fields.reference);
         btn.textContent = '改一改再提交';
       } else {
         btn.textContent = '修改后再提交';
-        if (attempts >= 2) btnRef.hidden = false;
+        again.after(text, false);
+        if (canReveal(attempts)) btnRef.hidden = false;
         session.record({ type: 'conjecture-try', title, q: plain(q), answer: text, via: via || undefined, verdict: `Claude：${verdict === 'partial' ? '部分正确' : '不正确'}`, feedback: r.feedback, el });
       }
     } catch (e) {

@@ -1,6 +1,7 @@
 // 概率树 ptree（概率第 4 批）：树（每条边上写概率、叶子上写乘出来的数）+ 面积图（单位正方形按先验分列、每列里按条件概率分出结果）+ 后验那一条。
 // 「A1 0.5: B 0.02」这种写法的树三样都有，面积图的分界能拖（树上的数、后验当场变）；缩进写的多层树只有树。
 // 写法、问的量、判法在 prob/treespec.js，计算在 prob/tree.js（都是纯函数）。
+import { REVEAL_TRIES, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
@@ -10,7 +11,6 @@ import { qTeX, judgeNumber, Q1 } from '../prob/num.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
-const TRIES = 3;
 const isTerminating = (q) => { let d = q.d; while (d % 2n === 0n) d /= 2n; while (d % 5n === 0n) d /= 5n; return d === 1n; };
 const ROW = 44, COL = 138, PAD = 24; // 一行 44px：整行能点
 const SIDE = 240, AX = 44, AY = 30; // 面积图：正方形的边长、左上角
@@ -54,7 +54,7 @@ export function ptree(el, src) {
     ...spec.blanks.map((b) => ({ kind: 'blank', q: `树上打问号的那一处：$${b.tex}$ 是多少？`, blank: b })),
     ...spec.asks.map((a) => ({ kind: 'ask', q: a.q, term: a.term })),
   ];
-  const state = { i: 0, tries: 0, checked: '', hot: null, filled: new Set() };
+  const state = { i: 0, tries: 0, checked: '', again: sameWrong(), hot: null, filled: new Set() };
   const gateDone = todo.length ? session.gate(el, title) : null;
   const cur = () => (state.i < todo.length ? todo[state.i] : null);
   const blankOpen = (where) => spec.blanks.some((b) => b.where === where) && !state.filled.has(where);
@@ -221,7 +221,7 @@ export function ptree(el, src) {
   function record(item, ok, extra) { session.record({ type: 'ptree', title, q: item.q.replace(/\s+/g, ' ').slice(0, 120), ok, attempts: state.tries, el, ...extra }); }
   const answerTeX = (item) => (item.kind === 'blank' ? `$${item.blank.tex} = ${tx(item.blank.value(tree))}$` : (() => { const r = valueOf(item.term, tree); return r.status === 'ok' ? `$${item.term.tex} = ${tx(r.value)}$` : `$${item.term.tex}$ 没有定义`; })());
   function next() {
-    state.i++; state.tries = 0; state.checked = '';
+    state.i++; state.tries = 0; state.checked = ''; state.again = sameWrong();
     if (state.i >= todo.length) gateDone?.();
     paintAsk();
     repaint(); // 后验那一条、能拖的把手跟着答题的进度出来
@@ -244,13 +244,14 @@ export function ptree(el, src) {
     const r = item.kind === 'blank' ? judgeNumber(item.blank.value(tree), input) : judgeTreeProb(item.term, tree, input);
     const fb = askBox.querySelector('.pt-fb');
     if (r.ok === null) { fb.className = 'pt-fb is-hint'; fb.textContent = r.text; return; }
-    if (input.trim() === state.checked) return; // 同一个答案又点了一次检查：不算一次新的尝试
+    if (state.again.repeat(input.trim())) return; // 同一个错答案又点了一次检查：不算一次新的尝试
+    state.again.after(input.trim(), r.ok);
     state.tries++;
     state.checked = input.trim();
     record(item, r.ok, { value: input.trim(), detail: r.text, ...(r.tag ? { misread: r.tag } : {}) });
     if (r.ok) { settle(item, `✓ ${mdToHtml(answerTeX(item), { inline: true })}`, 'is-ok'); return; }
     fb.className = 'pt-fb is-bad';
-    fb.innerHTML = `✗ ${escapeHtml(r.text)}${state.tries >= TRIES ? ' <button type="button" class="link-btn pt-reveal">看答案</button>' : ''}`;
+    fb.innerHTML = `✗ ${escapeHtml(r.text)}${state.tries >= REVEAL_TRIES ? ' <button type="button" class="link-btn pt-reveal">看答案</button>' : ''}`;
     fb.querySelector('.pt-reveal')?.addEventListener('click', () => {
       record(item, false, { value: input.trim(), giveup: true, expected: answerTeX(item).replace(/\$/g, '') });
       settle(item, `答案：${mdToHtml(answerTeX(item), { inline: true })}`, 'is-reveal');

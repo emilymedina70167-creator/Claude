@@ -3,6 +3,7 @@
 // find: deadlock / bad 是给学生的目标（找一种走法让它死锁 / 出错）；觉得怎么走都不会，点「不会」，页面把所有走法试一遍来判。
 // ask: block / value / wake / deadlock / buffer：点了进程以后、执行之前先猜。
 // 逻辑都在 engines/pv.js（pvStart / pvMove / procInfo / pvSearch，纯函数，有测试），这里只有画面、先猜和记录。
+import { canReveal, sameWrong } from '../tries.js';
 import { parseFields } from '../parse.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
@@ -133,7 +134,7 @@ export function pvDo(el, src) {
 
   // —— 先猜 ——
   function openAsk(a, r, p) {
-    pending = { a, r, p, attempts: 0, t0: Date.now() };
+    pending = { a, r, p, attempts: 0, t0: Date.now(), again: sameWrong() };
     askBox.hidden = false;
     askBox.innerHTML = `<div class="sv-ask-q"><span class="sv-ask-tag">先猜</span>${mdToHtml(a.q, { inline: true })}</div>
       ${a.kind === 'choice' ? `<div class="sv-choices">${a.choices.map((c) => `<button type="button" class="btn sv-choice" data-v="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>` : ''}
@@ -159,6 +160,9 @@ export function pvDo(el, src) {
     if (!pending || !String(given ?? '').trim()) return;
     const { a, p } = pending;
     const res = checkAsk(a, given);
+    const sig = String(given).trim();
+    if (pending.again.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
+    pending.again.after(sig, res.ok);
     pending.attempts++;
     // 错了：同一步按常见的错误口径算，答案和学生的一样，就是那种错法（只给老师看）
     let misread = '';
@@ -177,7 +181,7 @@ export function pvDo(el, src) {
     box.hidden = false;
     box.className = 'sv-ask-fb is-bad';
     box.textContent = res.msg || '不对，再想想。';
-    if (pending.attempts >= 2) askBox.querySelector('.sv-reveal').hidden = false;
+    if (canReveal(pending.attempts)) askBox.querySelector('.sv-reveal').hidden = false;
   }
 
   function finishAsk({ ok = false, giveup = false, revealed = false }) {

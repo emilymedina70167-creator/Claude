@@ -1,6 +1,7 @@
 // findbug：找错。给一份有错的解答，学生先点第一处错的那一行，再写错在哪（打字或手写）。
 // 点对了显示 why；点错了提示「这一行是对的」，第二次错后可以看答案。
 // 「错在哪」的文字只记录，由对话里的 Claude 看；写了 rubric: 时页面 Claude 可以给一句提示。
+import { canReveal, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { markDraft } from '../drafts.js';
 import { getAI } from '../ai.js';
@@ -59,23 +60,26 @@ export function findbug(el, src) {
     fb.hidden = true;
   }));
 
+  const again = sameWrong();
   body.querySelector('.fb-submit').addEventListener('click', async () => {
     if (!pick || finished) return;
     const text = tb.value;
     if (!text) { tb.focus(); tb.ta.classList.add('is-need'); return; }
+    if (again.repeat(pick)) return; // 再点刚点错的那一行：不算新的一次，上一次的提示还在
+    again.after(pick, pick === bug);
     attempts++;
     tried = pick;
     tb.markSent();
     firstPicks.push(pick);
     const ok = pick === bug;
-    session.record({ type: 'findbug', title, q: plain((fields.q || title).replace(/\$/g, '')), value: `第 ${pick} 行`, ok, attempts, text, via: tb.via || undefined, expected: `第 ${bug} 行`, liveOnly: !ok && attempts < 2, el });
+    session.record({ type: 'findbug', title, q: plain((fields.q || title).replace(/\$/g, '')), value: `第 ${pick} 行`, ok, attempts, text, via: tb.via || undefined, expected: `第 ${bug} 行`, liveOnly: !ok && !canReveal(attempts), el });
     const line = body.querySelector(`.fb-line[data-i="${pick}"]`);
     if (!ok) {
       line.classList.add('is-fine');
       fb.hidden = false;
       fb.className = 'fb-fb is-bad';
-      fb.innerHTML = attempts >= 2 ? '这一行是对的。可以再看看，或者点「看答案」。' : '这一行是对的，再看看。';
-      if (attempts >= 2) body.querySelector('.fb-show').hidden = false;
+      fb.innerHTML = canReveal(attempts) ? '这一行是对的。可以再看看，或者点「看答案」。' : '这一行是对的，再看看。';
+      if (canReveal(attempts)) body.querySelector('.fb-show').hidden = false;
       return;
     }
     finish(true, text);

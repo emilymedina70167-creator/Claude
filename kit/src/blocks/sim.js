@@ -3,6 +3,7 @@
 // intervals 一排置信区间（没盖住真值的标红）、scatter 二维正态的散点（样本相关系数）。
 // 随机数带种子：同一张图每次打开、每个人看到的是同一组。写法在 prob/simspec.js，抽样在 prob/sim.js（都是纯函数）。
 // 模拟出来的数只拿来看；判对错（ask）用的是理论值。
+import { REVEAL_TRIES, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
@@ -13,7 +14,7 @@ import { parseDist, sampler, rng, simulator, histogram, interval, STATS } from '
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
 const W = 560, H = 320, L = 48, R = 14, T = 14, Bm = 36;
-const MAX_REPS = 20000, KEEP_PATHS = 24, KEEP_INTERVALS = 40, TRIES = 3;
+const MAX_REPS = 20000, KEEP_PATHS = 24, KEEP_INTERVALS = 40;
 const tickText = (v) => String(Number(v.toPrecision(6)));
 
 export function sim(el, src) {
@@ -193,7 +194,7 @@ export function sim(el, src) {
   body.querySelector('.sm-clear').addEventListener('click', () => { reset(); paint(); });
 
   // —— 问一个数（按理论值判，滑块现在的值）——
-  const state = { i: 0, tries: 0, checked: '' };
+  const state = { i: 0, tries: 0, checked: '', again: sameWrong() };
   const gateDone = spec.asks.length ? session.gate(el, title) : null;
   const cur = () => (state.i < spec.asks.length ? spec.asks[state.i] : null);
   function paintAsk() {
@@ -210,7 +211,7 @@ export function sim(el, src) {
       fbEl.className = `sm-fb ${cls}`; fbEl.innerHTML = html; input.setAttribute('disabled', ''); askBox.dataset.settled = '1';
       askBox.querySelector('.sm-actions').innerHTML = last ? '' : '<button type="button" class="btn btn-primary sm-next">下一问 ›</button>';
       if (last) { state.i = spec.asks.length; state.lastShown = true; gateDone?.(); }
-      askBox.querySelector('.sm-next')?.addEventListener('click', () => { state.i++; state.tries = 0; state.checked = ''; paintAsk(); });
+      askBox.querySelector('.sm-next')?.addEventListener('click', () => { state.i++; state.tries = 0; state.checked = ''; state.again = sameWrong(); paintAsk(); });
     };
     // 判对错、看答案只用理论上的量（滑块现在的值、n、mu、sigma）：模拟出来的数会抖，不拿来判
     const want = () => fillShow(`{${a.expr}}`, theoryVars(spec, sl));
@@ -218,12 +219,13 @@ export function sim(el, src) {
       if (askBox.dataset.settled) return;
       const r = judgeSimAsk(a, input.value, theoryVars(spec, sl));
       if (r.ok === null) { fbEl.className = 'sm-fb is-hint'; fbEl.textContent = r.text; return; }
-      if (input.value.trim() === state.checked) return; // 同一个答案又点了一次检查：不算一次新的尝试
+      if (state.again.repeat(input.value.trim())) return; // 同一个错答案又点了一次检查：不算一次新的尝试
+      state.again.after(input.value.trim(), r.ok);
       state.tries++; state.checked = input.value.trim();
       session.record({ type: 'sim', title, q: a.q.replace(/\s+/g, ' ').slice(0, 120), ok: r.ok, value: input.value.trim(), detail: r.text, attempts: state.tries, el });
       if (r.ok) { settle('✓ 对。', 'is-ok'); return; }
       fbEl.className = 'sm-fb is-bad';
-      fbEl.innerHTML = `✗ ${escapeHtml(r.text)}${state.tries >= TRIES ? ' <button type="button" class="link-btn sm-reveal">看答案</button>' : ''}`;
+      fbEl.innerHTML = `✗ ${escapeHtml(r.text)}${state.tries >= REVEAL_TRIES ? ' <button type="button" class="link-btn sm-reveal">看答案</button>' : ''}`;
       fbEl.querySelector('.sm-reveal')?.addEventListener('click', () => { session.record({ type: 'sim', title, q: a.q.replace(/\s+/g, ' ').slice(0, 120), ok: false, value: input.value.trim(), giveup: true, expected: want(), attempts: state.tries, el }); settle(`答案：${escapeHtml(want())}`, 'is-reveal'); });
     };
     askBox.querySelector('.sm-check').addEventListener('click', check);

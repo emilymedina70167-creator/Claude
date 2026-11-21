@@ -1,6 +1,7 @@
 // 联合分布表 joint（概率第 4 批）：二维离散随机变量。边缘、条件、独立、矩页面算；Z = g(X, Y) 取值相同的格子同色；
 // 学生填边缘、填空着的格、填 Z 的分布、判独立（点出一格说明）、算一个量，页面逐格判。
 // 写法和判法在 prob/jointspec.js，计算在 prob/joint.js（都是纯函数）。
+import { REVEAL_TRIES, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
@@ -8,7 +9,6 @@ import { parseJointBlock, judgeQuantity, judgeCells } from '../prob/jointspec.js
 import { marginals, conditional } from '../prob/joint.js';
 import { qShow, qShowTeX } from '../prob/num.js';
 
-const TRIES = 3;
 const numText = (z) => (typeof z === 'number' ? String(Number(z.toPrecision(6))) : z.toString());
 
 export function joint(el, src) {
@@ -22,7 +22,7 @@ export function joint(el, src) {
   const f = (q) => qShow(q, decimal), ft = (q) => qShowTeX(q, decimal);
   const md = (s) => mdToHtml(s, { inline: true });
 
-  const state = { i: 0, tries: 0, inputs: {}, marks: {}, sel: null, hotZ: null, said: null, done: new Set(), checked: '', indepStage: 0 };
+  const state = { i: 0, tries: 0, inputs: {}, marks: {}, sel: null, hotZ: null, said: null, done: new Set(), checked: '', again: sameWrong(), indepStage: 0 };
   const gateDone = b.asks.length ? session.gate(el, title) : null;
   const cur = () => (state.i < b.asks.length ? b.asks[state.i] : null);
   const asking = (kind) => { const a = cur(); return !!a && a.kind === kind && !state.settled; };
@@ -124,7 +124,7 @@ export function joint(el, src) {
   const fb = () => askBox.querySelector('.jt-fb');
   function record(a, ok, extra) { session.record({ type: 'joint', title, q: a.q.replace(/\s+/g, ' ').slice(0, 120), ok, attempts: state.tries, el, ...extra }); }
   function next() {
-    state.i++; state.tries = 0; state.checked = ''; state.settled = false; state.indepStage = 0; state.pickCell = null; state.marks = {};
+    state.i++; state.tries = 0; state.checked = ''; state.again = sameWrong(); state.settled = false; state.indepStage = 0; state.pickCell = null; state.marks = {};
     if (state.i >= b.asks.length) gateDone?.();
     paint(); paintAsk();
   }
@@ -142,7 +142,7 @@ export function joint(el, src) {
   const reveal = (a, onClick) => { const btn = fb().querySelector('.jt-reveal'); btn?.addEventListener('click', onClick); };
   function fail(a, text, onReveal) {
     fb().className = 'jt-fb is-bad';
-    fb().innerHTML = `✗ ${escapeHtml(text)}${state.tries >= TRIES ? ' <button type="button" class="link-btn jt-reveal">看答案</button>' : ''}`;
+    fb().innerHTML = `✗ ${escapeHtml(text)}${state.tries >= REVEAL_TRIES ? ' <button type="button" class="link-btn jt-reveal">看答案</button>' : ''}`;
     reveal(a, onReveal);
   }
   function check() {
@@ -152,7 +152,8 @@ export function joint(el, src) {
       const input = askBox.querySelector('.jt-input').value, q = a.quantity, r = judgeQuantity(q, input);
       const ans = `$${q.tex} = ${q.exact ? ft(q.value) : `${q.valueTeX} \\approx ${Number(q.approx.toPrecision(4))}`}$`;
       if (r.ok === null) { fb().className = 'jt-fb is-hint'; fb().textContent = r.text; return; }
-      if (input.trim() === state.checked) return; // 同一个答案又点了一次检查：不算一次新的尝试
+      if (state.again.repeat(input.trim())) return; // 同一个错答案又点了一次检查：不算一次新的尝试
+      state.again.after(input.trim(), r.ok);
       state.tries++; state.checked = input.trim();
       record(a, r.ok, { value: input.trim(), detail: r.text, ...(r.tag ? { misread: r.tag } : {}) });
       if (r.ok) { settle(a, `✓ ${md(ans)}`, 'is-ok'); return; }
@@ -164,7 +165,8 @@ export function joint(el, src) {
     for (const inp of body.querySelectorAll('.jt-in')) state.inputs[inp.dataset.slot] = inp.value;
     const got = slots.map(([id]) => state.inputs[id] || ''), r = judgeCells(slots.map(([, v]) => v), got);
     if (r.ok === null) { fb().className = 'jt-fb is-hint'; fb().textContent = r.text; return; }
-    if (got.join(' ') === state.checked) return;
+    if (state.again.repeat(got.join(' '))) return;
+    state.again.after(got.join(' '), r.ok);
     state.tries++; state.checked = got.join(' ');
     slots.forEach(([id], n) => { state.marks[id] = r.marks[n]; });
     record(a, r.ok, { value: got.join('、'), detail: r.text });
@@ -176,8 +178,10 @@ export function joint(el, src) {
   function answerIndep(saysYes) {
     const a = cur();
     if (!a || state.settled) return;
-    state.tries++;
     const right = saysYes === a.answer;
+    if (state.again.repeat(`yn:${saysYes}`)) return; // 再点刚点错的那一个：不算新的一次
+    state.again.after(`yn:${saysYes}`, right);
+    state.tries++;
     // 说对了「不独立」还要点出一格才算完：这一下先不记，和点的那一格一起记
     if (!right || a.answer) record(a, right, { value: saysYes ? '独立' : '不独立', detail: right ? '对' : '不对' });
     if (!right) { fail(a, saysYes ? '不对：看看每一格是不是都等于它那一行、那一列两个边缘的乘积。' : '不对：每一格都正好等于两个边缘的乘积。', () => {
@@ -199,8 +203,10 @@ export function joint(el, src) {
   }
   function pickCell(i, k) {
     const a = cur();
-    state.tries++;
     const hit = a.cells.some(([x, y]) => x === i && y === k);
+    if (state.again.repeat(`cell:${i},${k}`)) return; // 再点刚点错的那一格：不算新的一次
+    state.again.after(`cell:${i},${k}`, hit);
+    state.tries++;
     record(a, hit, { value: `不独立，点了 X = ${f(j.xs[i])}、Y = ${f(j.ys[k])} 那一格`, detail: hit ? '这一格不等于乘积' : '这一格正好等于乘积' });
     if (hit) { showWhy(a, [i, k], true); return; }
     fail(a, `这一格正好相等（${f(px[i])} × ${f(py[k])} = ${f(j.p[i][k])}），换一格。`, () => { record(a, false, { value: '', giveup: true, expected: `X = ${f(j.xs[a.cells[0][0]])}、Y = ${f(j.ys[a.cells[0][1]])} 那一格` }); showWhy(a, a.cells[0]); });

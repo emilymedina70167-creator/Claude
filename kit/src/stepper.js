@@ -3,6 +3,7 @@
 //   上一步 / 下一步 / 播放 / 拖进度条；ask：走到某一步之前先让学生猜（在图上点、选、写），猜完才揭晓；
 //   mode: quiz：只给输入，学生写出结果、页面判分，做完可以看过程；
 //   课堂里的 figure set step= / play step / highlight（第几个格子、第几个结点闪一下）；学生走到第几步记成动作（刷新后恢复）。
+import { canReveal, sameWrong } from './tries.js';
 import { parseFields } from './parse.js';
 import { session } from './session.js';
 import { widget, mdToHtml, tex2html, escapeHtml, calcProblems, calcScope } from './blocks/common.js';
@@ -397,7 +398,7 @@ export function stepperBlock(engine) {
       fb.hidden = false;
       fb.className = 'sv-ask-fb is-bad';
       fb.innerHTML = escapeHtml(r.msg || '不对，再想想。');
-      if (pending.attempts >= 2) askBox.querySelector('.sv-reveal').hidden = false;
+      if (canReveal(pending.attempts)) askBox.querySelector('.sv-reveal').hidden = false;
       if (ask.kind === 'pick') { pending.picked = []; markPicked(); }
       // 按顺序点：留着前面对的那几个，错的那个和后面的撤掉，接着点
       if (ask.kind === 'order') { pending.picked = pending.picked.slice(0, r.prefix || 0); markPicked(); }
@@ -578,11 +579,16 @@ export function stepperBlock(engine) {
         box.insertAdjacentHTML('beforeend', '<button type="button" class="btn sv-show-demo">看一步步的过程</button>');
         box.querySelector('.sv-show-demo').addEventListener('click', (e) => { e.currentTarget.remove(); demo.hidden = false; go(0, { record: false }); });
       };
+      const again = sameWrong();
       box.querySelector('.sv-fill-check').addEventListener('click', () => {
         if (done) return;
         read();
+        // 同一张表（一格没改）连着再检查：不算新的一次，上一次的提示还在
+        const sig = JSON.stringify([cur, values, values.extra]);
+        if (again.repeat(sig)) return;
         const res = checkFill(t, values);
         attempts++;
+        again.after(sig, res.ok || (byRow && cur < t.rows.length && (res.first.extra !== undefined || res.first.r > cur)));
         // 一行一行判：第一处不对（或空着）在后面的行里，就是这一行全对了：锁上、开下一行
         if (byRow && !res.ok && cur < t.rows.length && (res.first.extra !== undefined || res.first.r > cur)) {
           const name = t.rows[cur].label ?? `第 ${cur + 1} ${unit}`;
@@ -611,7 +617,7 @@ export function stepperBlock(engine) {
         const said = res.first.extra !== undefined ? values.extra[res.first.extra] : values[res.first.r][res.first.c];
         fb.className = 'sv-fill-fb is-bad';
         fb.textContent = res.first.empty ? `${name}还空着（前面 ${res.okCount} 格都对）。` : `${name}不对（前面 ${res.okCount} 格都对）。改好再检查。`;
-        if (attempts >= 2) box.querySelector('.sv-fill-reveal').hidden = false;
+        if (canReveal(attempts)) box.querySelector('.sv-fill-reveal').hidden = false;
         elOf(at(res.first), res.first.c)?.focus?.({ preventScroll: true });
         const misread = misreadFill(t, values, variants().map((v) => { try { const vt = engine.table(v.input, v.run, fields); return vt ? { label: v.label, table: fillSpec(vt, fields).table } : null; } catch { return null; } }).filter(Boolean));
         record({ type: 'stepper', engine: engine.name, liveOnly: true, title, q: plainText(q), value: res.first.empty ? `填到${name}还空着` : `${name}写的「${said}」`, ok: false, attempts, detail: `填表：前 ${res.okCount}/${res.total} 格对`, misread: misread || undefined, el });

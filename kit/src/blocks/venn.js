@@ -1,5 +1,6 @@
 // 文氏图 venn（概率第 4 批）：一到三个事件。式子涂色、学生点区域 / 填概率、概率页面算。
 // 写法和判法在 prob/vennspec.js，几何在 prob/venngeom.js（都是纯函数）；这里只管画和点。
+import { REVEAL_TRIES, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, tex2html, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
@@ -9,7 +10,6 @@ import { qTeX, qText } from '../prob/num.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
-const TRIES = 3; // 检查几次没对出「看答案」
 // 这一块的式子：A\overline{B}
 const atomTeX = (k, names) => names.map((nm, i) => { const t = nm.replace(/^([A-Z])(\d)$/, '$1_$2'); return (k >> i) & 1 ? t : `\\overline{${t}}`; }).join('');
 const atomWords = (k, names) => names.map((nm, i) => `${nm} ${(k >> i) & 1 ? '发生' : '不发生'}`).join('、');
@@ -57,7 +57,7 @@ export function venn(el, src) {
 
   // —— 学生要做的 ——
   const askBox = body.querySelector('.vn-ask'), tip = body.querySelector('.vn-tip');
-  const state = { i: 0, picked: new Set(), tries: 0, done: !v.asks.length, shown: null, checked: '' };
+  const state = { i: 0, picked: new Set(), tries: 0, done: !v.asks.length, shown: null, checked: '', again: sameWrong() };
   const gateDone = v.asks.length ? session.gate(el, title) : null;
   const cur = () => (state.done ? null : v.asks[state.i]);
   const names = (ks) => [...ks].sort((a, b) => a - b).map((k) => atomName(k, v.names)).join('、');
@@ -73,7 +73,7 @@ export function venn(el, src) {
     session.record({ type: 'venn', title, q: a.q.replace(/\s+/g, ' ').slice(0, 120), ok, attempts: state.tries, el, ...extra });
   }
   function next() {
-    state.i++; state.picked = new Set(); state.tries = 0; state.shown = null; state.checked = '';
+    state.i++; state.picked = new Set(); state.tries = 0; state.shown = null; state.checked = ''; state.again = sameWrong();
     if (state.i >= v.asks.length) { state.done = true; gateDone?.(); }
     paintAsk(); paintPicks();
   }
@@ -93,7 +93,8 @@ export function venn(el, src) {
     if (!a || askBox.dataset.settled) return;
     if (a.kind === 'region') {
       const r = judgeRegion(a, [...state.picked]);
-      if (state.tries && names(state.picked) === state.checked) return; // 同样的几块又点了一次检查：不算一次新的尝试
+      if (state.again.repeat(names(state.picked))) return; // 同样的几块又点了一次检查：不算一次新的尝试
+      state.again.after(names(state.picked), r.ok);
       state.tries++;
       record(a, r.ok, { value: names(state.picked) || '（没点）', detail: r.text });
       state.checked = names(state.picked);
@@ -103,7 +104,8 @@ export function venn(el, src) {
       const input = askBox.querySelector('.vn-input').value;
       const r = judgeProb(a, input);
       if (r.ok === null) { askBox.querySelector('.vn-fb').className = 'vn-fb is-hint'; askBox.querySelector('.vn-fb').textContent = r.text; return; }
-      if (input.trim() === state.checked) return;
+      if (state.again.repeat(input.trim())) return;
+      state.again.after(input.trim(), r.ok);
       state.tries++;
       record(a, r.ok, { value: input.trim(), detail: r.text, ...(r.tag ? { misread: r.tag } : {}) });
       state.checked = input.trim();
@@ -114,7 +116,7 @@ export function venn(el, src) {
   function fail(a, text) {
     const fb = askBox.querySelector('.vn-fb');
     fb.className = 'vn-fb is-bad';
-    fb.innerHTML = `✗ ${escapeHtml(text)}${state.tries >= TRIES ? ' <button type="button" class="link-btn vn-reveal">看答案</button>' : ''}`;
+    fb.innerHTML = `✗ ${escapeHtml(text)}${state.tries >= REVEAL_TRIES ? ' <button type="button" class="link-btn vn-reveal">看答案</button>' : ''}`;
     fb.querySelector('.vn-reveal')?.addEventListener('click', () => {
       if (a.kind === 'region') {
         record(a, false, { value: names(state.picked) || '（没点）', giveup: true, expected: names(a.atoms) || '（一块都没有）' });

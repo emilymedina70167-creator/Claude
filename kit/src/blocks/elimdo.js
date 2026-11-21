@@ -1,5 +1,6 @@
 // elim 的 mode: do：学生自己一步步做行变换，页面精确地做出来（write: rows 时变了的那一行学生自己算，页面逐个数核对）。
 // 逻辑都在 engines/elim.js 的 doStart / doParse / doApply / doStatus / doHint（纯函数，有测试），这里只有画面和记录。
+import { canReveal, sameWrong } from '../tries.js';
 import { parseFields } from '../parse.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, tex2html, escapeHtml } from './common.js';
@@ -92,7 +93,7 @@ export function elimDo(el, src) {
     const op = ops[0];
     if (!write || !doChanged(op).length) { commit(op); return; }
     // 自己算：变了的那一行写出来
-    pendingOp = { op, tries: 0 };
+    pendingOp = { op, tries: 0, again: sameWrong() };
     const n = state.M[0].length;
     wbox.hidden = false;
     wbox.innerHTML = `<div class="ed-wq">${tex2html(doOpTeX(op))}：写出新的第 ${op.i + 1} 行（${n} 个数，分数写成 1/2）</div>
@@ -110,11 +111,14 @@ export function elimDo(el, src) {
     const bad = doCheckRow(state, pendingOp.op, texts);
     boxes.forEach((b, j) => b.classList.toggle('is-bad', bad.includes(j)));
     if (!bad.length) { commit(pendingOp.op); return; }
+    const sig = texts.map((t) => t.trim()).join(',');
+    if (pendingOp.again.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
+    pendingOp.again.after(sig, false);
     pendingOp.tries++;
     wrongRows++;
     session.record({ type: 'stepper', engine: 'elim', liveOnly: true, title, q: plain(fields.q), value: `${doOpText(pendingOp.op)} 之后第 ${pendingOp.op.i + 1} 行写成 (${texts.map((t) => t.trim()).join(', ')})`, ok: false, attempts: pendingOp.tries, detail: `自己算，第 ${bad.map((j) => j + 1).join('、')} 个数不对`, el });
     say(`第 ${bad.map((j) => j + 1).join('、')} 个数不对，再算算。`, 'bad');
-    if (pendingOp.tries >= 2) wbox.querySelector('.ed-wshow').hidden = false;
+    if (canReveal(pendingOp.tries)) wbox.querySelector('.ed-wshow').hidden = false;
   }
 
   body.addEventListener('click', (e) => {

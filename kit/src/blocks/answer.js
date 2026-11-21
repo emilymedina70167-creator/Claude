@@ -1,4 +1,5 @@
 // answer：自己算、自己填，自动判分（认可等价写法）
+import { canReveal } from '../tries.js';
 import { parseScene } from '../scene.js';
 import { compile, valueTeX, numText } from '../expr.js';
 import { mathInput } from '../mathinput.js';
@@ -134,7 +135,7 @@ export function answerWidget(body, spec, onDone) {
     if (r.ok === null) {
       input.markAll('');
       show('is-unsure', `<div class="q-verdict">？页面判不了，待外部核</div>${r.msg ? `<div>${r.msg}</div>` : ''}<div class="muted">可以改了再交，也可以接着往下做。</div>`);
-      if (attempts >= 2) btnReveal.hidden = false;
+      if (canReveal(attempts)) btnReveal.hidden = false;
       return;
     }
     if (r.ok) {
@@ -143,9 +144,9 @@ export function answerWidget(body, spec, onDone) {
       finish(true, false);
     } else {
       input.mark(r.wrong || []);
-      show('is-bad', `<div class="q-verdict">✗ 还不对</div>${r.msg ? `<div>${r.msg}</div>` : ''}${attempts >= 2 ? '<div class="muted">可以看提示，或者直接看答案和解析。</div>' : ''}`);
+      show('is-bad', `<div class="q-verdict">✗ 还不对</div>${r.msg ? `<div>${r.msg}</div>` : ''}${canReveal(attempts) ? '<div class="muted">可以看提示，或者直接看答案和解析。</div>' : ''}`);
       if (btnHint) btnHint.hidden = false;
-      if (attempts >= 2) btnReveal.hidden = false;
+      if (canReveal(attempts)) btnReveal.hidden = false;
     }
   }
 

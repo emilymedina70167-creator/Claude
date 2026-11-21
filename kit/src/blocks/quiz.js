@@ -1,4 +1,5 @@
 // 练习题：选择题（单选/多选）或填空（数字、分数、文字）
+import { canReveal, sameWrong } from '../tries.js';
 import { splitAlts } from '../tokens.js';
 import { parseFields } from '../parse.js';
 import { Frac } from '../linalg.js';
@@ -49,13 +50,16 @@ export function quiz(el, src) {
     return v && v !== lastChecked ? v : '';
   });
   const explain = fields.explain || fields.explanation || '';
+  const again = sameWrong();
   const feedback = (ok, extra = '', picked = '') => {
+    if (again.repeat(picked)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
+    again.after(picked, ok);
     tries++;
     if (!ok && picked) wrongPicks.push(picked);
     if (ok) settle(true);
     fb.hidden = false;
     fb.className = `q-feedback ${ok ? 'is-ok' : 'is-bad'}`;
-    fb.innerHTML = `<div class="q-verdict">${ok ? '✓ 正确' : '✗ 再想想'}</div>${extra}${explain && ok ? mdToHtml(explain) : ''}${!ok ? '<button type="button" class="link-btn q-reveal">看解析</button>' : ''}`;
+    fb.innerHTML = `<div class="q-verdict">${ok ? '✓ 正确' : '✗ 再想想'}</div>${extra}${explain && ok ? mdToHtml(explain) : ''}${!ok && canReveal(tries) ? '<button type="button" class="link-btn q-reveal">看解析</button>' : ''}`;
     fb.querySelector('.q-reveal')?.addEventListener('click', () => reveal());
   };
   const reveal = () => {

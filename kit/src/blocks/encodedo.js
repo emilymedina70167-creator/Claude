@@ -1,5 +1,6 @@
 // encode 的 mode: do：学生自己画波形。每个半码元点上半格是高、下半格是低；画完点「检查」，页面指出第几位不对、
 // 认得出常见错法（约定反了、画成了别的编码，只告诉老师）。判分在 engines/netcode.js 的 judgeDrawn（纯函数，有测试）。
+import { canReveal, sameWrong } from '../tries.js';
 import { parseFields } from '../parse.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
@@ -95,17 +96,21 @@ export function encodeDo(el, src) {
   };
   const showAnswer = () => { want.forEach((h, i) => { drawn[i] = h.slice(); }); bad = -1; draw(); };
 
+  const again = sameWrong();
   body.querySelector('.ecd-check').addEventListener('click', () => {
     if (done) return;
     const r = judgeDrawn(input, drawn);
     if (r.empty >= 0) { bad = -1; draw(); say('is-bad', `第 ${r.empty + 1} 位还没画完（两个半码元都要点）。`); return; }
+    const sig = halvesText(drawn);
+    if (again.repeat(sig)) return; // 同一个错答案连着再交：不算新的一次，上一次的提示还在
+    again.after(sig, r.ok);
     attempts++;
     session.record({ type: 'stepper', engine: 'encode', liveOnly: true, title, q: `把 ${input.bits.join('')} 编成${ENCODE_NAMES[code]}，自己画波形`, value: halvesText(drawn), ok: r.ok, attempts, detail: r.ok ? '画波形' : `画波形：第 ${r.bad + 1} 位开始不对`, misread: r.misread || undefined, el });
     if (r.ok) { bad = -1; draw(); say('is-ok', attempts === 1 ? '✓ 全对。' : `✓ 全对（检查了 ${attempts} 次）。`); finish(true); return; }
     bad = r.bad;
     draw();
     say('is-bad', `第 ${r.bad + 1} 位（是 ${input.bits[r.bad]}）不对${r.bad ? `，前面 ${r.bad} 位都对` : ''}。${pre ? '想想上一位结束时是什么电平。' : ''}`);
-    if (attempts >= 2) btnReveal.hidden = false;
+    if (canReveal(attempts)) btnReveal.hidden = false;
   });
   body.querySelector('.ecd-clear').addEventListener('click', () => { if (done) return; drawn.forEach((h) => { h[0] = null; h[1] = null; }); bad = -1; fb.hidden = true; draw(); });
   btnReveal.addEventListener('click', () => { showAnswer(); say('', '答案画上了。对着看看第几位想岔了。'); finish(false, { revealed: true }); });

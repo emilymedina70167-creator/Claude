@@ -1,6 +1,7 @@
 // derive 的学生版（mode: do）：老师给出发的式子，学生一行一行往下写，页面查每一行和上一行是不是相等（随机取几组数比）。
 // 不相等就告诉学生「取哪组数时上一行等于什么、这一行等于什么」，学生改；老师看到的记录精确到第几行、两边各等于什么。
 // 判断都在 derivedo.js（纯函数）。
+import { sameWrong } from '../tries.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
 import { readLine } from '../fx/deriveline.js';
 import { formulaTeX } from '../formula.js';
@@ -57,6 +58,7 @@ export function deriveDo(el, src) {
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
   $('.dd-ok').addEventListener('click', submit);
 
+  const again = sameWrong();
   function submit() {
     if (closed) return;
     const text = input.value.trim();
@@ -74,6 +76,8 @@ export function deriveDo(el, src) {
       show('ok', '记下了，接着往下写');
       return;
     }
+    if (again.repeat(`${k}|${text}`)) return; // 同一行写错的又交一次：不算新的一次，上一次的提示还在
+    again.after(`${k}|${text}`, r.ok);
     tries++; total++;
     // same: 'limit'：和上一行不恒等、只是极限一样——记进 check，带两行的原文（外部要能逐行看是正当的替换还是碰巧，审的定 5）
     const check = r.ok === true ? (r.same === 'limit' ? `只是极限一样（不恒等）：上一行「${prevMath}」，这一行「${text}」` : undefined) : r.why;
