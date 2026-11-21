@@ -99,7 +99,9 @@ export function parallel(el, src) {
     closed = true; done();
     for (const key of Object.keys(state)) delete state[key]; // 前面点错的那一项不再标红
     state[answer - 1] = fields.fix ? { cls: 'is-right', fixed: fields.fix } : { cls: 'is-right' };
-    rec({ final: true, ok, attempts, revealed: revealed || undefined, expected: `${nth(answer - 1)}${fields.fix ? ` → ${fields.fix}` : ''}` });
+    // 到了改法那一步：最后这一条记在「第 2 步」上（挑出那一项是第 1 步，另算一道题），次数是改法试了几次
+    const second = stage === 'fix' && !!opts;
+    rec({ final: true, ok, attempts: second ? fixTries : attempts, revealed: revealed || undefined, detail: second ? '第 2 步：改法' : undefined, expected: `${nth(answer - 1)}${fields.fix ? ` → ${fields.fix}` : ''}` });
     fixBox.hidden = true; body.querySelector('.w-hint')?.remove();
     paint();
   };
@@ -133,7 +135,7 @@ export function parallel(el, src) {
     if (!b || closed) return;
     const i = Number(b.dataset.i), ok = i === opts.right;
     fixTries++;
-    rec({ liveOnly: true, ok, attempts: attempts + fixTries, value: `改成 ${opts.options[i]}`, detail: ok ? '' : '改得不对' });
+    rec({ liveOnly: true, ok, attempts: fixTries, value: `改成 ${opts.options[i]}`, detail: ok ? '第 2 步：改法' : '第 2 步：改法，改得不对' });
     b.classList.add(ok ? 'is-right' : 'is-wrong');
     if (ok) { say(true, '改成这样就和另外几项的形式一样了。', explain); finish(true); } else { b.disabled = true; say(false, '这样改还是不平行：看别的几项开头的那个词是什么形式。'); if (fixTries >= 2) { fb.insertAdjacentHTML('beforeend', ' <button type="button" class="link-btn pl-show">看答案</button>'); } }
   });

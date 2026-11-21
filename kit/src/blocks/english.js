@@ -8,7 +8,7 @@ import { widget, mdToHtml, escapeHtml } from './common.js';
 import {
   ROLES, matchText, textHint, parseCloze, tokenizeSentence, findWrong, parseAlts, parseBrackets, judgeSpans, spanText, spansHint, parseRoles, parseDrill, joinWords,
   parseAnswer, diagnose, parseDecoys, parseSteps, parseChunk, judgeChunks, chunkHint, chunksOf, parseLink, judgeLinks, linkHint, regradePrompt, parseRegrade,
-  parsePoints, judgeTranslation, translationHint, roleName, joinsOf, judgeJoins,
+  parsePoints, judgeTranslation, translationHint, roleName, joinsOf, judgeJoins, joinTarget,
 } from '../entext.js';
 import { getAI } from '../ai.js';
 import { bracketHtml, spanPicker, wordPicker } from './enpick.js';
@@ -176,7 +176,9 @@ export function errfind(el, src) {
 /* ---------------- parse：句子成分标注 ---------------- */
 
 // 分裂结构（ask: join）：成分都清楚了以后，让学生点出本来连着、被隔开的两段。host 里画层次图（先不画弧），连对一对画一条
-function joinStage(host, { ans, roles, title, el, onDone }) {
+// step：前面还有标成分的几步时，这一步是第几步（记录里写「第 N 步」，另算一道题）；结构直接给出来的只有这一步（0）
+function joinStage(host, { ans, roles, title, el, onDone, step = 0 }) {
+  const tagOf = step ? `第 ${step} 步：分裂结构` : '分裂结构';
   const joins = joinsOf(ans.spans);
   const box = document.createElement('div');
   box.className = 'pz-join';
@@ -190,29 +192,37 @@ function joinStage(host, { ans, roles, title, el, onDone }) {
   const finish = (ok, revealed = false) => {
     closed = true;
     view.showArcs(new Set(joins.map((j) => j.id))); view.choose([]);
-    if (revealed) session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), detail: '分裂结构', ok: false, attempts, revealed: true, expected: joins.map((j) => j.parts.map(say).join(' — ')).join('；'), el });
+    if (revealed) session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), detail: tagOf, ok: false, attempts, revealed: true, expected: joins.map((j) => j.parts.map(say).join(' — ')).join('；'), el });
     onDone(ok);
   };
   const view = layersView(box.querySelector('.pz-join-ly'), {
     tokens: ans.tokens, spans: ans.spans, roles, arcsFor: found,
-    onPick(i) {
+    onPick(picked, token) {
       if (closed) return;
+      // 点从句里的词就是点那个从句（joinTarget）；主干上没标的词不选
+      const i = joinTarget(ans.spans, picked, token);
+      if (i < 0) return;
       if (first === null || first === i) { first = first === i ? null : i; view.choose(first === null ? [] : [first]); return; }
       const pair = [first, i];
       first = null;
+      // 已经连上的那一对再连一次：说一句，不算新的一次
+      if (joins.some((j) => found.has(j.id) && judgeJoins([pair], [j]).ok)) {
+        view.choose([]); fb.className = 'pz-join-fb is-ok'; fb.textContent = `这一对已经连上了${found.size < joins.length ? `，还有 ${joins.length - found.size} 处` : ''}。`;
+        return;
+      }
       const hit = joins.find((j) => !found.has(j.id) && judgeJoins([pair], [j]).ok);
       // 同一对连错的再连一次：不算新的一次（两段的先后不论）
       const sig = [...pair].sort((x, y) => x - y).join('-');
       if (!hit && wrongPairs.has(sig)) { view.choose([]); return; }
       if (!hit) wrongPairs.add(sig);
       attempts++;
-      session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: '分裂结构', value: pair.map(say).join(' — '), ok: !!hit, attempts, el });
+      session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: tagOf, value: pair.map(say).join(' — '), ok: !!hit, attempts, el });
       view.choose([]);
       if (hit) {
         found.add(hit.id); view.showArcs(found);
         fb.className = 'pz-join-fb is-ok';
         fb.textContent = found.size === joins.length ? '✓ 对：这两段本来是连着的，中间被别的成分隔开了。' : `✓ 对了一处，还有 ${joins.length - found.size} 处。`;
-        if (found.size === joins.length) { session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), detail: '分裂结构', ok: true, attempts, value: joins.map((j) => j.parts.map(say).join(' — ')).join('；'), el }); finish(true); }
+        if (found.size === joins.length) { session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), detail: tagOf, ok: true, attempts, value: joins.map((j) => j.parts.map(say).join(' — ')).join('；'), el }); finish(true); }
         return;
       }
       fb.className = 'pz-join-fb is-bad';
@@ -295,7 +305,8 @@ export function parse(el, src) {
     session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), ok, attempts, revealed: revealed || undefined, value: markup(mine()), expected: markup(ans.spans), more: (askJoin && ok) || undefined, el });
     pick.lock();
     sync();
-    if (askJoin && ok) joinStage(body, { ans, roles, title, el, onDone: () => done() });
+    // 连分裂结构的那一步用自己的层次图：上面那张（答错时长出来的半张）收掉，不留两张
+    if (askJoin && ok) { body.querySelector('.pz-layers')?.remove(); joinStage(body, { ans, roles, title, el, onDone: () => done(), step: 2 }); }
     else layers.show(ans.spans);
   };
   body.querySelector('.en-check').addEventListener('click', () => {
@@ -398,11 +409,13 @@ function parseByStep(el, fields, ans, roles, groups) {
     body.querySelector('.en-show').hidden = true;
     if (k < groups.length - 1) { k++; paintStep(); draw(); return; }
     closed = true;
-    done();
     body.querySelector('.pz-step').innerHTML = '<b>拆完了</b>';
     body.querySelector('.pz-roles').innerHTML = '';
     draw();
     if (fields.explain) { fb.hidden = false; fb.className = 'q-feedback is-ok'; fb.innerHTML = mdToHtml(fields.explain); }
+    // ask: join：成分都拆完了，再连分裂结构（是最后一步）
+    if (/^join$/i.test(fields.ask || '')) { body.querySelector('.pz-layers')?.remove(); joinStage(body, { ans, roles, title, el, onDone: () => done(), step: groups.length + 1 }); }
+    else done();
   }
   body.querySelector('.en-check').addEventListener('click', () => {
     if (closed || !mine.length) return;

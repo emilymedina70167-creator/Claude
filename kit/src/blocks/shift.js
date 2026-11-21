@@ -6,7 +6,7 @@ import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
 import { parseFields } from '../parse.js';
-import { parseShift, shiftPlan, judgeOrder, lineText, shiftFieldProblems } from '../enshift.js';
+import { parseShift, shiftPlan, judgeOrder, lineText, shiftFieldProblems, shiftDecoys } from '../enshift.js';
 import { roleName, fixOptions } from '../entext.js';
 import { figureControls } from '../plot.js';
 
@@ -34,8 +34,9 @@ export function shift(el, src) {
   const label = (k, row = 'from') => escapeHtml(roleName((row === 'to' ? toOf(k) : fromOf(k)).role));
   const roleMoved = s.from.filter((x) => x.key && toOf(x.key).role !== x.role);
   // decoys: V = approved | has approved（排对以后，变了形式的成分让学生选）
-  const decoys = {};
-  for (const line of String(fields.decoys || '').split('\n')) { const m = /^\s*([\w#]+)\s*=\s*(.+)$/.exec(line); if (m) decoys[m[1]] = m[2]; }
+  // decoys: V = 错的 | 错的（排对以后，变了形式的成分让学生选）；写错的报出来，不然那一步悄悄不问
+  const { decoys, problems: decoyProblems } = shiftDecoys(fields.decoys, s, plan);
+  for (const msg of decoyProblems) session.problem(el, 'shift', msg, { soft: true });
 
   // 原句那一行：gone 里的成分只剩影子
   const fromRow = (gone, { pick = false } = {}) => s.from.map((x) => {
@@ -122,7 +123,8 @@ export function shift(el, src) {
   // 学生自己排
   const done = session.gate(el, title);
   const placed = Array(plan.order.length).fill(undefined);
-  let attempts = 0, closed = false, bad = -1, tried = '', stage = 'order', formAt = 0;
+  // 排顺序是第 1 步、选形式是第 2 步：记录里分开算两道题，次数各数各的
+  let attempts = 0, formTries = 0, closed = false, bad = -1, tried = '', stage = 'order', formAt = 0;
   const forms = plan.changed.filter((c) => decoys[c.key]).map((c) => ({ ...c, opts: fixOptions({ fix: c.after, decoys: decoys[c.key] }, `${lineText(s.to)}|${c.key}`) }));
   body.innerHTML = `${head}<div class="sh-cap">原句</div><div class="sh-row sh-from"></div>
     <div class="sh-cap">变换以后<span class="muted">（点上面的成分放进下一个空位；点放好的拿回去；也能拖到某个空位上）</span></div><div class="sh-row sh-to"></div>
@@ -150,7 +152,8 @@ export function shift(el, src) {
   const say = (ok, text, extra = '') => { fb.hidden = false; fb.className = `q-feedback ${ok ? 'is-ok' : 'is-bad'}`; fb.innerHTML = `<div class="q-verdict">${ok ? '✓ 对了' : '✗ 再想想'}</div><div>${escapeHtml(text)}</div>${extra}`; };
   const finish = (ok, revealed = false) => {
     closed = true; done(); formBox.hidden = true;
-    rec({ final: true, ok, attempts, revealed: revealed || undefined, value: said(), expected: lineText(s.to) });
+    const second = stage === 'form';
+    rec({ final: true, ok, attempts: second ? formTries : attempts, detail: second ? '第 2 步：形式' : undefined, revealed: revealed || undefined, value: said(), expected: lineText(s.to) });
     paint();
     fb.insertAdjacentHTML('beforeend', `${notes()}${explain}`);
   };
@@ -190,8 +193,8 @@ export function shift(el, src) {
     const b = e.target.closest('.sh-opt');
     if (!b || closed) return;
     const f = forms[formAt], i = Number(b.dataset.i), ok = i === f.opts.right;
-    attempts++;
-    rec({ liveOnly: true, ok, attempts, value: `${roleName(fromOf(f.key).role)}写成 ${f.opts.options[i]}`, detail: ok ? '' : '形式不对' });
+    formTries++;
+    rec({ liveOnly: true, ok, attempts: formTries, value: `${roleName(fromOf(f.key).role)}写成 ${f.opts.options[i]}`, detail: ok ? '第 2 步：形式' : '第 2 步：形式不对' });
     if (ok) { formAt++; say(true, `${f.before} → ${f.after}`); askForm(); } else { b.disabled = true; b.classList.add('is-wrong'); say(false, '形式不对：看它在新句子里和谁搭配。'); }
   });
   // 拖：按住一个成分拖到下面的某个位置上（手指挪了 8px 以上才算拖，不然是点）

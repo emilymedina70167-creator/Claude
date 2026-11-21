@@ -32,8 +32,8 @@ export function layersView(host, { tokens, spans, roles = [], fold = true, onPic
       const cl = row.clause === null ? null : cur[row.clause];
       const pieces = row.pieces.map((x) => {
         if (x.folded !== undefined) return `<button type="button" class="ly-dots ${color(x.role)}" data-unfold="${x.folded}" aria-label="展开${escapeHtml(name(x.role))}">…<small>${escapeHtml(name(x.role))}</small></button>`;
-        if (!x.role) return `<span class="ly-piece is-plain" data-span="${x.span}">${text(x.from, x.to)}</span>`;
-        return `<span class="ly-piece ${color(x.role)}" data-span="${x.span}"><span class="ly-words">${text(x.from, x.to)}</span><small>${escapeHtml(name(x.role))}</small></span>`;
+        if (!x.role) return `<span class="ly-piece is-plain" data-span="${x.span}" data-from="${x.from}">${text(x.from, x.to)}</span>`;
+        return `<span class="ly-piece ${color(x.role)}" data-span="${x.span}" data-from="${x.from}"><span class="ly-words">${text(x.from, x.to)}</span><small>${escapeHtml(name(x.role))}</small></span>`;
       }).join(' ');
       if (!cl) return `<div class="ly-row" style="--ly-d:${row.depth}">${pieces}</div>`;
       // 被里面的从句隔开的后一截：不再写一遍名字，写「接着」
@@ -68,10 +68,11 @@ export function layersView(host, { tokens, spans, roles = [], fold = true, onPic
   }
   el.addEventListener('click', (e) => {
     if (onPick) {
-      // 点从句的标签是点那个从句；点块里的一段是点那一段
-      const hit = e.target.closest?.('.ly-piece[data-span], .ly-row.is-clause[data-span]');
-      const i = hit ? Number(hit.dataset.span) : -1;
-      if (i >= 0) onPick(i);
+      // 点从句的标签是点那个从句；点块里的一段（成分或没标的词）交给 onPick(段, 点的那个词)，由它决定是哪一段
+      const piece = e.target.closest?.('.ly-piece[data-span]');
+      if (piece) { onPick(Number(piece.dataset.span), Number(piece.dataset.from)); return; }
+      const row = e.target.closest?.('.ly-row.is-clause[data-span]');
+      if (row) onPick(Number(row.dataset.span), cur[Number(row.dataset.span)]?.from ?? -1);
       return;
     }
     const f = e.target.closest?.('[data-fold]'), u = e.target.closest?.('[data-unfold]');

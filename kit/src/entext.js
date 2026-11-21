@@ -228,7 +228,7 @@ export const ROLES = {
   RC: '定语从句', SC: '主语从句', ObC: '宾语从句', PC: '表语从句', AppC: '同位语从句', AdvC: '状语从句', NF: '非谓语', Conj: '连接词',
 };
 // 层次图、句子变换用的两个成分（视觉第 5 批）。不放进 ROLES：舞台的句子（stage/types/sentence.js）拿 ROLES 当它认得的成分名，那边的行为不变
-export const MORE_ROLES = { Par: '插入语', Emp: '被强调的部分' };
+export const MORE_ROLES = { Par: '插入语', Emp: '被强调的部分', Aux: '助动词' };
 const ALL_ROLES = { ...ROLES, ...MORE_ROLES };
 /** 成分的中文名（不认识的原样返回） */
 export const roleName = (k) => ALL_ROLES[k] || k;
@@ -357,6 +357,20 @@ export function joinsOf(spans) {
     out.push({ id, parts });
   }
   return out;
+}
+/**
+ * 连分裂结构时学生点的是哪一段：点的那一段自己带 ~n 就是它；不然往外找最近的、包着它（或包着点的那个词）的带 ~n 的一段
+ * （点从句里的词就是点那个从句）；都没有：点了成分就是那个成分，点了没标的词是 -1（什么都不选）。
+ */
+export function joinTarget(spans, i, token) {
+  if (i >= 0 && spans[i]?.join) return i;
+  const lo = i >= 0 ? spans[i].from : token, hi = i >= 0 ? spans[i].to : token;
+  let best = -1;
+  spans.forEach((sp, k) => {
+    if (k === i || !sp.join || !(sp.from <= lo && hi <= sp.to)) return;
+    if (best < 0 || sp.to - sp.from < spans[best].to - spans[best].from) best = k;
+  });
+  return best >= 0 ? best : i;
 }
 /** 学生连的（[[下标, 下标], …]）对不对：{ ok: true | false | null（一对都没连）, text } */
 export function judgeJoins(mine = [], joins = []) {
