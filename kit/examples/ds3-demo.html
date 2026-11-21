@@ -1,0 +1,178 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>数据结构：存储结构、双端队列、折半插入、分块查找、静态链表、调用栈</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+unit: 存储结构、双端队列、折半插入、分块查找、静态链表、调用栈（视觉交互第 6 批）
+subject: 数据结构
+---
+
+# 数据结构：存储结构、双端队列、折半插入、分块查找、静态链表、调用栈
+
+## 图的存储
+
+```store
+id: d3-ml
+title: 邻接矩阵、邻接表
+graph: A-B, A-C, B-D, C-D, B-E
+show: matrix, list
+ask: list
+```
+
+```store
+id: d3-cross
+title: 有向带权：邻接矩阵（∞）、十字链表
+graph: V1->V2 3, V1->V3 5, V3->V1 2, V2->V4 4, V3->V2 1
+show: matrix, cross
+ask: matrix, degree
+```
+
+```store
+id: d3-multi
+title: 邻接多重表（头插）
+graph: A-B, A-C, B-D, C-D
+show: multi
+insert: head
+```
+
+```store
+id: d3-fill
+title: 自己填邻接矩阵
+graph: A->B, B->C, C->A, A->C
+show: matrix
+mode: fill
+```
+
+## 树的存储
+
+```store
+id: d3-pc
+title: 双亲表示、孩子兄弟
+tree: A(B(D, E, F), C(G))
+show: parent, cs
+ask: parent
+```
+
+```store
+id: d3-seq
+title: 二叉树的顺序存储
+tree: A(B(, D), C(E, F(G)))
+show: seq
+ask: seq
+```
+
+## 双端队列
+
+```deque
+id: d3-dqin
+title: 输入受限：得得到 4 1 3 2 吗
+kind: in
+push: 1 2 3 4
+seq: 4 1 3 2
+ask: possible
+```
+
+```deque
+id: d3-dqout
+title: 输出受限：4 1 3 2
+kind: out
+push: 1 2 3 4
+seq: 4 1 3 2
+ask: possible
+```
+
+```deque
+id: d3-dqquiz
+title: 挑得到的
+kind: in
+push: 1 2 3 4
+options: 4 1 3 2, 4 2 1 3, 4 2 3 1, 1 2 3 4
+mode: quiz
+```
+
+## 折半插入、分块查找
+
+```sort
+id: d3-bi
+title: 折半插入排序
+algo: binsert
+array: 49 38 65 97 76 13 27 49'
+ask: mid
+```
+
+```sort
+id: d3-biquiz
+title: 写出第 3 趟
+algo: binsert
+array: 49 38 65 97 76 13 27
+pass: 3
+mode: quiz
+```
+
+```blocksearch
+id: d3-bk
+title: 分块查找：顺序找块
+blocks: 22 12 13 8 9 20 | 33 42 44 38 24 48 | 60 58 74 57 86 53
+key: 38
+ask: block, pos
+```
+
+```blocksearch
+id: d3-bk2
+title: 折半找块 + ASL
+blocks: 22 12 13 8 9 20 | 33 42 44 38 24 48 | 60 58 74 57 86 53
+key: 57
+find: binary
+asl: on
+ask: asl
+```
+
+## 静态链表
+
+```slist
+id: d3-sl
+title: 插入、删除
+size: 7
+list: a b c
+ops: insert 2 x, delete 1
+ask: slot, next
+```
+
+```slist
+id: d3-slq
+title: 按链的顺序写
+size: 8
+list: a b c d
+ops: delete 2, insert 1 e, insert 4 f
+mode: quiz
+```
+
+## 递归的调用栈
+
+```trace
+id: d3-fact
+title: 递归求阶乘
+call: fact(4)
+code:
+int fact(int n){
+    int r;
+    if(n<=1) return 1;
+    r = n*fact(n-1);
+    return r;
+}
+```
+
+```trace
+id: d3-hanoi
+title: 汉诺塔
+call: hanoi(3, 1, 2, 3)
+code:
+void hanoi(int n, int a, int b, int c){
+    if(n==0) return;
+    hanoi(n-1, a, c, b);
+    printf("%d->%d ", a, c);
+    hanoi(n-1, b, a, c);
+}
+```
+</script>

@@ -1,0 +1,103 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>线代：含参数的行列式、基变换的坐标</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+unit: 含参数的行列式、基变换的坐标（视觉交互第 6 批）
+subject: 线代
+---
+
+# 线代：含参数的行列式、基变换的坐标
+
+## 含参数的行列式
+
+```det
+id: l2-p3
+title: 各列加到第一列、提出公因式
+matrix: [[a, 1, 1], [1, a, 1], [1, 1, a]]
+param: a
+ops: c1 + c2 + c3; c1 / (a+2); r2 - r1; r3 - r1
+ask: effect
+```
+
+```det
+id: l2-quiz
+title: 自己算：写出 D
+matrix: [[a, 1, 1], [1, a, 1], [1, 1, a]]
+param: a
+ops: c1 + c2 + c3; c1 / (a+2); r2 - r1; r3 - r1
+mode: quiz
+```
+
+```det
+id: l2-lam
+title: 特征多项式 |λE − A|
+matrix: [[λ-1, -2], [-2, λ-4]]
+param: λ
+ops: expand r1
+```
+
+```det
+id: l2-auto
+title: 不写 ops：页面拿不含参数的主元化
+matrix: [[1, a, 0], [a, 1, 0], [0, 0, a]]
+param: a
+```
+
+## 基变换：坐标就是沿新基走几步
+
+```scene
+id: l2-dec
+title: v 在基 b1、b2 下的坐标
+q: 拖动 $\mathbf v$，让它在基 $\mathbf b_1, \mathbf b_2$ 下的坐标是 $(1, 2)$。
+let b1 = [1, 1]
+let b2 = [1, -1]
+let v = [3, 1] drag
+grid [[1, 1], [1, -1]] faint
+vector b1 color=blue label=b1 thin
+vector b2 color=pink label=b2 thin
+vector v color=yellow label=v
+decomp v, b1, b2
+show $[\mathbf v]_B = {coords(v, b1, b2)}$
+goal coords(v, b1, b2) = [1, 2] msg="对：v = 1·b1 + 2·b2"
+```
+
+```scene
+id: l2-frac
+title: 坐标可以是分数
+q: 拖动 $\mathbf b_2$，看 $\mathbf v$ 的坐标怎么变。
+let b1 = [2, 1]
+let b2 = [1, 3] drag
+let v = [1, 1]
+vector b1 color=blue label=b1 thin
+vector b2 color=pink label=b2 thin
+vector v color=yellow label=v
+decomp v, b1, b2
+show $[\mathbf v]_B = {coords(v, b1, b2)}$
+```
+
+## 以前的毛病修好了
+
+```elim
+id: l2-elimq
+title: 极大无关组（写出秩：题图的名字是公式）
+vectors: a1 = (1, -1, 2, 4), a2 = (0, 3, 1, 2), a3 = (3, 0, 7, 14), a4 = (1, -1, 2, 0), a5 = (2, 1, 5, 6)
+mode: quiz
+```
+
+```det
+id: l2-expand
+title: 按第一行展开一步算到底
+matrix: [[1, 2, 3], [4, 5, 6], [7, 8, 10]]
+ops: expand r1
+```
+
+```vectors
+id: l2-vec
+title: 老组件 vectors
+vectors: [[2, 1], [-1, 2]]
+target: [3, 4]
+mode: combo
+```
+</script>
