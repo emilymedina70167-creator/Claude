@@ -3,7 +3,8 @@
 .st-stage {
   --st-ink: rgb(var(--chalk-rgb, 27 34 32));
   --st-muted: var(--muted, #5e6b66);
-  --st-card: var(--card-solid, #fffffc);
+  /* 没写 --card-solid 的风格（石墨、黑板、深蓝……）：板的颜色往字的颜色挪一点，深色风格里是深的卡，字看得见（以前一律白卡，石墨里白底白字） */
+  --st-card: var(--card-solid, color-mix(in srgb, rgb(var(--chalk-rgb, 27 34 32)) 9%, rgb(var(--board-rgb, 255 255 252))));
   --st-line: rgb(var(--chalk-rgb, 27 34 32) / 0.14);
   --st-gold: rgb(var(--yellow-rgb, 150 112 42));
   --st-red: rgb(var(--coral-rgb, 178 58 43));

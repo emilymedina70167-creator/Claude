@@ -10085,7 +10085,8 @@ body.is-checking .class-pages, body.is-checking .class-pins, body.is-checking .c
 .st-stage {
   --st-ink: rgb(var(--chalk-rgb, 27 34 32));
   --st-muted: var(--muted, #5e6b66);
-  --st-card: var(--card-solid, #fffffc);
+  /* \u6CA1\u5199 --card-solid \u7684\u98CE\u683C\uFF08\u77F3\u58A8\u3001\u9ED1\u677F\u3001\u6DF1\u84DD\u2026\u2026\uFF09\uFF1A\u677F\u7684\u989C\u8272\u5F80\u5B57\u7684\u989C\u8272\u632A\u4E00\u70B9\uFF0C\u6DF1\u8272\u98CE\u683C\u91CC\u662F\u6DF1\u7684\u5361\uFF0C\u5B57\u770B\u5F97\u89C1\uFF08\u4EE5\u524D\u4E00\u5F8B\u767D\u5361\uFF0C\u77F3\u58A8\u91CC\u767D\u5E95\u767D\u5B57\uFF09 */
+  --st-card: var(--card-solid, color-mix(in srgb, rgb(var(--chalk-rgb, 27 34 32)) 9%, rgb(var(--board-rgb, 255 255 252))));
   --st-line: rgb(var(--chalk-rgb, 27 34 32) / 0.14);
   --st-gold: rgb(var(--yellow-rgb, 150 112 42));
   --st-red: rgb(var(--coral-rgb, 178 58 43));
