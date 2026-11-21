@@ -9,7 +9,7 @@ import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
 import { compile } from '../expr.js';
 import { parseSim, niceTicks, fillShow, varsOf, theoryVars, guessRange, judgeSimAsk } from '../prob/simspec.js';
-import { parseDist, sampler, rng, simulator, histogram, interval, STATS } from '../prob/sim.js';
+import { parseDist, sampler, rng, simulator, histogram, interval, STATS, drawChunks } from '../prob/sim.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
@@ -50,6 +50,7 @@ export function sim(el, src) {
 
   // 滑块一动、点了清空：从头来（同一个种子，同一组随机数）
   function reset() {
+    run++;
     Object.assign(data, { values: [], last: NaN, paths: [], nPaths: 0, inPaths: 0, intervals: [], total: 0, miss: 0, pts: [], r: NaN });
     range = null; err = '';
     try {
@@ -58,12 +59,19 @@ export function sim(el, src) {
       machine = spec.view === 'hist' ? simulator({ dist: spec.draw, n: nNow(), stat: spec.stat, seed: spec.seed, vars: sl }) : null;
     } catch (e) { err = e.message; machine = null; draw1 = null; }
   }
+  // 一下抽很多时分几帧抽（prob/sim.js 的 drawChunks），每帧画一次；滑块一动、清空了，没抽完的就不抽了
+  let run = 0;
   function go(k) {
     if (err || !draw1) return;
-    const n = nNow(), v = vars();
-    // 抽的过程里出的错（σ 未知的区间样本不到两个……）写在图上，不让它成了没接住的页面错误
-    try { drawMany(k, n, v); } catch (e) { err = e.message; }
-    paint();
+    const n = nNow(), v = vars(), my = ++run, parts = drawChunks(k, n);
+    const step = () => {
+      if (my !== run || !parts.length) return;
+      // 抽的过程里出的错（σ 未知的区间样本不到两个……）写在图上，不让它成了没接住的页面错误
+      try { drawMany(parts.shift(), n, v); } catch (e) { err = e.message; parts.length = 0; }
+      paint();
+      if (parts.length) requestAnimationFrame(step);
+    };
+    step();
   }
   function drawMany(k, n, v) {
     for (let i = 0; i < k; i++) {

@@ -6,7 +6,8 @@ import { readQ } from './num.js';
 
 /** 带种子的随机数（mulberry32）：同一个种子每次一样，刷新、回看、别的设备上都是同一组 */
 export function rng(seed = 1) {
-  let a = (Number(seed) | 0) || 1;
+  // seed: 0 就是 0（以前 0 当成 1，seed: 0 和 seed: 1 是同一组数）
+  let a = Number(seed) | 0;
   return () => {
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -59,7 +60,8 @@ function splitArgs(s) {
 /** 读分布的写法（前面的「X ~」不要也行；参数能写式子，用得到 vars 里的滑块）。回 { kind, params, pair, src } 或离散的 { kind: 'D', values, probs } */
 export function parseDist(src, vars = {}) {
   if (src && typeof src === 'object' && src.kind) return src;
-  let s = String(src ?? '').trim().replace(/^[（(]?\s*[A-Za-z](?:\s*[,，]\s*[A-Za-z])?\s*[)）]?\s*[~∼～]\s*/, '');
+  // 名字带数字的也认（X1 ~、(X1, X2) ~）
+  let s = String(src ?? '').trim().replace(/^[（(]?\s*[A-Za-z]\w*(?:\s*[,，]\s*[A-Za-z]\w*)?\s*[)）]?\s*[~∼～]\s*/, '');
   if (s.startsWith('{')) {
     const items = s.replace(/^\{|\}$/g, '').split(/[,，;；]/).map((x) => x.trim()).filter(Boolean);
     const values = [], probs = [];
@@ -212,4 +214,15 @@ export function interval({ xs, level = 0.95, sigma }) {
   need(n >= 2, 'σ 未知的置信区间至少要 2 个样本');
   const h = DIST.tinv(p, n - 1) * Math.sqrt(S2(xs) / n);
   return [m - h, m + h];
+}
+
+// 一帧最多抽多少个样本（组数 × 每组的 n）：iPad 上大约 30 毫秒。一下要抽很多组（n 上千 × 1000 组）时
+// 分成几帧抽，每帧画一次，页面不卡住（以前一下卡半秒以上）
+export const SAMPLE_BUDGET = 200000;
+/** k 组、每组 n 个 → 每一帧抽几组 */
+export function drawChunks(k, n, budget = SAMPLE_BUDGET) {
+  const per = Math.max(1, Math.floor(budget / Math.max(1, n)));
+  const out = [];
+  for (let left = k; left > 0; left -= per) out.push(Math.min(per, left));
+  return out;
 }

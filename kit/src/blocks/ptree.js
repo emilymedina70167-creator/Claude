@@ -6,7 +6,7 @@ import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
 import { parsePtree, valueOf, judgeTreeProb } from '../prob/treespec.js';
-import { treeNumbers, leaves, moveBoundary, setCond } from '../prob/tree.js';
+import { treeNumbers, leaves, moveBoundary, setCond, condHandle } from '../prob/tree.js';
 import { qTeX, qShow, judgeNumber, Q1 } from '../prob/num.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -161,7 +161,10 @@ export function ptree(el, src) {
       }
       tree.causes.forEach((c, i) => {
         const w = c.p.toNumber() * SIDE, yB = AY + SIDE - tree.cond[i].toNumber() * SIDE;
-        if (w > 18) { svgEl('line', { x1: xs[i] + w / 2 - Math.min(14, w / 3), y1: yB, x2: xs[i] + w / 2 + Math.min(14, w / 3), y2: yB, class: 'pt-grip' }, g); svgEl('rect', { x: xs[i] + 3, y: yB - 22, width: Math.max(0, w - 6), height: 44, class: 'pt-handle is-h', 'data-cond': i }, g); }
+        // 能抓的地方整个在方块里、窄的列也有（prob/tree.js 的 condHandle）
+        const half = Math.max(3, Math.min(14, w / 3));
+        svgEl('line', { x1: xs[i] + w / 2 - half, y1: yB, x2: xs[i] + w / 2 + half, y2: yB, class: 'pt-grip' }, g);
+        svgEl('rect', { ...condHandle(xs[i], w, yB, AY, SIDE), class: 'pt-handle is-h', 'data-cond': i }, g);
       });
     }
     // 后验：把结果发生的那几块抽出来排成一条

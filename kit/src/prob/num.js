@@ -13,9 +13,18 @@ function decimalQ(s) {
   return new Q(m[1] === '-' ? -n : n, 10n ** BigInt(frac.length));
 }
 
-/** 「0.2」「1/5」「20%」「.5」→ 分数；读不懂回 null */
+/** 「0.2」「1/5」「20%」「.5」「1 1/2」（带分数）→ 分数；全角的数字、点、斜杠、百分号照认；读不懂回 null */
 export function readQ(src) {
-  const s = String(src ?? '').replace(/\s+/g, '').replace(/[−–]/g, '-').replace(/％/g, '%');
+  const t = String(src ?? '').replace(/[０-９．／％－]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[−–]/g, '-').trim();
+  // 带分数：整数、空格、真分数（以前空格一去成了 11/2）
+  const mixed = /^([+-]?)(\d+)\s+(\d+)\s*\/\s*(\d+)$/.exec(t);
+  if (mixed && BigInt(mixed[4]) > 0n) {
+    const v = qInt(mixed[2]).add(new Q(BigInt(mixed[3]), BigInt(mixed[4])));
+    return mixed[1] === '-' ? Q0.sub(v) : v;
+  }
+  // 别的地方数中间的空格不是分隔：「1 2」读不懂，不拼成 12
+  if (/\d\s+[\d.]/.test(t)) return null;
+  const s = t.replace(/\s+/g, '');
   if (!s) return null;
   if (s.endsWith('%')) { const v = decimalQ(s.slice(0, -1)); return v && v.div(qInt(100)); }
   const parts = s.split('/');

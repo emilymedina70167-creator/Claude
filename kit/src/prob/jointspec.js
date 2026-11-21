@@ -2,7 +2,7 @@
 import { evaluateExact, Q } from '../exact.js';
 import { evaluate } from '../expr.js';
 import { parseJoint, checkJoint, completeJoint, independent, moments, distOf, expectOf, tidy } from './joint.js';
-import { Q0, readQ, judgeNumber, decimalVerdict, qInt, splitAsk } from './num.js';
+import { Q0, readQ, judgeNumber, decimalVerdict, qInt, qTeX, splitAsk } from './num.js';
 
 const KEYS = ['title', 'q', 'note', 'x', 'y', 'p', 'px', 'py', 'independent', 'show', 'z', 'ask'];
 const COMMON = ['id', 'upload'];
@@ -63,14 +63,14 @@ export function quantityOf(src, j) {
   r = /^Cov\s*[(（]([\s\S]+)[)）]$/i.exec(s);
   if (r || /^cov$/i.test(s)) {
     const [a, b] = r ? splitTop(r[1]) : ['X', 'Y'];
-    if (!a || !b) throw new Error('协方差写成 Cov(X, Y)');
+    if (!a || !b || splitTop(r ? r[1] : 'X, Y').length !== 2) throw new Error('协方差写成 Cov(X, Y)：括号里正好两个，逗号隔开');
     const eab = E(`(${tidy(a)})*(${tidy(b)})`), ea = E(a), eb = E(b);
     return { exact: true, value: eab.sub(ea.mul(eb)), tex: `\\operatorname{Cov}(${condTeX(a)}, ${condTeX(b)})`, traps: [trap(eab, '这是乘积的期望：协方差还要减去两个期望的乘积。', 'exy-for-cov')] };
   }
   if (/^(rho|ρ)(_?\{?XY\}?)?$/i.test(s)) {
     if (m.rho === null) throw new Error('X、Y 里有一个是常数（方差是 0），相关系数没有定义');
     if (m.rho instanceof Q) return { exact: true, value: m.rho, tex: '\\rho_{XY}', traps: [trap(m.cov, '这是协方差：相关系数还要除以两个标准差。', 'cov-for-rho')] };
-    return { exact: false, approx: m.rhoValue, valueTeX: m.rhoTeX, tex: '\\rho_{XY}', traps: [trap(m.cov, '这是协方差：相关系数还要除以两个标准差。', 'cov-for-rho')] };
+    return { exact: false, dec: !!m.rhoDec, approx: m.rhoValue, valueTeX: m.rhoTeX, tex: '\\rho_{XY}', traps: [trap(m.cov, '这是协方差：相关系数还要除以两个标准差。', 'cov-for-rho')] };
   }
   r = /^P\s*[(（]([\s\S]+)[)）]$/.exec(s);
   if (r) {
@@ -154,7 +154,8 @@ export function parseJointBlock(src) {
   try { raw = parseJoint(fields.x, fields.y, fields.p); } catch (e) { problems.push(e.message); return out; }
   out.raw = raw;
   let j = raw;
-  if (raw.blanks.length) {
+  // 写全了的表也照 px、py、independent 核一遍：和表对不上的报出来（以前只在有空格时才用它们）
+  if (raw.blanks.length || fields.px || fields.py || yes(fields.independent)) {
     let done;
     try { done = completeJoint(raw, { rowSums: fields.px, colSums: fields.py, independent: yes(fields.independent) }); } catch (e) { problems.push(e.message); return out; }
     if (done.why) { problems.push(done.why); return out; }
@@ -181,3 +182,10 @@ export function parseJointBlock(src) {
   return out;
 }
 export { qInt };
+
+/** 答案那一行（看答案、答对了时写）：精确的「= 值」；开不尽的「= 根式 ≈ 小数」；只有小数的「≈ 小数」（只一次 ≈） */
+export function answerLine(q, ft = qTeX) {
+  if (q.exact) return `${q.tex} = ${ft(q.value)}`;
+  if (q.dec) return `${q.tex} \\approx ${Number(q.approx.toPrecision(4))}`;
+  return `${q.tex} = ${q.valueTeX} \\approx ${Number(q.approx.toPrecision(4))}`;
+}

@@ -120,6 +120,7 @@ export function parseSim(src) {
     x: two(fields.x), y: two(fields.y), level: num('level', 0.95), sigmaKnown: !/^(unknown|未知|no)$/i.test(fields.sigma || 'known'),
     band: fields.band !== undefined ? Number(fields.band) : null, discrete: /^(on|yes|是)$/i.test(fields.discrete || ''),
   };
+  if (fields.seed !== undefined && !/^-?\d+$/.test(String(fields.seed).trim())) problems.push(`seed 要写一个整数（现在是 ${fields.seed}）：同一个 seed 每次抽出来的一样`);
   if (!out.draw) { problems.push('要写 draw:（从哪个分布抽，比如 draw: X ~ N(0, 1)）'); return out; }
   if (!VIEWS.includes(out.view)) { problems.push(`view 只能是 ${VIEWS.join(' / ')}（现在是 ${fields.view}）`); out.view = 'hist'; }
   if (!(out.level > 0 && out.level < 1)) { problems.push(`level（置信水平）要在 0 和 1 之间（现在是 ${fields.level}）`); out.level = 0.95; }

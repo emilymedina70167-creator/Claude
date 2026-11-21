@@ -230,11 +230,19 @@ function rhoOf(cov, den2) {
   const root = { num: cov, den2 };
   // ρ = ±√(u·v)/v = ±s√t/v
   const part = squarePart(r2.n * r2.d);
-  if (!part) return { rho: root, rhoValue: value, rhoTeX: String(Number(value.toPrecision(4))) };
+  // 太大拆不开：只给小数，rhoDec 记着（写的时候只写一次「≈」，rhoLine）
+  if (!part) return { rho: root, rhoValue: value, rhoTeX: String(Number(value.toPrecision(4))), rhoDec: true };
   const k = new Q(part.s, r2.d); // 根号外面的系数
   const top = k.n === 1n ? `\\sqrt{${part.t}}` : `${k.n}\\sqrt{${part.t}}`;
   const tex = `${neg ? '-' : ''}${k.d === 1n ? top : `\\frac{${top}}{${k.d}}`}`;
   return { rho: root, rhoValue: value, rhoTeX: tex };
+}
+
+/** 读数里那一行 ρ：精确的写「= 值」，开不尽的根式再跟一个「≈」，拆不开只有小数的写「≈ 值」（只一次） */
+export function rhoLine(m) {
+  if (m.rho === null) return null;
+  if (m.rhoDec) return `\\rho_{XY} \\approx ${m.rhoTeX}`;
+  return `\\rho_{XY} = ${m.rhoTeX}${m.rho && m.rho.den2 ? ` \\approx ${Number(m.rhoValue.toPrecision(3))}` : ''}`;
 }
 
 /** 期望、方差、协方差、相关系数。rho：分数；开不尽是 { num: 协方差, den2: DX·DY }（ρ = num / √den2）；有一个是常数时 null */

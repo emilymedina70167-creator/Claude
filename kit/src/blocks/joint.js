@@ -5,8 +5,8 @@ import { REVEAL_TRIES, sameWrong } from '../tries.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
-import { parseJointBlock, judgeQuantity, judgeCells } from '../prob/jointspec.js';
-import { marginals, conditional } from '../prob/joint.js';
+import { parseJointBlock, judgeQuantity, judgeCells, answerLine } from '../prob/jointspec.js';
+import { marginals, conditional, rhoLine } from '../prob/joint.js';
 import { qShow, qShowTeX } from '../prob/num.js';
 
 const numText = (z) => (typeof z === 'number' ? String(Number(z.toPrecision(6))) : z.toString());
@@ -86,7 +86,7 @@ export function joint(el, src) {
       out.push(`<div class="jt-fact">${md(`$E(X) = ${ft(m.EX)}$，$E(Y) = ${ft(m.EY)}$，$E(XY) = ${ft(m.EXY)}$`)}</div>`);
       out.push(`<div class="jt-fact">${md(`$D(X) = ${ft(m.DX)}$，$D(Y) = ${ft(m.DY)}$`)}</div>`);
       out.push(`<div class="jt-fact">${md(`$\\operatorname{Cov}(X, Y) = E(XY) - E(X)E(Y) = ${ft(m.cov)}$`)}</div>`);
-      out.push(`<div class="jt-fact">${md(m.rho === null ? '$\\rho_{XY}$ 没有定义（有一个的方差是 0）' : `$\\rho_{XY} = ${m.rhoTeX}$${m.rho && m.rho.den2 ? ` $\\approx ${Number(m.rhoValue.toPrecision(3))}$` : ''}`)}</div>`);
+      out.push(`<div class="jt-fact">${md(m.rho === null ? '$\\rho_{XY}$ 没有定义（有一个的方差是 0）' : `$${rhoLine(m)}$`)}</div>`);
     }
     if (b.show.has('independent')) {
       const d = b.indep;
@@ -150,7 +150,7 @@ export function joint(el, src) {
     if (!a || state.settled) return;
     if (a.kind === 'value') {
       const input = askBox.querySelector('.jt-input').value, q = a.quantity, r = judgeQuantity(q, input);
-      const ans = `$${q.tex} = ${q.exact ? ft(q.value) : `${q.valueTeX} \\approx ${Number(q.approx.toPrecision(4))}`}$`;
+      const ans = `$${answerLine(q, ft)}$`;
       if (r.ok === null) { fb().className = 'jt-fb is-hint'; fb().textContent = r.text; return; }
       if (state.again.repeat(input.trim())) return; // 同一个错答案又点了一次检查：不算一次新的尝试
       state.again.after(input.trim(), r.ok);
@@ -244,7 +244,7 @@ export function joint(el, src) {
     const a = cur();
     if (!a || state.settled) return '';
     if (a.kind === 'value') { const v = askBox.querySelector('.jt-input')?.value.trim() || ''; return v && v !== state.checked ? v : ''; }
-    if (a.kind === 'independent') return '';
+    if (a.kind === 'independent') return state.indepStage === 1 ? '说了「不独立」，还没点出是哪一格不等于两个边缘的乘积' : '';
     const got = slotsOf(a).map(([id]) => (state.inputs[id] || '').trim());
     return got.some(Boolean) && got.join(' ') !== state.checked ? `表里填了 ${got.map((x) => x || '（空）').join('、')}` : '';
   });

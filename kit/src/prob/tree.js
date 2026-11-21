@@ -143,3 +143,11 @@ export function setCond(t, i, v) {
   cond[i] = snap(v);
   return bayes(t.causes, t.effect, cond);
 }
+
+/** 面积图里一列横的分界（条件概率）的把手：能抓的地方高 44px、整个在方块里（条件概率很小、分界贴着底时往里收，
+ *  以前一半伸出图外，只剩二十来 px 能捏）；窄的列也至少 32px 宽、居中（以前不到 18px 宽的列没有把手） */
+export function condHandle(x, w, yB, top, side, { tall = 44, minW = 32 } = {}) {
+  const width = Math.max(minW, w - 6);
+  const y = Math.min(Math.max(yB - tall / 2, top), top + side - tall);
+  return { x: x + w / 2 - width / 2, y, width, height: tall };
+}
