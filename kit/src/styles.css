@@ -2921,3 +2921,50 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .sm-fb.is-ok { color: var(--green); }
 .sm-fb.is-bad { color: var(--coral); }
 .sm-fb.is-reveal { color: var(--body); }
+
+/* —— 长难句的层次图（parse 的 view: layers，视觉第 5 批）—— */
+.pz-layers { margin-top: 10px; }
+.ly { position: relative; display: grid; gap: 8px; margin: 6px 0 12px; font: 18px/1.55 var(--sans); }
+.ly-row { margin-left: calc(var(--ly-d, 0) * 26px); display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px; min-width: 0; }
+.ly-row.is-clause { padding: 8px 12px; border-left: 3px solid currentColor; border-radius: 4px 12px 12px 4px; background: rgb(var(--chalk-rgb) / 0.05); }
+.ly-in { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px; flex: 1 1 0; min-width: 0; }
+.ly-tag { flex: none; min-height: 44px; margin: -9px 0 -9px -2px; padding: 0 2px; border: 0; background: none; color: inherit; font: 600 13px/1 var(--sans); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.ly-tag::after { content: ' −'; opacity: .6; }
+.ly-tag.is-cont { min-height: 0; margin: 0; font-weight: 500; opacity: .7; cursor: default; line-height: 1.9; }
+.ly-row.is-cont { border-left-style: dashed; }
+.ly-piece { display: inline-flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.ly-piece .ly-words { color: var(--chalk); border-bottom: 2.5px solid currentColor; padding-bottom: 1px; }
+.ly-piece small { font: 600 11.5px/1.5 var(--sans); }
+.ly-piece.is-plain { color: var(--chalk); }
+.ly-dots { min-height: 44px; margin: -8px 0; padding: 0 12px; border: 1px dashed currentColor; border-radius: 999px; background: rgb(var(--chalk-rgb) / 0.04); font: 600 18px/1 var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.ly-dots small { font: 600 12px/1 var(--sans); }
+.ly.is-pick .ly-piece[data-span]:not([data-span="-1"]), .ly.is-pick .ly-row.is-clause > .ly-tag { cursor: pointer; min-height: 44px; justify-content: center; -webkit-tap-highlight-color: transparent; }
+.ly.is-pick .ly-row.is-clause > .ly-tag { margin: 0; display: inline-flex; align-items: center; }
+.ly .is-chosen > .ly-words, .ly .ly-piece.is-chosen { background: rgb(var(--yellow-rgb) / 0.2); border-radius: 6px; }
+.ly .ly-row.is-clause.is-chosen { background: rgb(var(--yellow-rgb) / 0.14); box-shadow: inset 0 0 0 1.5px rgb(var(--yellow-rgb) / 0.6); }
+.pz-join { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.05); }
+.pz-join-q { font: 16.5px/1.55 var(--sans); }
+.pz-join-fb { margin-top: 6px; font: 15.5px/1.5 var(--sans); min-height: 1.3em; color: var(--muted); }
+.pz-join-fb.is-ok { color: var(--green); }
+.pz-join-fb.is-bad { color: var(--coral); }
+.ly-arcs { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ly-arc { fill: none; stroke: var(--yellow); stroke-width: 2; stroke-dasharray: 5 4; }
+.ly-arc-dot { fill: var(--yellow); }
+
+/* —— 平行结构 parallel（视觉第 5 批）—— */
+.pl-grid { display: grid; grid-template-columns: fit-content(44%) minmax(0, 1fr); gap: 6px 12px; align-items: baseline; margin: 8px 0 12px; font: 18px/1.6 var(--sans); }
+.pl-lead { text-align: right; color: var(--chalk); }
+.pl-lead.is-conj { color: var(--yellow); font-weight: 600; }
+.pl-item { min-height: 44px; padding: 6px 12px; text-align: left; border: 0; border-left: 3px solid rgb(var(--blue-rgb)); border-radius: 2px 10px 10px 2px; background: rgb(var(--chalk-rgb) / 0.05); color: var(--chalk); font: inherit; }
+button.pl-item { width: 100%; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pl-item b { color: rgb(var(--blue-rgb)); font-weight: 700; }
+.pl-item.is-right { border-left-color: var(--green); }
+.pl-item.is-wrong { border-left-color: var(--coral); background: rgb(var(--coral-rgb) / 0.1); }
+.pl-fixed { color: var(--green); font-weight: 700; }
+.pl-rest { grid-column: 2; color: var(--chalk); padding-left: 15px; }
+.pl-fix { margin: 4px 0 10px; }
+.pl-fix-q { font: 16.5px/1.5 var(--sans); }
+.pl-fix-opts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.pl-opt { min-height: 44px; font-size: 17px; }
+.pl-opt.is-right { border-color: var(--green); color: var(--green); }
+.pl-opt.is-wrong { text-decoration: line-through; opacity: .55; }

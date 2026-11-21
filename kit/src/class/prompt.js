@@ -1159,8 +1159,9 @@ function recordText(a, type) {
     case 'drill':
     case 'chunk':
     case 'translate':
+    case 'parallel':
     case 'link': {
-      const kind = { cloze: '填空', errfind: '改错', parse: '句子成分', drill: '操练', chunk: '意群断句', link: '连线', translate: '翻译' }[type];
+      const kind = { cloze: '填空', errfind: '改错', parse: '句子成分', drill: '操练', chunk: '意群断句', link: '连线', translate: '翻译', parallel: '平行结构' }[type];
       // 翻译：译文原文给老师（要点页面判了，通不通顺老师看）
       if (type === 'translate' && !a.final) return `[作答] ${where(a, kind)}：${a.q ? `「${short(a.q, 160)}」` : ''}译成「${short(a.value, 400) || '（空）'}」${mark(a.ok, a.attempts)}${a.detail ? `（页面按要点判：${short(a.detail, 160)}）` : ''}${a.misread ? `；页面看出来：${short(a.misread, 160)}` : ''}`;
       // 断句后写的译文（判不了分）：原样给老师

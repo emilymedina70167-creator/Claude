@@ -8,10 +8,11 @@ import { widget, mdToHtml, escapeHtml } from './common.js';
 import {
   ROLES, matchText, textHint, parseCloze, tokenizeSentence, findWrong, parseAlts, parseBrackets, judgeSpans, spanText, spansHint, parseRoles, parseDrill, joinWords,
   parseAnswer, diagnose, parseDecoys, parseSteps, parseChunk, judgeChunks, chunkHint, chunksOf, parseLink, judgeLinks, linkHint, regradePrompt, parseRegrade,
-  parsePoints, judgeTranslation, translationHint,
+  parsePoints, judgeTranslation, translationHint, roleName, joinsOf, judgeJoins,
 } from '../entext.js';
 import { getAI } from '../ai.js';
 import { bracketHtml, spanPicker, wordPicker } from './enpick.js';
+import { layersView, clauseDepth } from './enlayers.js';
 
 // 复核用的模型：和课堂讲课一样只用 Opus 5.5（课堂里不许别的模型「讲课」），回来的不是它就当没复核
 const REGRADE_MODEL = 'claude-opus-5-5';
@@ -174,15 +175,80 @@ export function errfind(el, src) {
 
 /* ---------------- parse：句子成分标注 ---------------- */
 
+// 分裂结构（ask: join）：成分都清楚了以后，让学生点出本来连着、被隔开的两段。host 里画层次图（先不画弧），连对一对画一条
+function joinStage(host, { ans, roles, title, el, onDone }) {
+  const joins = joinsOf(ans.spans);
+  const box = document.createElement('div');
+  box.className = 'pz-join';
+  box.innerHTML = `<div class="pz-join-q">这句话里有 ${joins.length} 处被隔开的结构：先点一段，再点和它本来连着的那一段。</div><div class="pz-join-ly"></div><div class="pz-join-fb" aria-live="polite"></div>`;
+  host.appendChild(box);
+  const fb = box.querySelector('.pz-join-fb');
+  const found = new Set();
+  let first = null, attempts = 0, closed = false;
+  const say = (i) => `${roleName(ans.spans[i].role)}「${short(spanText(ans.tokens, ans.spans[i]), 40)}」`;
+  const finish = (ok, revealed = false) => {
+    closed = true;
+    view.showArcs(new Set(joins.map((j) => j.id))); view.choose([]);
+    if (revealed) session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), detail: '分裂结构', ok: false, attempts, revealed: true, expected: joins.map((j) => j.parts.map(say).join(' — ')).join('；'), el });
+    onDone(ok);
+  };
+  const view = layersView(box.querySelector('.pz-join-ly'), {
+    tokens: ans.tokens, spans: ans.spans, roles, arcsFor: found,
+    onPick(i) {
+      if (closed) return;
+      if (first === null || first === i) { first = first === i ? null : i; view.choose(first === null ? [] : [first]); return; }
+      const pair = [first, i];
+      first = null; attempts++;
+      const hit = joins.find((j) => !found.has(j.id) && judgeJoins([pair], [j]).ok);
+      session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: '分裂结构', value: pair.map(say).join(' — '), ok: !!hit, attempts, el });
+      view.choose([]);
+      if (hit) {
+        found.add(hit.id); view.showArcs(found);
+        fb.className = 'pz-join-fb is-ok';
+        fb.textContent = found.size === joins.length ? '✓ 对：这两段本来是连着的，中间被别的成分隔开了。' : `✓ 对了一处，还有 ${joins.length - found.size} 处。`;
+        if (found.size === joins.length) { session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), detail: '分裂结构', ok: true, attempts, value: joins.map((j) => j.parts.map(say).join(' — ')).join('；'), el }); finish(true); }
+        return;
+      }
+      fb.className = 'pz-join-fb is-bad';
+      fb.innerHTML = `✗ 这两段不是一家。${attempts >= 3 ? ' <button type="button" class="link-btn pz-join-show">看答案</button>' : ''}`;
+      fb.querySelector('.pz-join-show')?.addEventListener('click', () => { fb.className = 'pz-join-fb'; fb.textContent = '连起来的就是本来挨着的两段。'; finish(false, true); });
+    },
+  });
+}
+
+// 层次图的位置：不用层次图的题什么都不画；用的题，有成分可画时才露出来
+function layerSlot(host, ans, roles, layered) {
+  let view = null;
+  return {
+    show(spans) {
+      if (!layered || !host || !spans.length) return;
+      host.hidden = false;
+      if (view) view.update(spans); else view = layersView(host, { tokens: ans.tokens, spans, roles });
+    },
+  };
+}
+
 export function parse(el, src) {
   const { fields } = parseFields(src);
   const ans = parseBrackets(fields.answer || '');
   const roles = parseRoles(fields.roles, [...new Set(ans.spans.map((s) => s.role))]);
-  for (const s of ans.spans) if (!roles.some((r) => r.key === s.role)) roles.push({ key: s.role, name: ROLES[s.role] || s.role });
+  for (const s of ans.spans) if (!roles.some((r) => r.key === s.role)) roles.push({ key: s.role, name: roleName(s.role) });
+  // 层次图（视觉第 5 批）：view: layers 明着要；不写时，从句套了两层以上、有分裂结构（~n）的才用。view: line 照旧一行
+  const layered = /^layers$/i.test(fields.view || '') || (!/^line$/i.test(fields.view || '') && (clauseDepth(ans.spans) >= 2 || ans.spans.some((s) => s.join)));
+  fields.layered = layered;
+  // ask: join：让学生把分裂结构被隔开的两段连起来（answer 里要有 ~n）
+  const askJoin = /^join$/i.test(fields.ask || '');
+  if (askJoin && !ans.spans.some((s) => s.join)) throw new Error('ask: join 要 answer 里有分裂结构的记号：[S~1 The rumor] … [AppC~1 that …]');
   // mode: show：老师把句子结构直接画在板上（不作答、不拦人）
   if (/^show$/i.test(fields.mode || '')) {
     const b = widget(el, { title: fields.title || '', cls: 'en-parse-show' });
-    b.innerHTML = `${fields.q ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : ''}<div class="en-words pz-ans">${bracketHtml(ans.tokens, ans.spans, roles)}</div>${fields.explain ? mdToHtml(fields.explain) : ''}`;
+    b.innerHTML = `${fields.q ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : ''}${layered ? '<div class="pz-layers"></div>' : `<div class="en-words pz-ans">${bracketHtml(ans.tokens, ans.spans, roles)}</div>`}${fields.explain ? mdToHtml(fields.explain) : ''}`;
+    if (askJoin) {
+      // 结构直接给出来，只问「哪两段本来连着」
+      b.querySelector('.pz-layers')?.remove();
+      const gate = session.gate(el, fields.title || '分裂结构');
+      joinStage(b, { ans, roles, title: fields.title || '分裂结构', el, onDone: () => gate() });
+    } else if (layered) layersView(b.querySelector('.pz-layers'), { tokens: ans.tokens, spans: ans.spans, roles });
     return;
   }
   // steps: V | S O | RC：一层层拆（第 4 批）。每一步只标这几种成分，对了固定下来再下一步
@@ -194,10 +260,13 @@ export function parse(el, src) {
     ${fields.q ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : ''}
     <div class="pz-slot"></div>
     <div class="ans-actions"><button type="button" class="btn btn-primary en-check" disabled>检查</button><button type="button" class="btn pz-clear">清空</button><button type="button" class="btn en-show" hidden>看答案</button></div>
-    <div class="q-feedback" hidden></div>`;
+    <div class="q-feedback" hidden></div>
+    <div class="pz-layers" hidden></div>`;
   const fb = body.querySelector('.q-feedback');
   const done = session.gate(el, title);
   let attempts = 0, closed = false, last = null, tried = '';
+  // 层次图：标对的那几段先长出来，做完（或者看了答案）是完整的
+  const layers = layerSlot(body.querySelector('.pz-layers'), ans, roles, layered);
   // 点词标成分（enpick.js，检验里的 parse 也用它）：说明、句子、成分按钮放回原来的位置
   const slot = body.querySelector('.pz-slot');
   const pick = spanPicker(slot, { tokens: ans.tokens, roles, onChange: () => { last = null; sync(); } });
@@ -216,10 +285,12 @@ export function parse(el, src) {
   const finish = (ok, revealed = false) => {
     if (closed) return;
     closed = true;
-    done();
-    session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), ok, attempts, revealed: revealed || undefined, value: markup(mine()), expected: markup(ans.spans), el });
+    if (!(askJoin && ok)) done(); // 后面还有连分裂结构的那一步：连完才算做完
+    session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), ok, attempts, revealed: revealed || undefined, value: markup(mine()), expected: markup(ans.spans), more: (askJoin && ok) || undefined, el });
     pick.lock();
     sync();
+    if (askJoin && ok) joinStage(body, { ans, roles, title, el, onDone: () => done() });
+    else layers.show(ans.spans);
   };
   body.querySelector('.en-check').addEventListener('click', () => {
     if (closed || pick.empty()) return;
@@ -232,6 +303,7 @@ export function parse(el, src) {
     fb.innerHTML = verdict(last.ok, last.ok ? '' : spansHint(last, roles)) + (last.ok && fields.explain ? mdToHtml(fields.explain) : '');
     const res = last;
     pick.mark((s) => (res.right.includes(s) ? 'is-right' : 'is-wrong'));
+    if (!last.ok) layers.show(res.right);
     if (last.ok) finish(true);
     else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
   });
@@ -257,7 +329,9 @@ function parseByStep(el, fields, ans, roles, groups) {
     <div class="pz-sent en-words"></div>
     <div class="pz-roles"></div>
     <div class="ans-actions"><button type="button" class="btn btn-primary en-check" disabled>检查这一步</button><button type="button" class="btn pz-clear">清空这一步</button><button type="button" class="btn en-show" hidden>看这一步的答案</button></div>
-    <div class="q-feedback" hidden></div>`;
+    <div class="q-feedback" hidden></div>
+    <div class="pz-layers" hidden></div>`;
+  const layers = layerSlot(body.querySelector('.pz-layers'), ans, roles, fields.layered);
   const sent = body.querySelector('.pz-sent');
   const fb = body.querySelector('.q-feedback');
   const done = session.gate(el, title);
@@ -313,6 +387,7 @@ function parseByStep(el, fields, ans, roles, groups) {
   function nextStep(ok, revealed = false) {
     session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), detail: `第 ${k + 1} 步（${stepName(k)}）`, ok, attempts, revealed: revealed || undefined, value: markup(mine), expected: markup(target()), el });
     fixed = [...fixed, ...target()];
+    layers.show(k < groups.length - 1 ? fixed : ans.spans);
     mine = []; sel = null; last = null; attempts = 0; tried = '';
     body.querySelector('.en-show').hidden = true;
     if (k < groups.length - 1) { k++; paintStep(); draw(); return; }
