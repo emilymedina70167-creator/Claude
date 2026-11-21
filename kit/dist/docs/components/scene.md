@@ -34,10 +34,9 @@ goal A*x = [3, 5] msg="命中！"
 
 修饰词 `after` / `before`：只在 `predict` 揭晓之后 / 之前显示。`from=k` / `until=k`：图绑定了 `steps`（写 `link:`）时，揭开到第 k 步起 / 为止才显示，见下文 `steps`。标签末尾的数字自动变下标（`a1` → a₁）。
 
-颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
-
 还有 `polygon`、`text`、`curve`（参数曲线、单位圆的像）、`eigen`（特征方向）、`conic A = 3`（二次曲线 $\mathbf x^{\mathsf T}A\mathbf x=3$）。
 
+颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
 | 命令 | 作用 |
 |---|---|
 | `polygon P, Q, R, …` | 多边形 |

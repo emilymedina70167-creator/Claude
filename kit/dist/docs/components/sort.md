@@ -8,7 +8,7 @@ array: 49 38 65 97 76 13 27 49'
 ask: pivot
 ```
 
-- `algo:` 选算法：`insert`（直接插入）、`bubble`（冒泡）、`select`（简单选择）、`quick`（快排）、`merge`（二路归并）、`radix`（基数排序）、`shell`（希尔排序，`gaps: 5 3 1`，不写就是 ⌊n/2⌋ 每次减半；相隔 d 的一组、同组同色，一组一步做直接插入）。
+- `algo:` 选算法：`insert`（直接插入）、`binsert`（折半插入：每次折半的 low、high、mid 一步，相等往右，`ask: mid`）、`bubble`（冒泡）、`select`（简单选择）、`quick`（快排）、`merge`（二路归并）、`radix`（基数排序）、`shell`（希尔排序，`gaps: 5 3 1`，不写就是 ⌊n/2⌋ 每次减半；相隔 d 的一组、同组同色，一组一步做直接插入）。
 - `array:` 初始序列，位置从 1 数，最多 16 个；重复的数后面加 `'`（`49'`，画成带下划线的），看稳定性。
 - `ask:` 都有 `pass`（这一趟之后的序列；快排叫 `partition`），另外 insert `place`、bubble `swap`、select `min`、quick `pivot`（点出来）。
 - `mode: quiz` 配 `pass: 2`：只给初始序列，我写出第 2 趟（快排是第 2 次划分）之后的序列。
