@@ -41,23 +41,23 @@ test('排成一层层的行：主干在最外面，每个从句另起缩进的�
   // 套三层：同位语从句里的宾语从句
   const three = parseBrackets('[S The fact [AppC that [S he] [V said] [ObC that [S she] [V left]]]] [V surprised] [O us].');
   assert.deepEqual(show(three, layerRows(three)), ['S:The fact', '  <AppC> that | S:he | V:said', '    <ObC> that | S:she | V:left', 'V:surprised | O:us | .']);
-  // 状语从句在句首；没括的词（逗号、by research）照原样留在那一行
+  // 状语从句在句首：后面的逗号跟着它收尾（2026-11-21 改：以前逗号起了主干那一行）；没括的词（by then）照原样留在那一行
   const adv = parseBrackets('[AdvC When [S he] [V arrived]], [S we] [V had left] by then.');
-  assert.deepEqual(show(adv, layerRows(adv)), ['  <AdvC> When | S:he | V:arrived', ', | S:we | V:had left | by then .']);
+  assert.deepEqual(show(adv, layerRows(adv)), ['  <AdvC> When | S:he | V:arrived | ,', 'S:we | V:had left | by then .']);
   // 插入语
   const par = parseBrackets('[S The plan], [Par I think], [V will work].');
-  assert.deepEqual(show(par, layerRows(par)), ['S:The plan | ,', '  <Par> I think', ', | V:will work | .']);
+  assert.deepEqual(show(par, layerRows(par)), ['S:The plan | ,', '  <Par> I think | ,', 'V:will work | .']);
 });
 
-test('从句后面只剩标点的一行并到上一行；一个从句被里面的从句隔开时，后一截标「接着」', () => {
+test('句末只剩标点的一行回到主干那一行（2026-11-21 改：以前挪进了最后一个从句）；一个从句被里面的从句隔开时，后一截标「接着」', () => {
   const p = parseBrackets('[S He] [V said] [ObC that [S she] [V left]].');
   const rows = layerRows(p);
   assert.equal(rows.length, 2, '句号不单独占一行');
-  assert.deepEqual(show(p, rows), ['S:He | V:said', '  <ObC> that | S:she | V:left | .']);
-  assert.equal(rows[1].pieces.at(-1).tail, true);
+  assert.deepEqual(show(p, rows), ['S:He | V:said | .', '  <ObC> that | S:she | V:left']);
+  assert.equal(rows[0].pieces.at(-1).tail, true);
   const q = parseBrackets('[S We] [V know] [ObC that [S the plan [RC which [S they] [V made]]] [V failed]].');
   const r = layerRows(q);
-  assert.deepEqual(show(q, r), ['S:We | V:know', '  <ObC> that | S:the plan', '    <RC> which | S:they | V:made', '  <ObC> V:failed | .']);
+  assert.deepEqual(show(q, r), ['S:We | V:know | .', '  <ObC> that | S:the plan', '    <RC> which | S:they | V:made', '  <ObC> V:failed']);
   assert.deepEqual(r.map((x) => !!x.cont), [false, false, false, true]);
 });
 

@@ -10,6 +10,7 @@ import {
   ROLES, matchText, textHint, parseCloze, tokenizeSentence, findWrong, parseAlts, parseBrackets, judgeSpans, spanText, spansHint, parseRoles, parseDrill, joinWords,
   parseAnswer, diagnose, parseDecoys, parseSteps, parseChunk, judgeChunks, chunkHint, chunksOf, parseLink, judgeLinks, linkHint, regradePrompt, parseRegrade,
   parsePoints, judgeTranslation, translationHint, roleName, joinsOf, judgeJoins, joinTarget,
+  spansMarkup,
 } from '../entext.js';
 import { getAI } from '../ai.js';
 import { bracketHtml, spanPicker, wordPicker } from './enpick.js';
@@ -269,8 +270,9 @@ export function parse(el, src) {
     const b = widget(el, { title: fields.title || '', cls: 'en-parse-show' });
     b.innerHTML = `${fields.q ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : ''}${layered ? '<div class="pz-layers"></div>' : `<div class="en-words pz-ans">${bracketHtml(ans.tokens, ans.spans, roles)}</div>`}${fields.explain ? mdToHtml(fields.explain) : ''}`;
     if (askJoin) {
-      // 结构直接给出来，只问「哪两段本来连着」
+      // 结构直接给出来，只问「哪两段本来连着」：结构由连线那一步自己的层次图画，上面的（层次图或 view: line 的一行括号）收掉，不画两遍
       b.querySelector('.pz-layers')?.remove();
+      b.querySelector('.pz-ans')?.remove();
       const gate = session.gate(el, fields.title || '分裂结构');
       joinStage(b, { ans, roles, title: fields.title || '分裂结构', el, onDone: () => gate() });
     } else if (layered) layersView(b.querySelector('.pz-layers'), { tokens: ans.tokens, spans: ans.spans, roles });
@@ -298,13 +300,7 @@ export function parse(el, src) {
   slot.replaceWith(...pick.el.childNodes);
   const sync = () => { body.querySelector('.en-check').disabled = closed || pick.empty(); };
   const mine = () => pick.raw();
-  const markup = (spans) => {
-    // 学生标的写回括号写法（记录、草稿里给老师看）
-    const words = ans.tokens.map((t) => t.w);
-    const open = words.map(() => []), close = words.map(() => 0);
-    for (const s of [...spans].sort((a, b) => a.from - b.from || b.to - a.to)) { open[s.from].push(s.role); close[s.to]++; }
-    return joinWords(words.map((w, i) => `${open[i].map((r) => `[${r} `).join('')}${w}${']'.repeat(close[i])}`));
-  };
+  const markup = (spans) => spansMarkup(ans.tokens, spans); // 写回括号写法（记录、草稿里给老师看；答案带 ~n）
   markDraft(body, () => (!closed && mine().length && markup(mine()) !== tried ? `标了 ${markup(mine())}，还没检查` : ''));
   body.querySelector('.pz-clear').addEventListener('click', () => { if (!closed) pick.clear(); });
   const finish = (ok, revealed = false) => {
@@ -368,12 +364,7 @@ function parseByStep(el, fields, ans, roles, groups) {
   let k = 0, mine = [], fixed = [], sel = null, attempts = 0, last = null, closed = false, tried = '';
   const target = () => ans.spans.filter((sp) => groups[k].includes(sp.role));
   const stepName = (i) => groups[i].map(nameOf).join('、');
-  const markup = (spans) => {
-    const words = ans.tokens.map((t) => t.w);
-    const open = words.map(() => []), close = words.map(() => 0);
-    for (const sp of [...spans].sort((a, b) => a.from - b.from || b.to - a.to)) { open[sp.from].push(sp.role); close[sp.to]++; }
-    return joinWords(words.map((w, i) => `${open[i].map((r) => `[${r} `).join('')}${w}${']'.repeat(close[i])}`));
-  };
+  const markup = (spans) => spansMarkup(ans.tokens, spans); // 写回括号写法（记录、草稿里给老师看；答案带 ~n）
   markDraft(body, () => (!closed && mine.length && markup(mine) !== tried ? `第 ${k + 1} 步标了 ${markup(mine)}，还没检查` : ''));
   function paintStep() {
     body.querySelector('.pz-step').innerHTML = `<b>第 ${k + 1} / ${groups.length} 步</b>：标出${escapeHtml(stepName(k))}${k ? '<span class="muted">（前面几步已经固定在句子上）</span>' : ''}`;

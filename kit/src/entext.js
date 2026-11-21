@@ -242,6 +242,16 @@ export function parseRoles(src, fallback = []) {
   return out.length ? out : fallback.map((k) => ({ key: k, name: ALL_ROLES[k] || k }));
 }
 
+// 读不懂的「[成分名」：说哪里写错了、该怎么写
+function badTag(t) {
+  const tag = t.slice(1);
+  if (!tag) return '「[」后面要紧跟成分名，比如 [S The man]（[ 和成分名之间不空格）';
+  if (/~(?!\d)/.test(tag)) return `「${t}」：~ 后面要写数字，同一个数字的两段是分裂结构，比如 [S~1 …] … [AppC~1 …]`;
+  if (/=/.test(tag)) return `「${t}」：parse 里不写 =（[O=S …] 是 shift 的配对写法），成分就写 [S …]${/~\d/.test(tag) ? '，分裂结构写 [S~1 …]' : ''}`;
+  if (/#/.test(tag)) return `「${t}」：parse 里不写 #（#2 是 shift 里同名成分的写法），同名的成分照写 [${tag.split('#')[0]} …]`;
+  return `「${t}」读不懂：成分写成 [S The man]，成分名后面空一格再写词`;
+}
+
 /**
  * 括号写法 → { text（原句）, tokens, spans: [{ role, from, to, depth }] }。from / to 是词的下标（含两端），可以套（从句里再分成分）。
  * 括号不配对、角色没写都报错。标点不算进成分的头尾（[S Tom ,] 记成只到 Tom）
@@ -252,10 +262,12 @@ export function parseBrackets(src) {
   const spans = [];
   const stack = [];
   // [S~1 …]：~1 是分裂结构的记号（同一个号的两段本来是连着的）
-  const re = /\[([A-Za-z][\w]*)(?:~(\d+))?\s+|\]|[^\s[\]]+/g;
+  // 第二种：「[」后面跟着读不懂的成分名（[S~ …]、[S~1=O …]、[A#2 …]）——单独说，不让它落到后面成了「多了一个 ]」
+  const re = /\[([A-Za-z][\w]*)(?:~(\d+))?\s+|(\[[^\s\]]*)|\]|[^\s[\]]+/g;
   let m;
   const pieces = [];
   while ((m = re.exec(s))) {
+    if (m[3] !== undefined) throw new Error(badTag(m[3]));
     if (m[1]) { stack.push({ role: m[1], from: null, depth: stack.length, ...(m[2] ? { join: Number(m[2]) } : {}) }); continue; }
     if (m[0] === ']') {
       const top = stack.pop();
@@ -282,6 +294,14 @@ export function parseBrackets(src) {
   const sorted = spans.sort((a, b) => a.from - b.from || b.to - a.to);
   joinsOf(sorted); // ~n 只写了一段、写了三段：这里就报
   return { text: joinWords(words), tokens, spans: sorted };
+}
+
+/** 成分写回括号写法（记录、草稿里给老师看）：parseBrackets 的反过来，分裂结构带着 ~n */
+export function spansMarkup(tokens, spans) {
+  const words = tokens.map((t) => t.w);
+  const open = words.map(() => []), close = words.map(() => 0);
+  for (const sp of [...spans].sort((a, b) => a.from - b.from || b.to - a.to)) { open[sp.from].push(sp.join ? `${sp.role}~${sp.join}` : sp.role); close[sp.to]++; }
+  return joinWords(words.map((w, i) => `${open[i].map((r) => `[${r} `).join('')}${w}${']'.repeat(close[i])}`));
 }
 
 // —— 层次：括号套出来的树、一层层的行 ——
@@ -335,14 +355,26 @@ export function layerRows(p, { fold = [] } = {}) {
     });
     push(key, chain.length, { from: t, to: t, role: own >= 0 ? spans[own].role : null, span: own });
   }
-  // 只剩标点的一行（从句后面孤零零的句号）并到上一行的末尾；一个从句被里面的从句隔成两截时，后一截标 cont（接着上面那一块）
+  // 标点放在哪一行（2026-11-21 改）：
+  //   一行开头的标点（句首状语从句后面的逗号）跟着上一行收尾，不起这一行；
+  //   最后只剩标点的一行（句末的点）回到它自己那一层最近的一行（主干的点留在主干，以前挪进了最后一个从句）；
+  //   中间只剩标点的一行并到上一行的末尾。只是标点的一段标 punct（画的时候前面不空格）。
+  // 一个从句被里面的从句隔成两截时，后一截标 cont（接着上面那一块）
+  const isPunct = (x) => x.folded === undefined && !x.role && tokens.slice(x.from, x.to + 1).every((tk) => !tk.word);
+  for (const row of rows) for (const x of row.pieces) if (isPunct(x)) x.punct = true;
   const out = [], seen = new Set();
-  for (const row of rows) {
-    const onlyPunct = row.pieces.every((x) => x.folded === undefined && !x.role && tokens.slice(x.from, x.to + 1).every((tk) => !tk.word));
-    if (onlyPunct && out.length) { out.at(-1).pieces.push(...row.pieces.map((x) => ({ ...x, tail: true }))); continue; }
+  rows.forEach((row, k) => {
+    let lead = 0;
+    while (lead < row.pieces.length && row.pieces[lead].punct) lead++;
+    if (lead === row.pieces.length && out.length) {
+      const home = k === rows.length - 1 ? out.findLast((r) => r.clause === row.clause) || out.at(-1) : out.at(-1);
+      home.pieces.push(...row.pieces.map((x) => ({ ...x, tail: true })));
+      return;
+    }
+    if (lead && out.length) { out.at(-1).pieces.push(...row.pieces.slice(0, lead).map((x) => ({ ...x, tail: true }))); row.pieces = row.pieces.slice(lead); }
     if (row.clause !== null) { if (seen.has(row.clause)) row.cont = true; seen.add(row.clause); }
     out.push(row);
-  }
+  });
   return out;
 }
 

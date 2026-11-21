@@ -34,7 +34,7 @@ export function layersView(host, { tokens, spans, roles = [], fold = true, onPic
         if (x.folded !== undefined) return `<button type="button" class="ly-dots ${color(x.role)}" data-unfold="${x.folded}" aria-label="展开${escapeHtml(name(x.role))}">…<small>${escapeHtml(name(x.role))}</small></button>`;
         if (!x.role) return `<span class="ly-piece is-plain" data-span="${x.span}" data-from="${x.from}">${text(x.from, x.to)}</span>`;
         return `<span class="ly-piece ${color(x.role)}" data-span="${x.span}" data-from="${x.from}"><span class="ly-words">${text(x.from, x.to)}</span><small>${escapeHtml(name(x.role))}</small></span>`;
-      }).join(' ');
+      }).map((h, k) => (k && !row.pieces[k].punct ? ` ${h}` : h)).join(''); // 标点前面不空格
       if (!cl) return `<div class="ly-row" style="--ly-d:${row.depth}">${pieces}</div>`;
       // 被里面的从句隔开的后一截：不再写一遍名字，写「接着」
       const tag = row.cont ? `<span class="ly-tag is-cont">（${escapeHtml(name(cl.role))}接着）</span>`

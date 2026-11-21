@@ -13,7 +13,14 @@ function parseLine(src, which) {
   const flush = () => { if (loose.length) { out.push({ text: joinWords(loose) }); loose = []; } };
   // [O the plan]：成分 O；[O=S The plan]：和另一行的 O 配对，在这一行里是主语（被动句里原来的宾语当了主语）
   for (const m of s.matchAll(/\[([A-Za-z][\w]*)(?:#(\d+))?(?:=([A-Za-z]\w*)?)?\s+([^[\]]*)\]|[[\]]|[^\s[\]]+/g)) {
-    if (m[0] === '[' || m[0] === ']') throw new Error(`${which} 的括号不配对，或者括号套了括号（这里一个成分一对方括号，不套）`);
+    if (m[0] === '[' || m[0] === ']') {
+      // 「[S~1 …」这种成分名后面跟着读不懂的记号的，说清楚是哪一个（以前一律说括号不配对）
+      const after = s.slice(m.index);
+      const tag = /^\[([A-Za-z]\w*)(\S*)\s/.exec(after);
+      if (m[0] === '[' && tag && /~/.test(tag[2])) throw new Error(`${which} 里「[${tag[1]}${tag[2]}」：shift 里不用 ~（分裂结构的记号只在 parse 里用），成分写 [${tag[1]} …]，和另一行配对写 [${tag[1]}=S …]`);
+      if (m[0] === '[' && tag && tag[2]) throw new Error(`${which} 里「[${tag[1]}${tag[2]}」读不懂：成分写 [S …]，同名的第二个写 [S#2 …]，和另一行的成分配对写 [O=S …]`);
+      throw new Error(`${which} 的括号不配对，或者括号套了括号（这里一个成分一对方括号，不套）`);
+    }
     if (m[1]) {
       flush();
       if (/=/.test(m[0].split(/\s/)[0]) && !m[3]) throw new Error(`${which} 里 [${m[1]}= …] 的 = 后面要写这一行里它是什么成分，比如 [O=S The plan]`);

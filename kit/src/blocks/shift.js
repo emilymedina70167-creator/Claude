@@ -209,6 +209,7 @@ export function shift(el, src) {
     if (!b || closed || stage !== 'order') return;
     drag = { key: b.dataset.key, x: e.clientX, y: e.clientY, id: e.pointerId, moving: false, el: b };
     dragged = false;
+    on();
   });
   const move = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
@@ -223,22 +224,35 @@ export function shift(el, src) {
   const up = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     const d = drag; drag = null;
+    off();
     if (!d.moving) return;
     d.el.style.transform = ''; d.el.classList.remove('is-drag');
     const under = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('.sh-to [data-slot]');
     if (under) put(d.key, Number(under.dataset.slot)); else paint();
     setTimeout(() => { dragged = false; }, 0); // 松手后那一下 click 不算点
   };
-  const cancel = (e) => { if (drag && e.pointerId === drag.id) { drag.el.style.transform = ''; drag.el.classList.remove('is-drag'); drag = null; dragged = false; paint(); } };
-  // 监听挂在 window 上（拖出块外也接得住）；块被换掉了就撤掉，不越积越多
-  const guard = (fn) => (e) => { if (!el.isConnected) { off(); return; } fn(e); };
+  const cancel = (e) => { if (drag && e.pointerId === drag.id) { drag.el.style.transform = ''; drag.el.classList.remove('is-drag'); drag = null; dragged = false; off(); paint(); } };
+  // 监听只在拖的时候挂在 window 上（拖出块外也接得住），松手、取消、切到后台就撤（2026-11-21 改：以前每画一块
+  // 挂一组、一直挂着，块没了要等下一次按才撤，visibilitychange 从来不撤）
+  const guard = (fn) => (e) => { if (!el.isConnected) { drag = null; off(); return; } fn(e); };
   const moveG = guard(move), upG = guard(up), cancelG = guard(cancel);
-  function off() { window.removeEventListener('pointermove', moveG); window.removeEventListener('pointerup', upG); window.removeEventListener('pointercancel', cancelG); }
-  window.addEventListener('pointermove', moveG, { passive: false });
-  window.addEventListener('pointerup', upG);
-  window.addEventListener('pointercancel', cancelG);
   // 切到后台：拖到一半的放回原处
-  document.addEventListener('visibilitychange', () => { if (document.hidden && drag) cancel({ pointerId: drag.id }); });
+  const hide = () => { if (document.hidden && drag) cancel({ pointerId: drag.id }); };
+  let hooked = false;
+  function on() {
+    if (hooked) return;
+    hooked = true;
+    window.addEventListener('pointermove', moveG, { passive: false });
+    window.addEventListener('pointerup', upG);
+    window.addEventListener('pointercancel', cancelG);
+    document.addEventListener('visibilitychange', hide);
+  }
+  function off() {
+    if (!hooked) return;
+    hooked = false;
+    window.removeEventListener('pointermove', moveG); window.removeEventListener('pointerup', upG); window.removeEventListener('pointercancel', cancelG);
+    document.removeEventListener('visibilitychange', hide);
+  }
   markDraft(body, () => (!closed && filled().length && said() !== tried ? `排了 ${said()}，还没检查` : ''));
   paint();
 }
