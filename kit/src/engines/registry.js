@@ -2,7 +2,7 @@
 // practice 的 use:（演示组件当练习题）、测试也按名字找引擎。elim、pv 另有学生自己动手的写法，组件在 blocks/index.js 里分流
 import { sortEngine } from './sort.js';
 import { treeEngine } from './tree.js';
-import { kmpEngine, hashEngine, bsearchEngine } from './search.js';
+import { kmpEngine, hashEngine, bsearchEngine, blocksearchEngine } from './search.js';
 import { netEngine } from './graph.js';
 import { traceEngine } from './trace.js';
 import { schedEngine, pagingEngine, bankerEngine, diskEngine } from './os.js';
@@ -31,6 +31,8 @@ import { ufEngine } from './uf.js';
 import { buildtreeEngine } from './buildtree.js';
 import { threadEngine } from './thread.js';
 import { forestEngine } from './forest.js';
+import { storeEngine } from './store.js';
+import { dequeEngine } from './deque.js';
 import { avlEngine, rbtEngine } from './balanced.js';
 import { btreeEngine } from './btree.js';
 import { stackEngine } from './stack.js';
@@ -54,6 +56,7 @@ export const ENGINES = {
   kmp: kmpEngine,
   hash: hashEngine,
   bsearch: bsearchEngine,
+  blocksearch: blocksearchEngine,
   net: netEngine,
   trace: traceEngine,
   sched: schedEngine,
@@ -89,6 +92,8 @@ export const ENGINES = {
   buildtree: buildtreeEngine,
   thread: threadEngine,
   forest: forestEngine,
+  store: storeEngine,
+  deque: dequeEngine,
   avl: avlEngine,
   rbt: rbtEngine,
   btree: btreeEngine,

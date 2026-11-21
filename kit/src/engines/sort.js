@@ -4,10 +4,11 @@ import { parseArray, parseGaps } from '../sorting.js';
 import { arrayView, esc, itemText, chips } from './arrayview.js';
 
 export const ALGOS = {
-  insert: '直接插入排序', shell: '希尔排序', bubble: '冒泡排序', select: '简单选择排序', quick: '快速排序', merge: '二路归并排序', radix: '基数排序',
+  insert: '直接插入排序', binsert: '折半插入排序', shell: '希尔排序', bubble: '冒泡排序', select: '简单选择排序', quick: '快速排序', merge: '二路归并排序', radix: '基数排序',
 };
 const ALIAS = {
   insert: 'insert', insertion: 'insert', 插入: 'insert', 直接插入: 'insert',
+  binsert: 'binsert', binary: 'binsert', 折半插入: 'binsert', 二分插入: 'binsert',
   shell: 'shell', shellsort: 'shell', 希尔: 'shell',
   bubble: 'bubble', 冒泡: 'bubble',
   select: 'select', selection: 'select', 选择: 'select', 简单选择: 'select',
@@ -61,7 +62,7 @@ export function roundsOf(a, log) {
 
 /** 跑一遍：{ steps: [{ view, msg, ask? }], passes: [每一趟结束后的序列（数组）] }；快排另有 rounds（真题说的每一趟，见 roundsOf） */
 export function run(input) {
-  const f = { insert: insertion, shell: (A) => shell(A, input.gaps), bubble, select: selection, quick, merge, radix }[input.algo];
+  const f = { insert: insertion, binsert: binInsertion, shell: (A) => shell(A, input.gaps), bubble, select: selection, quick, merge, radix }[input.algo];
   const ok = f(input.items.map((x) => ({ ...x })));
   return input.mistake ? mistakeRun(input, ok) : ok;
 }
@@ -276,6 +277,52 @@ function insertion(A) {
   }
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done'), zero: { label: '哨兵', item: null } }, msg: `排序完成，一共 ${n - 1} 趟。` });
   return { steps, passes };
+}
+
+// —— 折半插入排序（视觉第 6 批，王道的代码）——
+//   for(i=2;i<=n;i++){ A[0]=A[i]; low=1; high=i-1;
+//     while(low<=high){ mid=(low+high)/2; if(A[mid]>A[0]) high=mid-1; else low=mid+1; }   // 相等往右：稳定
+//     for(j=i-1;j>=high+1;--j) A[j+1]=A[j];  A[high+1]=A[0]; }
+// 每趟都折半找位置（不先和前一个比）；比较次数 = while 走了几次，记在 cmps 里
+function binInsertion(A) {
+  const n = A.length;
+  const steps = [], passes = [], cmps = [];
+  const at = (p) => A[p - 1];
+  const done = (i) => clsFor(range(1, i), 'sv-done');
+  const ptrs = (o) => { const out = {}; for (const [k, p] of Object.entries(o)) if (p >= 1 && p <= n) out[p] = out[p] ? `${out[p]},${k}` : k; return out; };
+  steps.push({ view: { A: A.slice(), cls: done(1), zero: { label: '哨兵', item: null } }, msg: '初始序列。折半插入：第 1 个元素自己是有序表；每一趟把下一个放进 A[0]，在前面的有序表里折半找插入的位置，再把位置后面的整体后移一格。' });
+  for (let i = 2; i <= n; i++) {
+    const pass = i - 1, x = at(i);
+    let low = 1, high = i - 1, c = 0;
+    // 这一趟的结果先算出来（给 ask 用）
+    const sorted = A.slice();
+    { let lo = 1, hi = i - 1; while (lo <= hi) { const m = (lo + hi) >> 1; if (vOf(at(m)) > vOf(x)) hi = m - 1; else lo = m + 1; } const B = A.slice(0, i); B.splice(i - 1, 1); B.splice(hi, 0, x); for (let p = 0; p < i; p++) sorted[p] = B[p]; }
+    steps.push({ view: { A: A.slice(), cls: { ...done(i - 1), [i]: 'sv-cur' }, ptr: ptrs({ i, low, high }), zero: { label: '哨兵', item: x, fresh: true, cls: 'sv-cur' } }, msg: `第 ${pass} 趟：i = ${i}，A[0] = ${t(x)}，在第 1～${i - 1} 个里折半找位置：low = 1，high = ${i - 1}。`, ask: { tag: 'pass', kind: 'text', q: `第 ${pass} 趟（i = ${i}，插入 ${t(x)}）结束后，序列是什么？`, answer: seqOf(sorted) } });
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      c++;
+      const bigger = vOf(at(mid)) > vOf(x);
+      const before = { low, high };
+      if (bigger) high = mid - 1; else low = mid + 1;
+      steps.push({
+        view: { A: A.slice(), cls: { ...done(i - 1), [mid]: 'sv-done sv-cmp', [i]: 'sv-cur' }, ptr: ptrs({ low: before.low, high: before.high, mid }), zero: { label: '哨兵', item: x, cls: 'sv-cur' } },
+        msg: `mid = ⌊(${before.low} + ${before.high}) / 2⌋ = ${mid}：A[${mid}] = ${t(at(mid))} ${bigger ? '>' : '≤'} ${t(x)}，${bigger ? `往左找，high = ${high}` : `${vOf(at(mid)) === vOf(x) ? '相等也往右（稳定），' : ''}往右找，low = ${low}`}（第 ${c} 次比较）。`,
+        ask: { tag: 'mid', kind: 'pick', q: `low = ${before.low}、high = ${before.high}：下一次和哪个比？在图里点那个格子。`, answer: String(mid) },
+      });
+    }
+    cmps.push(c);
+    const to = high + 1;
+    for (let j = i - 1; j >= to; j--) A[j] = at(j); // A[j+1] = A[j]
+    A[to - 1] = x;
+    steps.push({
+      view: { A: A.slice(), cls: { ...done(i), [to]: 'sv-done sv-placed' }, ptr: ptrs({ 'high+1': to }), zero: { label: '哨兵', item: x }, fresh: range(to, i) },
+      msg: `low = ${low} > high = ${high}，停。插入的位置是 high + 1 = ${to}：第 ${to}～${i - 1} 个${to <= i - 1 ? '整体后移一格' : '不用动'}，${t(x)} 放进 A[${to}]。这一趟比较了 ${c} 次，前 ${i} 个有序了。`,
+      ask: { tag: 'place', kind: 'pick', q: `${t(x)} 最后插在第几个位置？在图里点那个格子。`, answer: String(to) },
+    });
+    passes.push(snap(A));
+  }
+  steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done'), zero: { label: '哨兵', item: null } }, msg: `排序完成，一共 ${n - 1} 趟，比较 ${cmps.reduce((a, b) => a + b, 0)} 次（每趟 ${cmps.join('、')} 次）。折半只减少了比较的次数，移动的次数和直接插入一样。` });
+  return { steps, passes, cmps };
 }
 
 // —— 希尔排序（王道的 ShellSort：增量 d 从 n/2 开始每次减半，也可以自己给；相隔 d 的元素是一组，组内直接插入）——
@@ -591,6 +638,9 @@ export function roundTable(input, r) {
 const VARIANTS = {
   shell: [
     ['shellBlock', '像是把相邻的元素分成了一组，每组是连续的一段（王道：相隔增量 d 的元素才是一组，第 1、1+d、1+2d……个）'],
+  ],
+  binsert: [
+    ['insertCount', '像是把第 1 个元素自己也算成了一趟，写的第 k 趟其实是第 k−1 趟（第 1 趟是插入第 2 个，一共 n−1 趟）'],
   ],
   insert: [
     ['insertCount', '像是把第 1 个元素自己也算成了一趟，写的第 k 趟其实是第 k−1 趟（王道：第 1 个元素自己就是有序表，第 1 趟是插入第 2 个，一共 n−1 趟）'],

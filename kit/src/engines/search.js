@@ -497,3 +497,112 @@ export const bsearchEngine = {
     ], fields);
   },
 };
+
+
+// ================= 分块查找（组件 blocksearch，视觉第 6 批）=================
+// blocks: 22 12 13 | 33 42 44 | 60 58 74（| 分块；块里不用有序，前一块的都比后一块的小）。索引表：每块的最大关键字、起始位置。
+// 先在索引表里找第一个最大关键字 ≥ key 的块（find: seq 顺序找，默认；find: binary 折半），再在那一块里从头顺序找。
+// asl: on 且每块一样长时，最后一步按公式算 ASL（王道：顺序找块 (b+1)/2 + (s+1)/2，折半 ⌈log₂(b+1)⌉ + (s+1)/2）
+function blkParse(fields) {
+  const parts = String(fields.blocks ?? '').split('|').map((b) => b.trim().split(/[\s,，、]+/).filter(Boolean));
+  if (parts.length < 2 || parts.some((b) => !b.length)) throw new Error('blocks: 用 | 分块，至少两块，如 22 12 13 | 33 42 44 | 60 58 74');
+  if (parts.flat().some((t) => !/^-?\d+(\.\d+)?$/.test(t))) throw new Error('blocks: 要写数');
+  if (parts.flat().length > 24) throw new Error('blocks: 一共最多 24 个');
+  const items = [], index = [];
+  parts.forEach((b, k) => {
+    const vals = b.map(Number);
+    index.push({ max: Math.max(...vals), start: items.length + 1, len: vals.length });
+    b.forEach((t) => items.push({ v: Number(t), text: t, block: k }));
+    if (k > 0) {
+      const prevMax = index[k - 1].max, mn = Math.min(...vals);
+      if (mn <= prevMax) throw new Error(`blocks: 块和块之间要有序：第 ${k} 块最大的 ${prevMax} 不能大于等于第 ${k + 1} 块最小的 ${mn}`);
+    }
+  });
+  const keyText = String(fields.key ?? '').trim();
+  if (!/^-?\d+(\.\d+)?$/.test(keyText)) throw new Error('blocksearch 要写 key:（要查的关键字）');
+  const find = String(fields.find ?? 'seq').trim().toLowerCase();
+  if (!['seq', 'binary'].includes(find)) throw new Error('find: 写 seq（顺序找块，默认）或 binary（折半找块）');
+  const asl = /^(on|true|yes|1)$/i.test(String(fields.asl ?? ''));
+  if (asl && new Set(index.map((b) => b.len)).size > 1) throw new Error('asl: on 要每块一样长（公式里 s 是每块的个数）');
+  return { items, index, key: Number(keyText), keyText, find, asl, mistake: null };
+}
+
+function blkRun(input) {
+  const { items, index, key, keyText } = input;
+  const find = input.mistake === 'flip' ? (input.find === 'seq' ? 'binary' : 'seq') : input.find;
+  const b = index.length, steps = [], cmp = [];
+  steps.push({ view: { stage: 'index' }, msg: `分块查找：索引表里是每块最大的关键字和这一块的起始位置（${index.map((x, k) => `第 ${k + 1} 块 ${x.max}、从 ${x.start} 开始`).join('；')}）。查 ${keyText}：先${find === 'seq' ? '顺序' : '折半'}查索引表找块，再在块里顺序找。` });
+  let blk = -1;
+  if (find === 'seq') {
+    for (let k = 0; k < b; k++) {
+      cmp.push(String(index[k].max));
+      const hit = key <= index[k].max;
+      steps.push({ view: { stage: 'index', at: k, cmp: cmp.slice() }, msg: `${keyText} ${hit ? '≤' : '>'} ${index[k].max}${hit ? `：在第 ${k + 1} 块（第 ${index[k].start}～${index[k].start + index[k].len - 1} 个）里` : '，往后看下一块'}。`, ask: { tag: 'block', kind: 'pick', q: `查 ${keyText}：索引表里第 ${cmp.length} 次和哪个比？在图里点出来。`, answer: `i${k}` } });
+      if (hit) { blk = k; break; }
+    }
+  } else {
+    let low = 0, high = b - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      cmp.push(String(index[mid].max));
+      const le = key <= index[mid].max;
+      steps.push({ view: { stage: 'index', at: mid, low, high, cmp: cmp.slice() }, msg: `low = ${low + 1}、high = ${high + 1}，mid = ${mid + 1}：${keyText} ${le ? '≤' : '>'} ${index[mid].max}，${le ? `high = ${mid}` : `low = ${mid + 2}`}。`, ask: { tag: 'block', kind: 'pick', q: `查 ${keyText}：索引表里第 ${cmp.length} 次和哪个比？在图里点出来。`, answer: `i${mid}` } });
+      if (le) high = mid - 1; else low = mid + 1;
+    }
+    if (low < b) blk = low;
+    steps.push({ view: { stage: 'index', at: blk >= 0 ? blk : undefined, cmp: cmp.slice() }, msg: blk >= 0 ? `low = ${low + 1} > high = ${high + 1}，停：第一个最大关键字 ≥ ${keyText} 的是第 ${blk + 1} 块。` : `low > high，所有块的最大关键字都比 ${keyText} 小：表里没有它。` });
+  }
+  let found = null;
+  if (blk < 0) {
+    if (find === 'seq') steps.push({ view: { stage: 'index', cmp: cmp.slice() }, msg: `${keyText} 比最后一块的最大关键字还大：表里没有它，查找失败。` });
+  } else {
+    const { start, len } = index[blk];
+    for (let p = start; p < start + len; p++) {
+      cmp.push(items[p - 1].text);
+      const hit = items[p - 1].v === key;
+      steps.push({ view: { stage: 'block', blk, at: p, cmp: cmp.slice(), found: hit ? p : null }, msg: `第 ${p} 个是 ${items[p - 1].text}：${hit ? `等于 ${keyText}，找到了，在第 ${p} 个。一共比了 ${cmp.length} 次（索引表 ${cmp.length - (p - start + 1)} 次、块里 ${p - start + 1} 次）` : '不是，往后'}。`, ...(hit ? { ask: { tag: 'pos', kind: 'number', q: `${keyText} 在表里第几个？`, answer: p } } : {}) });
+      if (hit) { found = p; break; }
+    }
+    if (found === null) steps.push({ view: { stage: 'block', blk, cmp: cmp.slice() }, msg: `第 ${blk + 1} 块找完了也没有 ${keyText}：查找失败。` });
+  }
+  let asl = null;
+  if (input.asl) {
+    const s = index[0].len;
+    const a = find === 'seq' ? frac(b + 1, 2) : String(Math.ceil(Math.log2(b + 1)));
+    const aNum = find === 'seq' ? (b + 1) / 2 : Math.ceil(Math.log2(b + 1));
+    const total = aNum + (s + 1) / 2;
+    const tot = frac(Math.round(total * 2), 2);
+    asl = `${a} + ${frac(s + 1, 2)} = ${tot}`;
+    steps.push({ view: { stage: 'index', cmp: cmp.slice() }, msg: `ASL成功 = 查索引表 + 查块内：${find === 'seq' ? `(b + 1)/2 = (${b} + 1)/2` : `⌈log₂(b + 1)⌉ = ⌈log₂${b + 1}⌉`} = ${a}，(s + 1)/2 = (${s} + 1)/2 = ${frac(s + 1, 2)}，一共 ${tot}（b = ${b} 块，每块 s = ${s} 个）。`, ask: { tag: 'asl', kind: 'number', q: 'ASL成功是多少？', answer: total, display: tot, alts: numForms(Math.round(total * 2), 2) } });
+  }
+  return { steps, passes: [cmp], found, asl };
+}
+
+function blkView(s, input) {
+  const { items, index } = input;
+  const cmpSet = new Set(s.cmp || []);
+  const idx = index.map((x, k) => `<div class="sv-cell bk-idx${s.stage === 'index' && s.at === k ? ' sv-cur' : cmpSet.has(String(x.max)) && s.stage === 'index' ? ' sv-cmp' : ''}" data-pick="i${k}" data-label="${esc(x.max)}">${esc(x.max)}<small>${x.start}</small></div>`).join('');
+  const cls = {}, ptr = {};
+  items.forEach((x, i) => { cls[i + 1] = `bk-b${x.block % 3}${s.blk === x.block ? ' bk-in' : ''}`; });
+  if (s.stage === 'block' && s.at) { cls[s.at] += ' sv-cur'; ptr[s.at] = '比'; }
+  if (s.found) cls[s.found] += ' sv-done';
+  if (s.low !== undefined) { /* 折半找块：low、high 写在索引表下面 */ }
+  const ptrIdx = s.low !== undefined ? index.map((_, k) => [k === s.low ? 'low' : '', k === s.high ? 'high' : '', k === s.at ? 'mid' : ''].filter(Boolean).join(',')) : null;
+  return `<div class="bk"><div class="bk-h muted">索引表（最大关键字 / 起始位置）</div><div class="bk-row">${idx}</div>${ptrIdx ? `<div class="bk-ptr">${ptrIdx.map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : ''}<div class="bk-h muted">查找表</div>${arrayView(items.map((x) => x.text), { cls, ptr })}</div>${chips([['查找', input.keyText]])}`;
+}
+
+export const blocksearchEngine = {
+  name: 'blocksearch',
+  title: '分块查找',
+  parse: blkParse,
+  run: blkRun,
+  view: blkView,
+  quiz(input, r) {
+    return { q: `分块查找：表是 ${input.index.map((_, k) => input.items.filter((x) => x.block === k).map((x) => x.text).join(' ')).join(' | ')}（| 分块），索引表${input.find === 'seq' ? '顺序' : '折半'}查找、块内顺序查找。查 ${input.keyText} 时依次和哪些关键字比较（索引表里的最大关键字、块里的元素）？按顺序写出来。`, type: 'seq', answer: r.passes[0].join(' ') };
+  },
+  variants(input, fields) {
+    return differing(blocksearchEngine, input, [
+      { label: input.find === 'seq' ? '像是折半查了索引表（题里是顺序查索引表）' : '像是顺序查了索引表（题里是折半查索引表）', input: { ...input, mistake: 'flip' } },
+    ], fields);
+  },
+};

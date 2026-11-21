@@ -1949,6 +1949,47 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 .sv-gtbl .sv-code { min-width: 5.5em; }
 /* 两张图并排（森林 / 二叉树、二叉树 / 结点表），放不下就上下排 */
 .sv-panels { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-start; justify-content: center; }
+/* —— 存储结构 store（视觉第 6 批）：邻接表、孩子链一行一个顶点，结点是小格子，箭头连着，最后是 ∧ —— */
+.sto-list { display: grid; gap: 6px; font: 15px/1.3 var(--sans); }
+.sto-list-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.sto-idx { width: 1.6em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sto-head { min-width: 2.2em; padding: 4px 8px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.55); border-radius: 6px; text-align: center; font-weight: 600; color: var(--chalk); }
+.sto-node { display: inline-flex; flex-direction: column; align-items: center; min-width: 2.2em; padding: 3px 7px 2px; border: 1px solid rgb(var(--chalk-rgb) / 0.35); border-radius: 6px; color: var(--body); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.sto-node small { font-size: 11px; color: var(--muted); }
+.sto-node.sv-new { border-color: var(--yellow); color: var(--yellow); }
+.sto-arrow { color: var(--muted); }
+.sto-nil { color: var(--muted); padding-left: 2px; }
+.sto-mx td { min-width: 2em; text-align: center; }
+.sto-mx td.sto-h { font-weight: 600; color: var(--chalk); }
+.sto-mx td.sto-hit { color: var(--yellow); font-weight: 700; }
+.sv-net .sv-gedge.sv-edge-later { opacity: 0.18; }
+/* 双端队列 deque：中间一排格子两头标着能进能出 / 只能进 / 只能出，上面还没进的、下面出队序列 */
+.dq { display: flex; flex-direction: column; align-items: center; gap: 12px; font: 16px/1.3 var(--sans); }
+.dq-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.dq-lab { font-size: 14px; margin-right: 4px; }
+.dq-tok { min-width: 30px; padding: 3px 8px; border-radius: 6px; border: 1px solid rgb(var(--chalk-rgb) / 0.3); text-align: center; color: var(--body); }
+.dq-tok.is-out { border-color: var(--green); color: var(--green); }
+.dq-tok.sv-new { border-color: var(--yellow); color: var(--yellow); }
+.dq-mid { display: flex; align-items: center; gap: 10px; }
+.dq-end { display: flex; flex-direction: column; align-items: center; font-size: 14px; color: var(--chalk); }
+.dq-end small { font-size: 11.5px; color: var(--muted); }
+.dq-cells { display: flex; min-width: 120px; min-height: 46px; padding: 4px 6px; border-top: 2px solid rgb(var(--chalk-rgb) / 0.55); border-bottom: 2px solid rgb(var(--chalk-rgb) / 0.55); gap: 4px; justify-content: center; }
+.dq-cells .sv-cell { min-width: 36px; }
+.dq-cells.is-noin-l { border-left: 3px dashed var(--coral); }
+.dq-cells.is-noout-l { border-left: 3px dashed var(--blue); }
+.dq-empty { align-self: center; font-size: 14px; }
+/* 分块查找 blocksearch：上面索引表（最大关键字，小字是起始位置），下面查找表按块染色 */
+.bk { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.bk-h { font: 14px var(--sans); }
+.bk-row { display: flex; gap: 6px; }
+.bk-idx { display: flex; flex-direction: column; align-items: center; min-width: 44px; }
+.bk-idx small { font-size: 11px; color: var(--muted); }
+.bk-ptr { display: flex; gap: 6px; font: 12px var(--sans); color: var(--yellow); }
+.bk-ptr span { min-width: 44px; text-align: center; }
+.sv-cell.bk-b0 { background: rgb(var(--blue-rgb) / 0.10); }
+.sv-cell.bk-b1 { background: rgb(var(--pink-rgb) / 0.10); }
+.sv-cell.bk-b2 { background: rgb(var(--chalk-rgb) / 0.07); }
+.sv-cell.bk-in { box-shadow: inset 0 -3px 0 var(--yellow); }
 .sv-panel { min-width: 0; max-width: 100%; display: flex; flex-direction: column; align-items: center; }
 .sv-panel-h { font-family: var(--hand); font-size: 19px; color: var(--muted); margin-bottom: 2px; }
 .sv-uf, .sv-bt { display: flex; flex-direction: column; align-items: center; gap: 10px; }
