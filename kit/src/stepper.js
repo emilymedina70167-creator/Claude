@@ -10,6 +10,7 @@ import { figureControls, sliderText } from './plot.js';
 import { commonSpec, resolveAsks, checkAsk, askAnswerText, stepLabel, parseAskField, fillSpec, checkFill, cellName, cellAnswer, fillOrder, misreadFill, trackFields, calcFields, parseVary, stepOfEvent, stepOutline } from './stepperspec.js';
 import { markDraft } from './drafts.js';
 import { answerWidget, textAnswerSpec } from './blocks/answer.js';
+import { formulaSpec } from './formula.js';
 import { snapshot, animateFrom, settle } from './morph.js';
 import { cellOk as cellOkFor } from './stepperspec.js';
 import { ICONS, playLabel, trackFill } from './icons.js';
@@ -66,7 +67,7 @@ export function stepperBlock(engine) {
     // practice 里随机取的数：「数据已经有序」这类提醒不是老师写的问题，不报
     if (!opts.embedded) for (const e of engine.problems?.(input, run) || []) session.problem(el, engine.name, e, { soft: true });
     for (const msg of calcProblems([fields.title, fields.q, fields.note], varyVals)) session.problem(el, engine.name, msg);
-    const quiz = common.mode === 'quiz' ? engine.quiz?.(input, run, fields) : null;
+    const quiz = common.mode === 'quiz' ? engine.quiz?.(input, run, fields, { tex: (x) => tex2html(x) }) : null;
     if (common.mode === 'quiz' && !quiz) throw new Error(`${engine.name} 没有 quiz 模式`);
     let fill = null;
     if (common.mode === 'fill') {
@@ -437,19 +438,21 @@ export function stepperBlock(engine) {
     // —— quiz：只给输入，写出结果；做完可以看过程 ——
     if (quiz) {
       const qbox = body.querySelector('.sv-quiz');
-      const spec = textAnswerSpec(quiz.type || 'seq', quiz.answer, { width: quiz.width });
+      // type: 'formula'（含参数的行列式这类）：学生写一个式子，formula.js 代几组数比；别的照旧是文字答案
+      const fml = quiz.type === 'formula' ? formulaSpec(quiz.answer, quiz.free || '') : null;
+      const spec = fml ? { display: quiz.display || quiz.answer } : textAnswerSpec(quiz.type || 'seq', quiz.answer, { width: quiz.width });
       const q = fields.q ? `${fields.q}\n\n${quiz.q}` : quiz.q;
       const onTry = (t) => {
         // 错法的结果也照这道题的题型判（二进制、十六进制、数、序列的各种写法都认）
-        const misread = t.ok ? '' : (variants().find((v) => {
+        const misread = t.ok || fml ? '' : (variants().find((v) => {
           try {
-            const a = engine.quiz(v.input, v.run, fields);
+            const a = engine.quiz(v.input, v.run, fields, { tex: (x) => tex2html(x) });
             return !!a && textAnswerSpec(quiz.type || 'seq', a.answer, { width: quiz.width }).check(t.text).ok;
           } catch { return false; }
         })?.label || '');
         record({ type: 'stepper', engine: engine.name, liveOnly: true, title, q: plainText(q), value: t.text, ok: t.ok, attempts: t.attempts, detail: '写出结果', misread: misread || undefined, el });
       };
-      answerWidget(qbox, { q, qhtml: quiz.qhtml ? `<div class="sv-stage sv-stage-q">${quiz.qhtml}</div>` : '', text: spec, explain: quiz.explain, hint: fields.hint, onTry }, (r) => {
+      answerWidget(qbox, { q, qhtml: quiz.qhtml ? `<div class="sv-stage sv-stage-q">${quiz.qhtml}</div>` : '', ...(fml ? { formula: fml, answer: quiz.answer } : { text: spec }), explain: quiz.explain, hint: fields.hint, onTry }, (r) => {
         record({ type: 'stepper', engine: engine.name, final: true, title, q: plainText(q), ok: r.ok, attempts: r.attempts, revealed: r.revealed || undefined, expected: spec.display, detail: '写出结果', el });
         gate?.();
         qbox.insertAdjacentHTML('beforeend', '<button type="button" class="btn sv-show-demo">看一步步的过程</button>');

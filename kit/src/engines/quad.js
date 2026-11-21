@@ -303,8 +303,9 @@ export function view(s, input, opts = {}) {
   return h;
 }
 
-export function quiz(input, r) {
-  return { q: '这个二次型的正惯性指数、负惯性指数各是多少？（空格隔开）', qhtml: view(r.steps[0].view, input, { k: 0 }), type: 'seq', answer: `${r.p} ${r.q}` };
+// opts.tex：外壳给的公式画法（mode: quiz 的题图里矩阵、名字是公式）
+export function quiz(input, r, fields = {}, opts = {}) {
+  return { q: '这个二次型的正惯性指数、负惯性指数各是多少？（空格隔开）', qhtml: view(r.steps[0].view, input, { k: 0, tex: opts.tex }), type: 'seq', answer: `${r.p} ${r.q}` };
 }
 
 export function table(input, r) {

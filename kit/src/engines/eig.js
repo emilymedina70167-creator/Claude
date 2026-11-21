@@ -186,8 +186,9 @@ export function view(s, input, opts = {}) {
   return h || '<div class="muted">（开始）</div>';
 }
 
-export function quiz(input, r) {
-  return { q: '求 A 的全部特征值（重根写几遍，空格隔开）。', qhtml: view(r.steps[0].view, input, { k: 0 }), type: 'seq', answer: perms(r.values).join(' | ') };
+// opts.tex：外壳给的公式画法（mode: quiz 的题图里矩阵、名字是公式）
+export function quiz(input, r, fields = {}, opts = {}) {
+  return { q: '求 A 的全部特征值（重根写几遍，空格隔开）。', qhtml: view(r.steps[0].view, input, { k: 0, tex: opts.tex }), type: 'seq', answer: perms(r.values).join(' | ') };
 }
 
 export function table(input, r) {

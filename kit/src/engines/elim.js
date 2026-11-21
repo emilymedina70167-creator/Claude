@@ -644,10 +644,11 @@ export function view(s, input, opts = {}) {
 
 // ================= 写结果、填表 =================
 
-export function quiz(input, r) {
+// opts.tex：外壳给的公式画法（mode: quiz 的题图里矩阵、名字是公式）
+export function quiz(input, r, fields = {}, opts = {}) {
   // 题面画开始的样子（矩阵、增广矩阵、向量组）：quiz 时看不到演示，不画就不知道做哪一题
   const q = quiz0(input, r);
-  return q && { ...q, qhtml: view(r.steps[0].view, input, { k: 0 }) };
+  return q && { ...q, qhtml: view(r.steps[0].view, input, { k: 0, tex: opts.tex }) };
 }
 function quiz0(input, r) {
   if (input.param) return { q: `${input.param} 取哪些值时要单独讨论？（从小到大，空格隔开）`, type: 'seq', answer: r.special.join(' ') || '无' };
