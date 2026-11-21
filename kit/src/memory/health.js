@@ -113,13 +113,13 @@ export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.n
   // 只清半小时以前的：另一台设备上刚开的课，证据可能比这节课先订阅到
   const orphans = orphan.filter((e) => e.src !== 'say' && Number(e.at || 0) < now - 30 * 60000).map((e) => String(e.id));
 
-  // —— 考情（只记不改：标签、映射、画像、答案的核对由开发那边和教研室补）——
+  // —— 考情（只记不改：标签、映射、画像、答案的核对由开发那边补，或外部写进夜班的计划；第十五轮起没有谁自动重写，这里不许诺）——
   const NAME = { LA: '线代', HM: '高数', PS: '概率', DS: '数据结构', CO: '组成原理', OS: '操作系统', CN: '计网', EN: '英语', PO: '政治' };
   for (const [c, st] of Object.entries(exam?.stats || {})) {
     if (st.untagged) note('exam', c, `${NAME[c] || c}：${st.untagged} 道真题还没打标签（统计、考情一节算不到它们）`);
     if (st.holes?.blocks?.length) note('exam', c, `${NAME[c] || c}：${st.holes.blocks.length} 块没挂考点（上这几块课时没有考情）`);
-    if (st.stale?.profiles?.length && exam.statsAt && now - exam.statsAt > 7 * 86400000) note('exam', c, `${NAME[c] || c}：${st.stale.profiles.length} 个考点的画像过时一周以上（教研室还没重写）`);
-    else if (st.stale?.profiles?.length) note('exam', c, `${NAME[c] || c}：${st.stale.profiles.length} 个考点的画像过时（等教研室重写）`);
+    if (st.stale?.profiles?.length && exam.statsAt && now - exam.statsAt > 7 * 86400000) note('exam', c, `${NAME[c] || c}：${st.stale.profiles.length} 个考点的画像过时一周以上（考点下的真题变了以后没重写过）`);
+    else if (st.stale?.profiles?.length) note('exam', c, `${NAME[c] || c}：${st.stale.profiles.length} 个考点的画像过时（考点下的真题变了以后没重写过）`);
     if (st.unverified) note('exam', c, `${NAME[c] || c}：${st.unverified} 道真题的答案没核过（验算的式子算不出来）`);
   }
   const target = (Array.isArray(mem.exam) ? mem.exam : []).find((x) => x?.id === 'target');

@@ -165,7 +165,8 @@ export function classRows(mem = {}) {
       id: s.id, date: s.date || '', block: s.block || '', title: s.title || '', status: s.status || '',
       minutes: s.report?.activeMs ? Math.round(s.report.activeMs / 60000) : null, line: s.report?.line || '',
       verify: s.verify || null, summary: cutMd(first, 80), usage: s.usage || null, review: s.review || null, startedAt: s.startedAt || 0,
-      kind: ['talk', 'stage', 'live', 'unit'].includes(s.kind) ? s.kind : 'class',
+      // 外部的课、检验的复测课也照自己的种类（以前落成「课堂」）；练一练另有「练习」的标，这里不重复
+      kind: ['ext', 'check', 'talk', 'stage', 'live', 'unit'].includes(s.kind) ? s.kind : 'class',
       // 课堂里的 Claude 讲的课（课堂、一问一答）：「接着上课」
       teach: isTeach(s),
       // 练一练、课前热身（kind: drill）：列表里照旧算一行，「上一节」不算它
@@ -340,10 +341,11 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
   const due = dueList(live(mem, 'reviews'), today).filter((d) => d.days <= 0);
   const todo = [];
   const ids = packIds(space);
-  // 学习台自己管自己（docs/autonomy-plan.md）：备课、改记忆、判复现都由学习台做，外部只做开发，这里只告诉它现状
-  if (!pack) todo.push(`下一节${SPACES[space]?.label || ''}课还没备：学习台首页「让 Claude 备课」自己备（资料包 pack/${ids.main}、pack/${ids.problems}），不用你代写。`);
-  if (proposals.length) todo.push(`上一节课堂里的 Claude 留了 ${proposals.length} 条提议（observations 里 kind: proposal）：开发时参考，不用你代写记忆。`);
-  if (open.length) todo.push(`还有 ${open.length} 张改动单没写进去（pending，status: open）：学习台首页打开时会自己写，不用你代写。`);
+  // 第十五轮起外部是主讲（备课、上课、写记忆都是它）：这里只写事实，不分派活（以前写的「你只做开发」「首页让 Claude 备课」
+  // 是第十三、十四轮的角色，首页的备课早收掉了）
+  if (!pack) todo.push(`下一节${SPACES[space]?.label || ''}课的资料包还没写（pack/${ids.main}、pack/${ids.problems}）。`);
+  if (proposals.length) todo.push(`上一节页面里的 Claude 留了 ${proposals.length} 条提议（observations 里 kind: proposal）。`);
+  if (open.length) todo.push(`还有 ${open.length} 张改动单没写进去（pending，status: open）：学习台首页打开时会自己写进去。`);
   return [
     head ? `【${SPACES[space]?.label || ''}】` : `【学习台 · 接手 · ${SPACES[space]?.label || ''}】`,
     head ? '' : `- 学习台：${deskUrl || kitUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。说明书、组件写法、记忆、每节课都在它里面：先用 Artifact 工具 action: "read"、path: "CLAUDE-PROJECT.md" 读说明书，记忆用 ArtifactData 读。`,
@@ -355,7 +357,7 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
       : r.kind === 'unit' ? `- 自学单元 ${r.id}「${cut(r.title, 40)}」我还没学完。` : `- 有一节${r.kind === 'talk' ? '一问一答的课' : r.kind === 'stage' ? '舞台课' : '课堂'}还没下课：${r.id}。`)),
     due.length ? `- 到期的复现组：${due.map((d) => `${d.id}${d.days < 0 ? `（过期 ${-d.days} 天）` : ''}`).join('、')}（学习台首页能直接开复现课）。` : '',
     pack ? `- 已经备好的下一节：${cut(pack.unit || '', 60)}${pack.block ? `（${pack.block}）` : ''}。` : '',
-    todo.length && !head ? `- 现状（学习台自己处理，你只做开发）：\n${todo.map((t) => `  - ${t}`).join('\n')}` : '',
+    todo.length && !head ? `- 现状：\n${todo.map((t) => `  - ${t}`).join('\n')}` : '',
     open.length ? `- 还没写进去的改动：${open.slice(0, 6).map((p) => cut(pendingTitle(p), 50)).join('；')}${open.length > 6 ? '……' : ''}` : '',
   ].filter(Boolean).join('\n');
 }

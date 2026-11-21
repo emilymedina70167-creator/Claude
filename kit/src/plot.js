@@ -3,6 +3,7 @@ import { numText } from './expr.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const SIZE = 480;
+export const PLANE_SIZE = SIZE;
 
 export function createPlane(container, { range = 5 } = {}) {
   const svg = document.createElementNS(NS, 'svg');
@@ -76,22 +77,10 @@ export function createPlane(container, { range = 5 } = {}) {
       }
       return g;
     },
-    // 给标签找一个不和已有标签重叠、也不出界的位置
+    // 给标签找一个不和已有标签重叠、也不出界的位置（labelSpot）
     placeLabel(x, y, ux, uy, label) {
-      const w = textWidth(label);
-      const along = 16 + (w / 2) * Math.abs(ux) + 14 * Math.abs(uy);
-      const cands = [
-        [x + ux * along, y + uy * along],
-        [x + ux * 10 - uy * (w / 2 + 12), y + uy * 10 + ux * 22],
-        [x + ux * 10 + uy * (w / 2 + 12), y + uy * 10 - ux * 22],
-        [x + ux * (along + 22), y + uy * (along + 22)],
-        [x - uy * (w / 2 + 16), y + ux * 26],
-        [x + uy * (w / 2 + 16), y - ux * 26],
-      ];
-      const inside = ([cx, cy]) => cx - w / 2 > 2 && cx + w / 2 < SIZE - 2 && cy > 16 && cy < SIZE - 14;
-      const free = (c) => !p.placed.some((b) => overlap(b, box(c[0], c[1], w)));
-      const pick = cands.find((c) => inside(c) && free(c)) || cands.find(inside) || cands[0];
-      p.placed.push(box(pick[0], pick[1], w));
+      const pick = labelSpot(x, y, ux, uy, label, p.placed);
+      p.placed.push(box(pick[0], pick[1], textWidth(label)));
       return pick;
     },
     dot(pt, cls = 'dot', r = 5) {
@@ -189,6 +178,30 @@ function add(parent, tag, attrs) {
 }
 
 // 粗略估算标签宽度（中文字更宽）
+// 向量的名字放哪（纯函数，屏幕坐标）：先在箭头尖前面、两侧找；尖在窗口边上时那几处都在框外，再退到箭杆两旁
+// （以前退无可退就用第一个，画到框外被裁掉：2026-11-18 外部课里 Ax、BAx 两个名字都没出来）；还不行夹进框里
+export function labelSpot(x, y, ux, uy, label, placed = []) {
+  const w = textWidth(label);
+  const along = 16 + (w / 2) * Math.abs(ux) + 14 * Math.abs(uy);
+  const side = w / 2 + 14;
+  const back = (k, s) => [x - ux * k - uy * s, y - uy * k + ux * s];
+  const cands = [
+    [x + ux * along, y + uy * along],
+    [x + ux * 10 - uy * (w / 2 + 12), y + uy * 10 + ux * 22],
+    [x + ux * 10 + uy * (w / 2 + 12), y + uy * 10 - ux * 22],
+    [x + ux * (along + 22), y + uy * (along + 22)],
+    [x - uy * (w / 2 + 16), y + ux * 26],
+    [x + uy * (w / 2 + 16), y - ux * 26],
+    back(30, side), back(30, -side), back(30, 26), back(30, -26), back(60, side), back(60, -side),
+  ];
+  const inside = ([cx, cy]) => cx - w / 2 > 2 && cx + w / 2 < SIZE - 2 && cy > 16 && cy < SIZE - 14;
+  const free = (c) => !placed.some((b) => overlap(b, box(c[0], c[1], w)));
+  const hit = cands.find((c) => inside(c) && free(c)) || cands.find(inside);
+  if (hit) return hit;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  return [clamp(cands[0][0], w / 2 + 3, SIZE - w / 2 - 3), clamp(cands[0][1], 17, SIZE - 15)];
+}
+
 const textWidth = (s) => [...String(s)].reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 30 : /[₀-₉]/.test(ch) ? 11 : 16), 0);
 const box = (cx, cy, w) => ({ l: cx - w / 2 - 2, r: cx + w / 2 + 2, t: cy - 15, b: cy + 15 });
 const overlap = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;

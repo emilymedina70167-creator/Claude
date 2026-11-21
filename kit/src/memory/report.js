@@ -13,6 +13,7 @@ import { checkLine } from '../check/record.js';
 // 加「这节课要拿下的事」（aims）时没有升版本号：升了首页会把每节旧课重算一遍，报告的时间一变，知识点归类就要
 // 每节再调用一次 Claude 重做（skills.js 的 needsSkills），掌握和预测分可能跟着动；而旧课重算出来只多一个空的 aims。
 // 新下课的课本来就用新代码算，自然带 aims；读的地方都当它可能没有（r.aims?.length）。给报告加 scenes 时也是这样办的。
+// 2026-11-21「每次都对是一次对」（以前判改对了）也没升：只动少数刷新后又做一遍的题，旧课照旧，新课按新的算。
 export const REPORT_VERSION = 2;
 export const IDLE_GAP = 10 * 60 * 1000; // 两个动静之间超过 10 分钟：算走开了，不计进时长
 export const REPORT_MAX = 200 * 1024; // 数据库一个文档最多 256 KiB，留点余量
@@ -63,6 +64,9 @@ export function guessed({ kind, multi, options, attempts, ok } = {}) {
 
 const sureOf = (evs) => { const s = evs.filter((e) => e.kind === 'sure').at(-1); const v = s?.detail?.sure ?? s?.sure; return typeof v === 'boolean' ? v : null; };
 
+// 作答的文字：舞台挑战（type: stage 带 goal）的 text 是写给老师的叙述（「学生做到了挑战 g1…」），不是学生写的答案，不算
+const answerText = (r) => (r && !(r.type === 'stage' && r.goal) ? r.text ?? '' : '');
+
 function itemOf(key, list, segs) {
   const recs = list.filter((e) => e.src === 'record').sort(byAt);
   const evs = list.filter((e) => e.src === 'event').sort(byAt);
@@ -82,7 +86,8 @@ function itemOf(key, list, segs) {
   const giveup = recs.some((r) => r.giveup) || evs.some((e) => e.kind === 'giveup');
   const revealed = !giveup && (!!final?.revealed || (recs.some((r) => r.revealed) && !(final?.ok === true)));
   const lastOk = typeof final?.ok === 'boolean' ? final.ok : tries.length ? tries.at(-1) : null;
-  const outcome = giveup ? 'giveup' : revealed ? 'revealed' : lastOk === true ? (tries[0] === true && attempts <= 1 ? 'first' : 'ok') : lastOk === false ? 'wrong' : 'open';
+  // 一次对：第一次就对、之后也没错过（每次都对是刷新后又做了一遍，以前按条数算成「改对了」）
+  const outcome = giveup ? 'giveup' : revealed ? 'revealed' : lastOk === true ? (tries[0] === true && !tries.includes(false) ? 'first' : 'ok') : lastOk === false ? 'wrong' : 'open';
   // 用时：有屏幕计时的（dr-batch4 第 4 条，带 msTotal）取第一次交的 ms（首次）和最后一次的 msTotal（一共）；以前的记录照旧取最大的 ms
   const timed = recs.filter((r) => num(r.msTotal));
   const ms = timed.length ? num([...timed].sort(byAt)[0].ms) || null : Math.max(0, ...recs.map((r) => num(r.ms) || 0)) || null;
@@ -121,9 +126,9 @@ function itemOf(key, list, segs) {
     sure: sureOf(evs),
     ms,
     ...(msTotal ? { msTotal } : {}),
-    last: cut(final?.last ?? recs.at(-1)?.value ?? recs.at(-1)?.text ?? '', 200),
+    last: cut(final?.last ?? recs.at(-1)?.value ?? answerText(recs.at(-1)), 200),
     // 写错的那几次写了什么（选择题记在 wrong 里）：这节课的一页（sheet.js）里「当时是怎么错的」
-    wrongs: uniq([...recs.filter((r) => r.ok === false).map((r) => cut(r.value ?? r.text ?? '', 80)), ...recs.flatMap((r) => (Array.isArray(r.wrong) ? r.wrong.map((w) => cut(w, 80)) : []))].filter(Boolean)).slice(0, 3),
+    wrongs: uniq([...recs.filter((r) => r.ok === false).map((r) => cut(r.value ?? answerText(r), 80)), ...recs.flatMap((r) => (Array.isArray(r.wrong) ? r.wrong.map((w) => cut(w, 80)) : []))].filter(Boolean)).slice(0, 3),
     expected: final?.expected !== undefined ? cut(final.expected, 120) : undefined,
     images: uniq(recs.flatMap((r) => (Array.isArray(r.images) ? r.images : []))),
     turn: Math.min(...list.map((e) => num(e.turn) ?? Infinity)),

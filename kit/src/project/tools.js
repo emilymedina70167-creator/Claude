@@ -90,7 +90,7 @@ export function projectTools({ db, getData = () => ({}), getBooks = () => null, 
     },
     {
       name: 'search',
-      description: `在学习台里按字找，回命中的路径和那一小段原文（最多 30 条，分高的在前；要全文再 read）。in 可以只找其中几处：${SEARCH_IN.join('、')}（books 教材，exam 真题和考点，evidence 每一次作答和说的话，turns 每节课的每一轮，chats 和班主任的对话，notebook 你的笔记，old 以前一条条存的记忆和学习的账）；不写就全找。每调一次多等一整轮。`,
+      description: `在学习台里按字找，回命中的路径和那一小段原文（最多 30 条，分高的在前；要全文再 read）。in 可以只找其中几处：${SEARCH_IN.join('、')}（books 教材，exam 真题和考点，evidence 每一次作答和说的话，turns 每节课的每一轮，chats 以前和班主任的对话，notebook 你的笔记，old 以前一条条存的记忆和学习的账）；不写就全找。每调一次多等一整轮。`,
       inputSchema: { type: 'object', properties: { q: { type: 'string' }, in: { type: 'array', items: { type: 'string' } } }, required: ['q'] },
       async execute(input) {
         const q = String(input?.q ?? '').trim();

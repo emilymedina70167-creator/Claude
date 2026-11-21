@@ -58,7 +58,7 @@ export function createExamPage(host, { db, getData, getMeta, getBoard, space }) 
     const courses = SPACE_COURSES[space()] || [];
     host.innerHTML = `<section class="dk-card ex-target"><h2 class="dk-h">${escapeHtml(schoolLine(t))}</h2>
         <p class="dk-sub muted">考 ${(t.subjects || []).join('、')} · 离考试 ${n} 天 · 目标 ${t.goal} 分</p>
-        ${lines.length ? `<ul class="ex-list">${lines.map((l) => `<li><span>${l.year} 年${escapeHtml(l.kind || '')}</span><b>${escapeHtml(String(l.value))}</b></li>`).join('')}</ul>` : '<p class="muted">历年分数线还没核过（教研室查到两次一样的数才写上）。</p>'}</section>
+        ${lines.length ? `<ul class="ex-list">${lines.map((l) => `<li><span>${l.year} 年${escapeHtml(l.kind || '')}</span><b>${escapeHtml(String(l.value))}</b></li>`).join('')}</ul>` : '<p class="muted">历年分数线还没核过。</p>'}</section>
       ${courses.map((c) => heatCard(c, meta.stats?.[c], getBoard?.())).join('')}
       ${open ? bank() : ''}
       <section class="dk-card"><details class="dk-fold"><summary><h2 class="dk-h">怎么算的</h2></summary>

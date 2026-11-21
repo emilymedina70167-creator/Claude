@@ -41,7 +41,7 @@ function profileText(info, cut = 0) {
     if (p.how) lines.push(`- ${flat(clean(p.how), cut || 600)}`);
     for (const t of p.traps || []) { const qs = (t.qs || []).filter((x) => ok.has(x)); lines.push(`- 坑 ${t.id}：${flat(clean(t.text), cut ? 80 : 200)}${qs.length ? `（${qs.join('、')}）` : ''}`); }
   }
-  return lines.length ? `## 怎么考、典型的坑（教研室归纳的，引的是题号）\n${lines.join('\n')}` : '';
+  return lines.length ? `## 怎么考、典型的坑（考点画像，引的是题号）\n${lines.join('\n')}` : '';
 }
 function repText(q, info, cut) {
   const how = HOW[info.course]?.[q.tags?.how] || '';

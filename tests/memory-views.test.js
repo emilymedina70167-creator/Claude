@@ -149,7 +149,8 @@ test('启动语：说明书地址、学到哪、上一节、到期的复现组�
   m.sessions.push({ id: 'c-20261028-2', date: TODAY, kind: 'live', title: '分块', status: 'open', startedAt: 9 });
   assert.match(handoffText(m, { today: TODAY }), /实时黑板 c-20261028-2「分块」还开着：接着写就往 sessions\/c-20261028-2\/steps 写/);
   assert.equal(classRows(m)[0].kind, 'live');
-  assert.match(t, /下一节数学课还没备：学习台首页「让 Claude 备课」自己备（资料包 pack\/main/);
+  // 2026-11-21：外部是主讲，简报只写事实（不再写「首页让 Claude 备课」）
+  assert.match(t, /下一节数学课的资料包还没写（pack\/main/);
   assert.match(t, /这一科：数学/);
   assert.match(handoffText(m, { today: TODAY, space: "en" }), /pack\/main-en/);
   assert.match(t, /1 张改动单没写进去/);

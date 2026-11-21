@@ -196,7 +196,7 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
         <p class="muted">${KIND_TEXT[r.kind]}${r.block ? ` · ${inline(blockName(r.block))}` : ''}${r.minutes !== null ? ` · ${r.minutes} 分钟` : ''}${r.usage?.calls ? ` · 调用 ${r.usage.calls} 轮，${esc(tokenText(r.usage.bytes))}` : ''}</p>
         <div class="mm-acts"><button type="button" class="btn btn-primary" data-goto="${r.status === 'open' ? esc(sid) : `view/${esc(sid)}`}">${r.status === 'open' ? (r.teach ? '接着上课' : '进去') : r.kind === 'unit' ? '翻看这个单元' : '翻看这节课的黑板'}</button>${purge ? `<button type="button" class="btn btn-danger" data-purge="${esc(sid)}">删掉这节课</button>` : ''}</div>
         ${r.later ? `<p class="dk-later-result">${esc(laterLine(r.later))}</p>` : ''}
-        ${aimLines(r, rep).length ? `<ul class="dk-log">${aimLines(r, rep).map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
+        ${aimLines(r, rep).length ? `<div class="dk-memo-sub" role="heading" aria-level="3">这节课要拿下的事</div><ul class="dk-log">${aimLines(r, rep).map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
         ${debriefHtml(r.debrief)}
         ${skillsHtml(r.skills)}
         ${sum ? `<div class="dk-memo-sub" role="heading" aria-level="3">下课小结</div><div class="dk-summary">${mdToHtml(sum.text || '')}</div>` : ''}
