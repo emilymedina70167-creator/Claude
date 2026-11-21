@@ -50,7 +50,7 @@ export function sim(el, src) {
 
   // 滑块一动、点了清空：从头来（同一个种子，同一组随机数）
   function reset() {
-    run++;
+    run++; queue = []; busy = false;
     Object.assign(data, { values: [], last: NaN, paths: [], nPaths: 0, inPaths: 0, intervals: [], total: 0, miss: 0, pts: [], r: NaN });
     range = null; err = '';
     try {
@@ -59,17 +59,22 @@ export function sim(el, src) {
       machine = spec.view === 'hist' ? simulator({ dist: spec.draw, n: nNow(), stat: spec.stat, seed: spec.seed, vars: sl }) : null;
     } catch (e) { err = e.message; machine = null; draw1 = null; }
   }
-  // 一下抽很多时分几帧抽（prob/sim.js 的 drawChunks），每帧画一次；滑块一动、清空了，没抽完的就不抽了
-  let run = 0;
+  // 一下抽很多时分几帧抽（prob/sim.js 的 drawChunks），每帧画一次；还没抽完又点了：接在后面抽（复查：以前把前面
+  // 没抽完的取消了，抽的次数少了、同一个种子抽出来的看手快慢）。滑块一动、清空了，排着的都不抽了
+  let run = 0, queue = [], busy = false;
   function go(k) {
     if (err || !draw1) return;
-    const n = nNow(), v = vars(), my = ++run, parts = drawChunks(k, n);
+    const n = nNow(), v = vars(), my = run;
+    queue.push(...drawChunks(k, n).map((c) => ({ c, n, v })));
+    if (busy) return;
+    busy = true;
     const step = () => {
-      if (my !== run || !parts.length) return;
+      if (my !== run || !queue.length) { busy = false; return; }
+      const { c, n: nn, v: vv } = queue.shift();
       // 抽的过程里出的错（σ 未知的区间样本不到两个……）写在图上，不让它成了没接住的页面错误
-      try { drawMany(parts.shift(), n, v); } catch (e) { err = e.message; parts.length = 0; }
+      try { drawMany(c, nn, vv); } catch (e) { err = e.message; queue = []; }
       paint();
-      if (parts.length) requestAnimationFrame(step);
+      if (queue.length) requestAnimationFrame(step); else busy = false;
     };
     step();
   }

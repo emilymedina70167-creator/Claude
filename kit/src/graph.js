@@ -671,10 +671,11 @@ export function createGraph(container, src, opts = {}) {
     row.querySelector('.g-pick-check').addEventListener('click', () => {
       const ts = targetsOf(c);
       if (ts instanceof Error) return;
-      const sig = pickSig(st);
+      // 目标跟着滑块变：签名里带上现在的目标（复查：滑块改了以后同一组点再检查以前不算）
+      const sig = `${pickSig(st)}|${JSON.stringify(ts)}`;
       if (st.again.repeat(sig)) return; // 同一组点连着再检查：不算新的一次，上一次的提示还在
       st.tries++;
-      st.checked = sig;
+      st.checked = pickSig(st);
       // 随便点的：按屏幕上的远近算——y 方向的距离换成「横向多少个单位那么长」（每单位的像素数两个方向不一样）
       const scale = c.on === 'free' ? [1, ((W - ML - MR) / (xr[1] - xr[0])) / ((H - MT - MB) / (yr[1] - yr[0]))] : [1, 1];
       st.res = judgePicks(st.pts, ts, tolOf(c), { scale });

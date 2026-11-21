@@ -1026,10 +1026,11 @@ export function createSpace(container, src, opts = {}) {
     row.querySelector('.g-pick-check').addEventListener('click', () => {
       const ts = targetsOf(c);
       if (ts instanceof Error) return;
-      const sig = pickSig(st);
+      // 目标跟着滑块变：签名里带上现在的目标（复查：滑块改了以后同一组点再检查以前不算）
+      const sig = `${pickSig(st)}|${JSON.stringify(ts)}`;
       if (st.again.repeat(sig)) return; // 同一组点连着再检查：不算新的一次，上一次的提示还在
       st.tries++;
-      st.checked = sig;
+      st.checked = pickSig(st);
       st.res = judgePicks(st.pts, ts, tolOf(c));
       st.again.after(sig, st.res.ok);
       st.msg = pickFeedback(st.res);
@@ -1107,6 +1108,8 @@ export function createSpace(container, src, opts = {}) {
   };
   svg.addEventListener('pointerup', end);
   svg.addEventListener('pointercancel', end);
+  // 按着的手指丢了（系统手势抢走、指针被别的接管，等不到 pointerup）：当成取消，不然这张图以后的按都不接（复查）
+  svg.addEventListener('lostpointercapture', (e) => { if (drag && e.pointerId === drag.id) end({ pointerId: e.pointerId, type: 'pointercancel' }); });
 
   function tween(toYaw, toPitch, dur = 600) {
     const y0 = state.yaw, p0 = state.pitch, t0 = performance.now();

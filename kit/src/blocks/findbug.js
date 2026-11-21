@@ -65,8 +65,10 @@ export function findbug(el, src) {
     if (!pick || finished) return;
     const text = tb.value;
     if (!text) { tb.focus(); tb.ta.classList.add('is-need'); return; }
-    if (again.repeat(pick)) return; // 再点刚点错的那一行：不算新的一次，上一次的提示还在
-    again.after(pick, pick === bug);
+    // 再交刚点错的那一行、错在哪也一字没改：不算新的一次（改了说法算：说法也是作答）
+    const sig = `${pick}|${text}`;
+    if (again.repeat(sig)) return;
+    again.after(sig, pick === bug);
     attempts++;
     tried = pick;
     tb.markSent();

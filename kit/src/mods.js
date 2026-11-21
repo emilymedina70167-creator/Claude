@@ -27,3 +27,6 @@ export function splitTop(s, sep = ',') {
   out.push(cur);
   return out.map((x) => x.trim()).filter(Boolean);
 }
+
+// 能写好几行字的字段：缩进的续行算它的（graphspec、spacespec 共用）；别的字段后面缩进的照旧是命令
+export const PROSE_FIELDS = new Set(['note', 'q', 'explain', 'hint']);

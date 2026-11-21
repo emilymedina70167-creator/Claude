@@ -120,8 +120,9 @@ const guarded = (d, f) => ({ t: 'bin', op: '+', a: d, b: { t: 'bin', op: '*', a:
 const V = (name) => ({ t: 'var', name });
 function kinkGuard(d, lower, x) {
   const h = { t: 'bin', op: '*', a: { t: 'num', v: 1e-6 }, b: { t: 'call', name: 'max', args: [{ t: 'num', v: 1 }, { t: 'call', name: 'abs', args: [V(x)] }] } };
-  const at = (op) => substAll(lower, { [x]: { t: 'bin', op, a: V(x), b: h } });
-  return { t: 'call', name: '__kink', args: [d, at('-'), lower, at('+'), h] };
+  const h10 = { t: 'bin', op: '/', a: h, b: { t: 'num', v: 10 } };
+  const at = (op, k = h) => substAll(lower, { [x]: { t: 'bin', op, a: V(x), b: k } });
+  return { t: 'call', name: '__kink', args: [d, at('-'), lower, at('+'), h, at('-', h10), at('+', h10)] };
 }
 // 一个变量接一个变量求导（f'' 是 x、x；f_xy 是 x、y），守门只看最后那一下：低一阶的光不光滑
 function diffChain(body, xs, diff) {

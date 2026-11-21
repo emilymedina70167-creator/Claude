@@ -14,7 +14,7 @@
 //   goal 左 = 右 [tol=]  /  goal 条件       学生拖到、调到算做到
 //   pick "题目" [on f(x) | on x] at 值, …   学生在图上点出来，页面判
 // 图里的式子一律弧度。
-import { splitMods, splitTop } from './mods.js';
+import { splitMods, splitTop, PROSE_FIELDS } from './mods.js';
 import { PLANE_MAX_LEVELS } from './fx/plane.js';
 import { parseDef, makeDefs, addDef, compileWith, expandSrc, guardedDiff } from './fx/defs.js';
 import { evaluate } from './expr.js';
@@ -88,8 +88,9 @@ export function parseGraph(src) {
   for (const raw of String(src).split('\n')) {
     const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
     if (!line.trim()) continue;
-    // 字段后面前面空了格的一行是那个字段的续行（note: 写好几行），长得像命令、定义也不当（以前 f(x) = … 被当成定义）
-    if (last && /^\s/.test(line)) { fields[last] += '\n' + line; continue; }
+    // 写字的字段（note:、q: 这些）后面前面空了格的一行是续行，长得像命令、定义也不当（以前 f(x) = … 被当成定义）；
+    // 别的字段（x:、title:）后面缩进的照旧是命令（复查：以前一律吞进字段，图是空的也不报）
+    if (last && PROSE_FIELDS.has(last) && /^\s/.test(line)) { fields[last] += '\n' + line; continue; }
     const c = line.trim().match(re);
     if (c) { cmds.push({ ...parseCmdKeep(c[1].toLowerCase(), c[2], { C, num, defs, cmds }), srcLine: line.trim() }); last = null; continue; }
     const def = parseDef(line);
@@ -142,7 +143,9 @@ function parseCmd(kind, rest, { C, num, defs, cmds = [], keep = new Set() }) {
       const src = String(md.on);
       if (/[<>≤≥]/.test(src)) throw new Error(`let ${m[1]} 的 on= 是一条曲线，写等式（on="x^2 + y^2 = 4"）或者数的把手骑的 y = f(x) 的 f(x)；「${src}」是不等式（一块区域），拖不上去`);
       const tryC = (t) => { try { return C(t); } catch { return null; } };
-      const onG = tryC(eqToZero(src)), onF = /(?<![<>=!])=(?!=)/.test(src) ? null : tryC(src);
+      // 数的把手骑的曲线：写 f(x)，也认 y = f(x)（复查：以前 y = 的写法悄悄退回 x 轴上）
+      const yEq = /^\s*y\s*=(?!=)\s*([\s\S]+)$/.exec(src);
+      const onG = tryC(eqToZero(src)), onF = yEq ? tryC(yEq[1]) : /(?<![<>=!])=(?!=)/.test(src) ? null : tryC(src);
       if (!onG && !onF) C(eqToZero(src)); // 都编译不了：照原来报那条错
       on = { ...(onG ? { onG } : {}), ...(onF ? { onF } : {}) };
     }

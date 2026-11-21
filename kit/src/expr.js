@@ -55,11 +55,15 @@ const FUNCS = {
   },
   // 求导的守门（fx/defs.js 展开 f'、f_x 时自己加的，主讲不写）：低一阶的那个在这一点左右的斜率对不上
   // （尖点、分段的分界、跳跃）——这一阶在这里没有定义。一边没定义（定义域的端点）、冲到无穷的不拦
-  __kink: (d, l, y, r, h) => {
-    if (typeof d !== 'number' || ![l, y, r, h].every((v) => typeof v === 'number')) return d;
-    const dl = (y - l) / h, dr = (r - y) / h;
-    if (![dl, dr].every(Number.isFinite)) return d;
-    return Math.abs(dl - dr) <= 0.02 * Math.max(1, Math.abs(dl), Math.abs(dr)) ? d : NaN;
+  // 两个步长都看（h 和 h/10）：尖点左右斜率差多少和步长无关；光滑的地方（再陡、再弯）差的量跟着步长缩小十倍。
+  // 只看一个步长时 sin(200x) 的峰、x² sin(1/x) 都被当成尖点（复查）
+  __kink: (d, l, y, r, h, l2, r2) => {
+    if (typeof d !== 'number' || ![l, y, r, h, l2, r2].every((v) => typeof v === 'number')) return d;
+    const gap = (a, b, k) => { const dl = (y - a) / k, dr = (b - y) / k; return [dl, dr].every(Number.isFinite) ? { m: Math.abs(dl - dr), s: Math.max(1, Math.abs(dl), Math.abs(dr)) } : null; };
+    const g1 = gap(l, r, h), g2 = gap(l2, r2, h / 10);
+    if (!g1 || !g2) return d;
+    const kink = g1.m > 0.02 * g1.s && g2.m > 0.02 * g2.s && g2.m > 0.5 * g1.m;
+    return kink ? NaN : d;
   },
   sin: (x) => Math.sin(num(x)),
   cos: (x) => Math.cos(num(x)),

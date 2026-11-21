@@ -12,7 +12,7 @@
 //
 // 角度还是弧度：老的三维图（线代）三角函数按角度——rot(…)、cos(60)。高数的图要弧度（曲面 z = sin x cos y 按角度画出来是平的）。
 // 规矩：图里有微积分的东西（函数定义、CALC_CMDS 里的命令）就整张按弧度，别的照旧按角度；`angle: rad` / `angle: deg` 明着定。
-import { splitMods, splitTop } from './mods.js';
+import { splitMods, splitTop, PROSE_FIELDS } from './mods.js';
 import { parseDef, makeDefs, addDef, compileWith, expandSrc } from './fx/defs.js';
 import { evaluate } from './expr.js';
 import { diffAst } from './fx/diff.js';
@@ -28,7 +28,7 @@ export function parseSpace(src) {
   const re = new RegExp(`^(${SPACE_CMDS.join('|')})\\s+(.*)$`, 'i');
   // 字段后面前面空了格的一行是那个字段的续行（note: 写好几行）：长得像命令、定义也不当，也不让整张图改成弧度
   const cont = new Set();
-  { let open = false; lines.forEach((line, k) => { if (open && /^\s/.test(line)) { cont.add(k); return; } open = /^[A-Za-z][\w-]*\s*[:：]/.test(line) && !re.test(line.trim()); }); }
+  { let open = false; lines.forEach((line, k) => { if (open && /^\s/.test(line)) { cont.add(k); return; } const f = /^([A-Za-z][\w-]*)\s*[:：]/.exec(line); open = !!f && PROSE_FIELDS.has(f[1].toLowerCase()) && !re.test(line.trim()); }); }
   // 先过一遍定角度还是弧度：定义、命令都要按它编译
   let angle = null, calc = false;
   for (const [k, line] of lines.entries()) {

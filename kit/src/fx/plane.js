@@ -476,7 +476,10 @@ export function nearestOn(G, [px, py], box, { n = 64 } = {}) {
 export function whereNote(runs, box) {
   if (!runs.length) return 'region 的条件在窗口里一处都不成立（等式 == 围不出面积）：要画一条曲线用 implicit，比如 implicit x = 1';
   const area = runs.reduce((s, r) => s + (r.x1 - r.x0) * (r.y1 - r.y0), 0), all = (box.x1 - box.x0) * (box.y1 - box.y0);
-  if (area < 0.005 * all && runs.length > 24) return 'region 的条件围出来的是一条很细的带子（画出来是一圈点）：要画曲线用 implicit，比如 implicit x^2 + y^2 = 4';
+  // 细：围起来的范围不小，里面却几乎是空的（细圈、细线）。小的圆、三角形本来就小，不算（复查：以前按条数和总面积，正常的小区域也报）
+  const bx0 = Math.min(...runs.map((r) => r.x0)), bx1 = Math.max(...runs.map((r) => r.x1)), by0 = Math.min(...runs.map((r) => r.y0)), by1 = Math.max(...runs.map((r) => r.y1));
+  const bbox = (bx1 - bx0) * (by1 - by0);
+  if (runs.length > 24 && bbox >= 0.04 * all && area < 0.06 * bbox) return 'region 的条件围出来的是一条很细的带子（画出来是一圈点）：要画曲线用 implicit，比如 implicit x^2 + y^2 = 4';
   return '';
 }
 
