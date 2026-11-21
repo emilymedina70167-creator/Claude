@@ -25,6 +25,13 @@ const FUNCS = {
   dot: (u, v) => dot(asVec(u), asVec(v)),
   norm: (v) => (isNum(v) ? Math.abs(v) : Math.hypot(...asVec(v))), // |x| 写在数上就是绝对值
   proj: (u, v) => scale(dot(asVec(u), asVec(v)) / dot(asVec(v), asVec(v)), asVec(v)),
+  // 基变换（视觉第 6 批）：v 在基 b1、b2 下的坐标 [c1, c2]（v = c1·b1 + c2·b2）
+  coords: (v, b1, b2) => {
+    const [x, y] = asVec(v), [a, c] = asVec(b1), [b, d] = asVec(b2);
+    const det = a * d - b * c;
+    if (Math.abs(det) <= 1e-12 * Math.max(1, Math.hypot(a, c) * Math.hypot(b, d))) throw new Error('coords 的两个基向量共线：不是一组基');
+    return [(x * d - b * y) / det, (a * y - c * x) / det];
+  },
   cross: (u, v) => { const [a, b, c] = asVec(u), [d, e, f] = asVec(v); return [b * f - c * e, c * d - a * f, a * e - b * d]; },
   // 空间里的距离和夹角（三维图）：点是 [x, y, z]，平面是 [a, b, c, d]（ax + by + cz = d），直线是 [[点], [方向]]。
   // 图里起了名字的平面、直线就是这样的量。夹角是弧度；angledeg 是度

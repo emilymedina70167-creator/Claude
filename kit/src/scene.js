@@ -42,12 +42,12 @@ export function parseScene(src) {
     const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
     if (!line.trim()) { if (lastField) fields[lastField] += '\n'; continue; }
     const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
-    if (f && !/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen|conic)\b/.test(line)) {
+    if (f && !/^(let|vector|point|segment|line|span|grid|area|decomp|polygon|text|show|goal|slider|curve|eigen|conic)\b/.test(line)) {
       lastField = f[1].toLowerCase();
       fields[lastField] = f[2];
       continue;
     }
-    const c = line.trim().match(/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen|conic)\s+(.*)$/i);
+    const c = line.trim().match(/^(let|vector|point|segment|line|span|grid|area|decomp|polygon|text|show|goal|slider|curve|eigen|conic)\s+(.*)$/i);
     if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2]), srcLine: line.trim() }); lastField = null; continue; }
     // 只有说明类字段（q、note、explain……）可以续行；id、title 这类一行字段后面跟着看不懂的行，多半是命令写错了
     if (lastField && !ONE_LINE.has(lastField)) fields[lastField] += '\n' + line;
@@ -105,6 +105,7 @@ function parseCmd(kind, rest) {
     return { kind, A: compile(m[1]), c: m[2] !== undefined ? compile(m[2]) : () => 1, mods };
   }
   const exprs = splitTop(body).map(compile);
+  if (kind === 'decomp' && exprs.length !== 3) throw new Error('decomp 的写法：decomp v, b1, b2（把 v 沿着基 b1、b2 分解）');
   return { kind, exprs, mods };
 }
 
@@ -293,6 +294,17 @@ export function createScene(container, src, opts = {}) {
         const [a, b] = c.exprs.map((e) => vec2(e(v), 'area '));
         const d = a[0] * b[1] - a[1] * b[0];
         plane.poly([[0, 0], a, [a[0] + b[0], a[1] + b[1]], b], d < 0 ? 'area area-neg' : 'area');
+        break;
+      }
+      case 'decomp': {
+        // 坐标分解：先沿 b1 走 c1 倍（蓝），再沿 b2 走 c2 倍（粉）到 v；平行四边形的另外两条边画成虚线
+        const [p0, b1, b2] = c.exprs.map((e) => vec2(e(v), 'decomp '));
+        const d = decompParts(p0, b1, b2);
+        if (!d) throw new Error('decomp 的两个基向量共线：不是一组基');
+        for (const [a0, a1] of d.guides) plane.line(a0, a1, 'guide').style.stroke = 'var(--muted)';
+        const [l1, l2] = d.legs;
+        if (Math.hypot(l1[1][0] - l1[0][0], l1[1][1] - l1[0][1]) > 1e-9) plane.arrow(l1[0], l1[1], 'var(--v1)', { label: c.mods.label === 'off' ? '' : prettyLabel(`${numText(d.c[0])}·b1`), width: 3.6 });
+        if (Math.hypot(l2[1][0] - l2[0][0], l2[1][1] - l2[0][1]) > 1e-9) plane.arrow(l2[0], l2[1], 'var(--v2)', { label: c.mods.label === 'off' ? '' : prettyLabel(`${numText(d.c[1])}·b2`), width: 3.6 });
         break;
       }
       case 'polygon': {
@@ -490,6 +502,18 @@ export function fillValues(text, v, errors = [], compileFn = compile) {
     const dollars = (text.slice(0, at).match(/(?<!\\)\$/g) || []).length;
     return dollars % 2 ? tex : `$${tex}$`;
   });
+}
+
+/**
+ * 坐标分解的几何（纯函数）：v = c1·b1 + c2·b2。legs：两段首尾相接（原点 → c1·b1 → v），
+ * guides：平行四边形的另外两条边（原点 → c2·b2 → v）。b1、b2 共线时回 null
+ */
+export function decompParts(v, b1, b2) {
+  const det = b1[0] * b2[1] - b2[0] * b1[1];
+  if (Math.abs(det) <= 1e-12 * Math.max(1, Math.hypot(...b1) * Math.hypot(...b2))) return null;
+  const c1 = (v[0] * b2[1] - b2[0] * v[1]) / det, c2 = (b1[0] * v[1] - b1[1] * v[0]) / det;
+  const p1 = [c1 * b1[0], c1 * b1[1]], p2 = [c2 * b2[0], c2 * b2[1]];
+  return { c: [c1, c2], legs: [[[0, 0], p1], [p1, [v[0], v[1]]]], guides: [[[0, 0], p2], [p2, [v[0], v[1]]]] };
 }
 
 export function close(a, b, tol = 1e-9) {

@@ -178,3 +178,22 @@ export function fmt(x, digits = 2) {
   if (Math.abs(x - Math.round(x)) < 1e-9) return String(Math.round(x));
   return Number(x.toFixed(digits)).toString();
 }
+
+// 老组件 vectors 的字段 → { names, vecs }。一个字段一个向量（u: [2, 1]）；也认 vectors: [[2, 1], [-1, 2]]（几个没起名的，叫 u、v、w）。
+// 每个都要是二维、每个分量是数（以前矩阵形状的写法过了「两个分量」的检查，画出来是空的）
+const VECTOR_RESERVED = new Set(['mode', 'title', 'target', 'range', 'note', 'a', 'b', 'snap', 'id']);
+export function vectorsOf(fields = {}) {
+  const names = [], vecs = [];
+  for (const k of Object.keys(fields)) {
+    if (VECTOR_RESERVED.has(k)) continue;
+    const raw = parseArray(fields[k]);
+    if (k === 'vectors' && Array.isArray(raw) && raw.every(Array.isArray)) {
+      raw.forEach((v, i) => { names.push(['u', 'v', 'w', 'p', 'q'][i] || `v${i + 1}`); vecs.push(toNum(v)); });
+      continue;
+    }
+    names.push(k); vecs.push(toNum(raw));
+  }
+  if (!vecs.length) throw new Error('至少写一个向量，例如 u: [2, 1]');
+  vecs.forEach((v, i) => { if (!Array.isArray(v) || v.length !== 2 || !v.every((x) => typeof x === 'number' && Number.isFinite(x))) throw new Error(`${names[i]} 需要是二维向量（两个数，如 [2, 1]）`); });
+  return { names, vecs };
+}

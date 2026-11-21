@@ -1,17 +1,13 @@
 // 二维向量：可拖动；mode = plot | sum | combo | span
 import { parseFields } from '../parse.js';
-import { parseArray, toNum, fmt } from '../linalg.js';
+import { parseArray, toNum, fmt, vectorsOf } from '../linalg.js';
 import { createPlane, snap, COLORS } from '../plot.js';
 import { widget, tex2html, mdToHtml } from './common.js';
 
-const RESERVED = new Set(['mode', 'title', 'target', 'range', 'note', 'a', 'b', 'snap']);
 
 export function vectors(el, src) {
   const { fields } = parseFields(src);
-  const names = Object.keys(fields).filter((k) => !RESERVED.has(k));
-  const vecs = names.map((n) => toNum(parseArray(fields[n])));
-  if (!vecs.length) throw new Error('至少写一个向量，例如 u: [2, 1]');
-  vecs.forEach((v, i) => { if (v.length !== 2) throw new Error(`${names[i]} 需要是二维向量`); });
+  const { names, vecs } = vectorsOf(fields);
   const mode = (fields.mode || (vecs.length >= 2 ? 'sum' : 'plot')).toLowerCase();
   const target = fields.target ? toNum(parseArray(fields.target)) : null;
   const step = Number(fields.snap) || 0.5;
