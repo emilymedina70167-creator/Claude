@@ -72,7 +72,7 @@ test('示例页里学生能动手的图占多数（拖、点、目标）', () =>
   assert.ok(demo.filter((src) => parseGraph(src).cmds.some((c) => c.kind === 'goal' || c.kind === 'pick')).length >= 10);
 });
 
-test('手册里的函数图例子照抄就能画，新命令每样至少一个例子', () => {
+test('手册里的函数图例子照抄读得懂（真的画一遍在 npm run check:pages 的 tools/manual-figs.mjs），新命令每样至少一个例子', () => {
   assert.ok(inManual.length >= 6, `手册里只有 ${inManual.length} 个 graph 例子`);
   const kinds = new Set();
   inManual.forEach((src, i) => check(src, `手册第 ${i + 1} 个例子`).cmds.forEach((c) => kinds.add(c.kind)));

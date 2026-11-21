@@ -30,12 +30,30 @@ export function meshGrid(P, [u0, u1], [v0, v1], { nu = 24, nv = 24 } = {}) {
     let p; try { p = P(u0 + ((u1 - u0) * i) / nu, v0 + ((v1 - v0) * j) / nv); } catch { p = null; }
     pts.push(fin(p) ? p : null);
   }
-  const quads = [], W = nu + 1;
+  const quads = [], edge = [], W = nu + 1;
+  const at = (i, j) => { let p; try { p = P(u0 + ((u1 - u0) * i) / nu, v0 + ((v1 - v0) * j) / nv); } catch { p = null; } return fin(p) ? p : null; };
+  // 一条格子边上从有定义的一头 (i1, j1) 往没定义的一头走：二分找到还有定义的最后一点
+  const reach = ([i1, j1], [i2, j2]) => {
+    let a = 0, b = 1, last = at(i1, j1);
+    for (let k = 0; k < 30; k++) { const m = (a + b) / 2, p = at(i1 + (i2 - i1) * m, j1 + (j2 - j1) * m); if (p) { a = m; last = p; } else b = m; }
+    return last;
+  };
   for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
     const q = [j * W + i, j * W + i + 1, (j + 1) * W + i + 1, (j + 1) * W + i];
-    if (q.every((k) => pts[k])) quads.push(q);
+    if (q.every((k) => pts[k])) { quads.push(q); continue; }
+    // 只有一部分角有定义（曲面在这一格里到头了，球写在比它大的底上）：沿着边找到头的地方，裁成一个多边形
+    // （以前整格丢掉，边是锯齿）
+    const ij = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]];
+    if (!q.some((k) => pts[k])) continue;
+    const poly = [];
+    for (let k = 0; k < 4; k++) {
+      const a = q[k], b = q[(k + 1) % 4];
+      if (pts[a]) poly.push(pts[a]);
+      if (!!pts[a] !== !!pts[b]) poly.push(pts[a] ? reach(ij[k], ij[(k + 1) % 4]) : reach(ij[(k + 1) % 4], ij[k]));
+    }
+    if (poly.length >= 3) edge.push(poly);
   }
-  return { pts, quads, nu, nv };
+  return { pts, quads, edge, nu, nv };
 }
 
 // 区域里的一点：s 沿 a..b，t 从 0 到 1 在 lo..hi 之间
@@ -60,17 +78,37 @@ export function meshOver(f, base, { n = 24, m = 24 } = {}) {
  * 任意方程的曲面 F(x, y, z) = 0：三族平面（x = 常数、y = 常数、z = 常数）各切 n 刀，把截痕画出来当线框（截痕法）。
  * 回 { x: [{ at, lines }], y: […], z: […] }，lines 是三维的折线。每一刀是 fx/plane.js 的 contourLines（极点、跳跃处不画假线）
  */
-export function sliceLines(F, box, { n = 9, grid = 48 } = {}) {
+export function sliceLines(F, box, { n = 9, grid = 48, _inner = false } = {}) {
   const f = num1(F);
   const cut = (lo, hi, rect, g, lift) => Array.from({ length: n }, (_, k) => {
     const at = n === 1 ? (lo + hi) / 2 : lo + ((hi - lo) * k) / (n - 1);
     return { at, lines: contourLines((p, q) => g(at, p, q), 0, rect, { nx: grid, ny: grid }).map((l) => l.map(([p, q]) => lift(at, p, q))) };
   });
-  return {
+  const out = {
     x: cut(box.x0, box.x1, { x0: box.y0, x1: box.y1, y0: box.z0, y1: box.z1 }, (x, y, z) => f(x, y, z), (x, y, z) => [x, y, z]),
     y: cut(box.y0, box.y1, { x0: box.x0, x1: box.x1, y0: box.z0, y1: box.z1 }, (y, x, z) => f(x, y, z), (y, x, z) => [x, y, z]),
     z: cut(box.z0, box.z1, { x0: box.x0, x1: box.x1, y0: box.y0, y1: box.y1 }, (z, x, y) => f(x, y, z), (z, x, y) => [x, y, z]),
   };
+  if (_inner || ['x', 'y', 'z'].some((k) => out[k].some((c) => c.lines.length))) return out;
+  // 一刀都没切到：曲面可能很小、夹在两刀之间（以前什么都不画、也不说）。在细一点的格子上找变号的地方，
+  // 有就在那一小块里再切一遍（没有曲面的式子，x² + y² + z² + 1 = 0，照旧什么都不画）
+  const m = 24, at = (i, lo, hi) => lo + ((hi - lo) * i) / m;
+  const sign = [];
+  let pos = false, neg = false;
+  for (let i = 0; i <= m; i++) for (let j = 0; j <= m; j++) for (let k = 0; k <= m; k++) {
+    const v = f(at(i, box.x0, box.x1), at(j, box.y0, box.y1), at(k, box.z0, box.z1));
+    if (!Number.isFinite(v)) continue;
+    if (v > 0) pos = true; else if (v < 0) neg = true;
+    sign.push([i, j, k, Math.sign(v)]);
+  }
+  if (!pos || !neg) return out;
+  const few = sign.filter((t) => t[3] < 0).length <= sign.filter((t) => t[3] > 0).length ? -1 : 1;
+  const lo = [m, m, m], hi = [0, 0, 0];
+  for (const [i, j, k, sg] of sign) if (sg === few) { [i, j, k].forEach((t, d) => { lo[d] = Math.min(lo[d], t); hi[d] = Math.max(hi[d], t); }); }
+  const span = [[box.x0, box.x1], [box.y0, box.y1], [box.z0, box.z1]];
+  const sub = (d) => [at(Math.max(0, lo[d] - 1), ...span[d]), at(Math.min(m, hi[d] + 1), ...span[d])];
+  const [[x0, x1], [y0, y1], [z0, z1]] = [0, 1, 2].map(sub);
+  return sliceLines(F, { x0, x1, y0, y1, z0, z1 }, { n, grid, _inner: true });
 }
 
 // —— 平面 ——
@@ -127,17 +165,26 @@ export function planes3(P1, P2, P3) {
   const scale = Math.max(1, ...rows.map((r) => Math.abs(r[3])));
   const rankA = rankOf(rows.map((r) => r.slice(0, 3))), rankAb = rankOf(rows.map((r) => [r[0], r[1], r[2], r[3] / scale]));
   const pairs = [[0, 1], [0, 2], [1, 2]].map(([i, j]) => planeMeet2(ps[i], ps[j]));
-  const same = pairs.some((m) => m && m.same), par = pairs.some((m) => m === null), ln = pairs.find((m) => m && !m.same);
+  // 几种情形和画出来的交线用同一把尺子（2026-11-21：以前秩和两两的交线各用各的容差，系数差 1e-9 时
+  // 说「三个平面平行」却画了两条交线）。先看两两的关系，秩只在两两都相交时用来分「一点 / 一条线 / 三棱柱」
+  const nLine = pairs.filter((m) => m && !m.same).length, nSame = pairs.filter((m) => m && m.same).length;
   let kind, point, line;
-  if (rankA === 3) {
-    kind = 'point';
-    // 克拉默：x = [d1 (n2 × n3) + d2 (n3 × n1) + d3 (n1 × n2)] / (n1 · n2 × n3)
-    const [n1, n2, n3] = ps.map((p) => p.n), [d1, d2, d3] = ps.map((p) => dot(p.n, p.p0));
-    point = mul(1 / dot(n1, cross(n2, n3)), add(add(mul(d1, cross(n2, n3)), mul(d2, cross(n3, n1))), mul(d3, cross(n1, n2))));
-  } else if (rankA === 2 && rankAb === 2) { kind = same ? 'two-same' : 'line'; line = ln; } else if (rankA === 2) kind = par ? 'two-parallel' : 'prism';
-  else if (rankAb === 1) kind = 'plane';
-  else kind = same ? 'two-same-parallel' : 'parallel';
-  return { rankA, rankAb, kind, text: `r(A) = ${rankA}，r(A, b) = ${rankAb}：${P3_TEXT[kind]}`, ...(point ? { point } : {}), ...(line ? { line } : {}) };
+  if (nLine === 3) {
+    if (rankA === 3) {
+      kind = 'point';
+      // 克拉默：x = [d1 (n2 × n3) + d2 (n3 × n1) + d3 (n1 × n2)] / (n1 · n2 × n3)
+      const [n1, n2, n3] = ps.map((p) => p.n), [d1, d2, d3] = ps.map((p) => dot(p.n, p.p0));
+      point = mul(1 / dot(n1, cross(n2, n3)), add(add(mul(d1, cross(n2, n3)), mul(d2, cross(n3, n1))), mul(d3, cross(n1, n2))));
+    } else if (rankAb === 3) kind = 'prism';
+    else { kind = 'line'; line = pairs[0]; }
+  } else if (nLine === 2) {
+    if (nSame) { kind = 'two-same'; line = pairs.find((m) => m && !m.same); } else kind = 'two-parallel';
+  } else kind = nSame === 3 ? 'plane' : nSame ? 'two-same-parallel' : 'parallel';
+  const RANKS = { point: [3, 3], line: [2, 2], 'two-same': [2, 2], prism: [2, 3], 'two-parallel': [2, 3], plane: [1, 1], 'two-same-parallel': [1, 2], parallel: [1, 2] };
+  const [rA, rAb] = RANKS[kind];
+  // 要画的交线：一条线、两张重合的只画那一条；都平行的不画（两两的交线只剩一条的那种数值边角也不画）
+  const meets = kind === 'line' || kind === 'two-same' ? [line, null, null] : nLine >= 2 ? pairs.map((m) => (m && !m.same ? m : null)) : [null, null, null];
+  return { rankA: rA, rankAb: rAb, kind, text: `r(A) = ${rA}，r(A, b) = ${rAb}：${P3_TEXT[kind]}`, meets, ...(point ? { point } : {}), ...(line ? { line } : {}) };
 }
 
 /**
@@ -301,10 +348,25 @@ export function sectionArea(lo, hi, base, z0) {
   };
   const dp = 1e-12 * Math.abs(X[1] - X[0]), x0 = Math.min(X[0], X[1]) + dp, x1 = Math.max(X[0], X[1]) - dp;
   if (!(x1 > x0)) return 0;
-  // 对 p 积：等分成小段、每段三点高斯。线上的段长是连续的、可以有折（截面的边拐过去），不要求光滑到自适应那一套能核
-  const M = 160, g = Math.sqrt(0.6), w = (x1 - x0) / M;
+  // 对 p 积。线上的段长是连续的、可以有折（截面的边拐过去），截面开始、结束的地方常是根号的样子（球的截面
+  // 两头 √(p − p₀)）：先找出段长大于 0 的那几段 p，每一段用 p = 中点 − 半宽·cos θ 换元（根号的两头变平滑），
+  // 再等分三点高斯（以前整个范围等分 160 段，两头的根号只准到约 1e-4）
+  const S = 160, step = (x1 - x0) / S, vals = Array.from({ length: S + 1 }, (_, i) => line(x0 + step * i));
+  const edge = (u, w, inU) => { for (let k = 0; k < 50; k++) { const m = (u + w) / 2; if ((line(m) > 0) === inU) u = m; else w = m; } return (u + w) / 2; };
+  const runs = [];
+  let from = vals[0] > 0 ? x0 : null;
+  for (let i = 1; i <= S; i++) {
+    const p = x0 + step * i, was = vals[i - 1] > 0, now = vals[i] > 0;
+    if (was !== now) { const c = edge(p - step, p, was); if (was) { runs.push([from, c]); from = null; } else from = c; }
+  }
+  if (from !== null) runs.push([from, x1]);
+  const M = 96, g = Math.sqrt(0.6);
   let total = 0;
-  for (let i = 0; i < M; i++) { const c = x0 + (i + 0.5) * w; total += (w / 18) * (5 * line(c - (g * w) / 2) + 8 * line(c) + 5 * line(c + (g * w) / 2)); }
+  for (const [a, b] of runs) {
+    const mid = (a + b) / 2, half = (b - a) / 2, w = Math.PI / M;
+    const f = (t) => line(mid - half * Math.cos(t)) * half * Math.sin(t);
+    for (let i = 0; i < M; i++) { const c = (i + 0.5) * w; total += (w / 18) * (5 * f(c - (g * w) / 2) + 8 * f(c) + 5 * f(c + (g * w) / 2)); }
+  }
   return Number.isFinite(total) ? total : NaN;
 }
 
@@ -510,4 +572,12 @@ export function linearPlane(F) {
     if (!(Math.abs(v - (a * x + b * y + c * z + d)) <= tol * (1 + Math.abs(x) + Math.abs(y) + Math.abs(z)))) return null;
   }
   return [a, b, c, d];
+}
+
+/** 四边形（四个角按顺序）切成 n × n 小块（双线性插值），每块四个角。切平面这种一整张的面片按块排远近用 */
+export function subdivideQuad(q, n = 6) {
+  const at = (s, t) => [0, 1, 2].map((k) => (1 - s) * (1 - t) * q[0][k] + s * (1 - t) * q[1][k] + s * t * q[2][k] + (1 - s) * t * q[3][k]);
+  const out = [];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) out.push([at(i / n, j / n), at((i + 1) / n, j / n), at((i + 1) / n, (j + 1) / n), at(i / n, (j + 1) / n)]);
+  return out;
 }

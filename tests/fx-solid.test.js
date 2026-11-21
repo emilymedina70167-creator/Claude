@@ -71,7 +71,7 @@ test('平面：从方程来、两个平面的交线', () => {
   assert.deepEqual(planeMeet2(p1, planeFrom(2, 2, 2, 2)), { same: true });
 });
 
-test('三个平面的七种情形：秩和说法都对', () => {
+test('三个平面的八种情形：秩和说法都对', () => {
   const P = (a, b, c, d) => planeFrom(a, b, c, d);
   const cases = [
     ['point', [P(1, 0, 0, 1), P(0, 1, 0, 2), P(0, 0, 1, 3)], 3, 3],

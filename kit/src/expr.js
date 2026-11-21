@@ -373,7 +373,8 @@ function run(n, vars, fns = FUNCS) {
       const sp = Object.hasOwn(SPECIAL, n.name) ? SPECIAL[n.name] : null;
       if (sp && isForm(n, sp)) return sp.run(n, vars, fns);
       const f = Object.hasOwn(fns, n.name) ? fns[n.name] : null;
-      if (!f) throw new Error(`没有函数 ${n.name}()`);
+      // if：别的语言里有，这里没有——说分段函数怎么写（以前只说「没有函数 if()」，看不出是写法问题）
+      if (!f) throw new Error(n.name === 'if' ? '没有 if()：分段函数写成 (x < 0)*x^2 + (x >= 0)*x^3（条件成立是 1、不成立是 0）' : `没有函数 ${n.name}()`);
       return f(...n.args.map((x) => run(x, vars, fns)));
     }
     case 'bin': {
@@ -395,6 +396,49 @@ function run(n, vars, fns = FUNCS) {
     }
   }
   throw new Error('表达式错误');
+}
+
+// 积分、求和的里层一个式子要算几万到几百万次：语法树一层层走太慢（带条件的三重积分一秒半）。
+// fastNum 把只含数的式子编译成一串闭包，算出来和 run 一模一样（同样的运算顺序：除法是乘倒数、乘方走 realPow、
+// 比较带 1e-9）；碰到向量、矩阵、特殊形式、没定义的名字，这一次整个退回 run（报的错也一样）。tests/expr-fast.test.js
+const SLOW = Symbol('slow');
+function fastNode(n, fns) {
+  switch (n.t) {
+    case 'num': { const v = n.v; return () => v; }
+    case 'var': {
+      const name = n.name, k = Object.hasOwn(CONSTS, name) ? CONSTS[name] : undefined;
+      return (vs) => { if (name in vs) { const x = vs[name]; if (typeof x === 'number') return x; throw SLOW; } if (typeof k === 'number') return k; throw SLOW; };
+    }
+    case 'neg': { const a = fastNode(n.a, fns); return (vs) => -1 * a(vs); }
+    case 'call': {
+      if (Object.hasOwn(SPECIAL, n.name) || !Object.hasOwn(fns, n.name)) return () => { throw SLOW; };
+      const f = fns[n.name], args = n.args.map((x) => fastNode(x, fns));
+      return (vs) => { const r = f(...args.map((g) => g(vs))); if (typeof r === 'number') return r; throw SLOW; };
+    }
+    case 'bin': {
+      const a = fastNode(n.a, fns), b = fastNode(n.b, fns), eps = 1e-9;
+      switch (n.op) {
+        case '+': return (vs) => a(vs) + b(vs);
+        case '-': return (vs) => a(vs) + -1 * b(vs);
+        case '*': return (vs) => a(vs) * b(vs);
+        case '/': return (vs) => { const x = a(vs), y = b(vs); return (1 / y) * x; };
+        case '^': return (vs) => realPow(a(vs), b(vs));
+        case '<': return (vs) => { const x = a(vs), y = b(vs); return +(x < y - eps); };
+        case '<=': return (vs) => { const x = a(vs), y = b(vs); return +(x <= y + eps); };
+        case '>': return (vs) => { const x = a(vs), y = b(vs); return +(x > y + eps); };
+        case '>=': return (vs) => { const x = a(vs), y = b(vs); return +(x >= y - eps); };
+        case '==': return (vs) => { const x = a(vs), y = b(vs); return +(Math.abs(x - y) <= eps); };
+        case '!=': return (vs) => { const x = a(vs), y = b(vs); return +(Math.abs(x - y) > eps); };
+        default: return () => { throw SLOW; };
+      }
+    }
+    default: return () => { throw SLOW; };
+  }
+}
+/** 语法树 → (vars) => 值：和 run(n, vars, fns) 一样，只是数的式子快得多 */
+export function fastNum(n, fns = FUNCS) {
+  const c = fastNode(n, fns);
+  return (vs) => { try { return c(vs); } catch (e) { if (e === SLOW) return run(n, vs, fns); throw e; } };
 }
 
 // —— 特殊形式：参数里有一个「绑定的字母」，后面的式子要对它的每个取值各算一遍，不能像普通函数那样先把参数算好 ——
@@ -438,7 +482,8 @@ function marksOf(body) {
   let out = markCache.get(body);
   if (out) return out;
   out = [];
-  const numOf = (e) => (v, fns) => { const r = run(e, v, fns); return isNum(r) ? r : NaN; };
+  // 断口的式子在找断口时要算很多次：照 fastNum 编译（每套函数表编一次）
+  const numOf = (e) => { const byFns = new Map(); return (v, fns) => { let g = byFns.get(fns); if (!g) byFns.set(fns, (g = fastNum(e, fns))); const r = g(v); return isNum(r) ? r : NaN; }; };
   const walk = (n) => {
     if (!n || typeof n !== 'object') return;
     if (n.t === 'call' && Object.hasOwn(SPECIAL, n.name) && isFormQuiet(n)) return; // 里面那一层自己管
@@ -516,7 +561,8 @@ function memoRun(n, bound, vars, compute) {
 function realFn(n, vars, fns) {
   const name = n.args[1].name, body = n.args[0], v = bindVar(vars, name);
   const a = num(run(n.args[2], vars, fns)), b = num(run(n.args[3], vars, fns));
-  const f = (x) => { v[name] = x; try { const y = run(body, v, fns); return isNum(y) ? y : NaN; } catch { return NaN; } };
+  const fb = fastNum(body, fns);
+  const f = (x) => { v[name] = x; try { const y = fb(v); return isNum(y) ? y : NaN; } catch { return NaN; } };
   // 最值、求根是在区间上取点找的：区间要有限（积分另算，它自己换元处理无穷限）
   if (n.name !== 'int' && !(Number.isFinite(a) && Number.isFinite(b))) throw new Error(`${n.name} 的区间要是有限的（现在是 ${a} 到 ${b}）`);
   return { f, a, b, v, name };
@@ -669,13 +715,13 @@ const SPECIAL = {
     const v = Object.create(vars);
     v[xv.name] = 0; v[yv.name] = 0; v[zv.name] = 0;
     const limX = (ex) => (x) => { v[xv.name] = x; return num(run(ex, v, fns)); };
-    const marks = marksOf(body);
+    const marks = marksOf(body), fbody = fastNum(body, fns);
     let why = '';
     const inner = (x, y) => {
       v[xv.name] = x; v[yv.name] = y;
       let z0, z1;
       try { z0 = num(run(e, v, fns)); z1 = num(run(g, v, fns)); } catch { return NaN; }
-      const f = (z) => { v[xv.name] = x; v[yv.name] = y; v[zv.name] = z; try { const r = run(body, v, fns); return isNum(r) ? r : NaN; } catch { return NaN; } };
+      const f = (z) => { v[xv.name] = x; v[yv.name] = y; v[zv.name] = z; try { const r = fbody(v); return isNum(r) ? r : NaN; } catch { return NaN; } };
       const r = intPieces(f, marks.map((m) => (z) => { v[xv.name] = x; v[yv.name] = y; v[zv.name] = z; return m(v, fns); }), z0, z1, 32);
       if (r.ok !== true) { why = r.why || '不收敛'; return NaN; }
       return r.value;
@@ -691,7 +737,8 @@ const SPECIAL = {
     const A = num(run(a, vars, fns)), B = num(run(b, vars, fns));
     const v = Object.create(vars);
     v[xv.name] = 0; v[yv.name] = 0;
-    const f = (x, y) => { v[xv.name] = x; v[yv.name] = y; try { const r = run(body, v, fns); return isNum(r) ? r : NaN; } catch { return NaN; } };
+    const fb2 = fastNum(body, fns);
+    const f = (x, y) => { v[xv.name] = x; v[yv.name] = y; try { const r = fb2(v); return isNum(r) ? r : NaN; } catch { return NaN; } };
     const lim = (e) => (x) => { v[xv.name] = x; return num(run(e, v, fns)); };
     const lo = lim(c), hi = lim(d);
     const marks = marksOf(body).map((g) => (x, y) => { v[xv.name] = x; v[yv.name] = y; return g(v, fns); });

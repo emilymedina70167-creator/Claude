@@ -27,7 +27,7 @@ const pickSig = (st) => st.pts.map((p) => JSON.stringify(p)).sort().join(' ');
 import { close } from './scene.js';
 import { typedRegion, contourLines } from './fx/plane.js';
 import {
-  meshGrid, meshOver, sliceLines, planeFrom, planeMeet2, planes3, splitAll, planeInBox, revolveMesh, revolveVolume, revolveArea,
+  meshGrid, meshOver, sliceLines, subdivideQuad, planeFrom, planeMeet2, planes3, splitAll, planeInBox, revolveMesh, revolveVolume, revolveArea,
   solidBounds, columnOf, crossSection, sectionArea, fieldArrows3, eig3, baseDepth,
   tangentPlane, curveTangent, rootsAlong, frameZ, clipPolyZ, linearPlane,
 } from './fx/solid.js';
@@ -408,7 +408,7 @@ export function createSpace(container, src, opts = {}) {
         + notes.map((n) => `<div class="sp-auto">${escapeHtml(n)}</div>`).join('');
       checkGoals(v, ctl.quiet || firstDraw, errs);
       for (const i of pickIdx) { const ts = targetsOf(cmds[i], v); if (ts instanceof Error) errs.push(ts.message); }
-    }
+    } else side.querySelector('.r-show').innerHTML = ''; // 算不出来：读数不留上一个状态的话（错误写在下面）
     firstDraw = false;
     const msg = [...new Set(errs)].join('；');
     if (msg !== lastErr) {
@@ -450,6 +450,8 @@ export function createSpace(container, src, opts = {}) {
         const P = planeOf(c, v);
         const col = color(c, c.eq ? PLANE_COLORS[list.length % PLANE_COLORS.length] : 'var(--v4)');
         const poly = c.eq ? planeInBox(P, boxNow()) : patchCorners(P.p0, P.n, R * (Number(c.mods.size) || 0.9)).poly;
+        // 整张平面都在画出来的盒子外面：说一声（以前悄悄不画）
+        if (c.eq && !poly) notes.push(`平面${c.name ? ` ${c.name}` : ''} 整张在画出来的范围外面，看不到：改 x: / y: / z: 的范围`);
         list.push({ c, i, P, col, poly });
       } catch (e) { errs.push(e.message); }
     });
@@ -587,8 +589,8 @@ export function createSpace(container, src, opts = {}) {
         const r = planes3(...ps);
         notes.push(`三个平面：${r.text}`);
         if (r.point) { const P = dot3(r.point, mc, 6.5); if (lab) labels.push({ x: P[0], y: P[1], ux: 1, uy: -1, text: lab, col: mc, cmd: cur }); }
-        // 两两的交线都画出来（唯一解时三条交于一点；三棱柱时三条平行）
-        for (const [i, j] of [[0, 1], [0, 2], [1, 2]]) { const m = planeMeet2(ps[i], ps[j]); if (m && !m.same) drawLine(m); }
+        // 两两的交线（唯一解时三条交于一点；三棱柱时三条平行）：画哪几条和上面那句话同一把尺子（planes3 的 meets）
+        for (const m of r.meets) if (m) drawLine(m);
         break;
       }
       case 'angle': {
@@ -673,6 +675,12 @@ export function createSpace(container, src, opts = {}) {
             if (ps.some(farXY)) continue;
             if (ps.every((p) => p[2] >= z0 && p[2] <= z1)) { quads.push(q); continue; }
             const part = clipPolyZ(ps, z0, z1);
+            if (part && part.length >= 3) cut.push(part);
+          }
+          // 曲面在格子里到头的那几格（沿边裁好的多边形）：照样裁顶 / 底
+          for (const ps of raw.edge || []) {
+            if (ps.some(farXY)) continue;
+            const part = ps.every((p) => p[2] >= z0 && p[2] <= z1) ? ps : clipPolyZ(ps, z0, z1);
             if (part && part.length >= 3) cut.push(part);
           }
           return { ...raw, quads, cut };
@@ -760,7 +768,8 @@ export function createSpace(container, src, opts = {}) {
         // 写方程的曲面：点要在曲面上（离曲面的距离约 |F| / |∇F|）
         if (S.form === 'eq' && !(Math.abs(off) <= 1e-3 * len(n) * Math.max(1, R))) throw new Error(`tangent：点 [${p.map((x) => Number(x.toFixed(3))).join(', ')}] 不在曲面${S.name ? ` ${S.name} ` : ''}上（代进方程两边差 ${Number(off.toFixed(3))}）`);
         const { poly } = patchCorners(p, n, R * 0.42);
-        poly3(poly, 'sp-plane sp-piece sp-tplane', tc, -R * 0.02);
+        // 切成小块各自排远近：碗沿这些在它前面的面片照样压在它上面（以前整张一个深度、固定往前偏，从上面看碗时画在碗沿上面）
+        for (const piece of subdivideQuad(poly, 6)) poly3(piece, 'sp-plane sp-piece sp-tplane', tc, -R * 0.002);
         for (let k = 0; k < 4; k++) seg3(poly[k], poly[(k + 1) % 4], 'sp-plane-edge', tc);
         const nu = unit(n);
         arrow3(p, addv(p, mul(R * 0.35, nu[2] < 0 ? mul(-1, nu) : nu)), tc, { label: lab, width: 3.2 });
@@ -880,6 +889,7 @@ export function createSpace(container, src, opts = {}) {
     cmds.forEach((c, i) => {
       if (c.kind !== 'let' || !c.mods.drag || !visible(c)) return;
       const p = v[c.name];
+      if (isVec(p) && p.length === 3) { notes.push(`${c.name} 是三维的点，拖不了：能拖的是地面上的点 [x, y]`); return; }
       if (!isVec(p) || p.length !== 2) return;
       cur = i + 1;
       const hc = color(c, 'var(--yellow)'), G = proj([p[0], p[1], 0]);
@@ -1034,6 +1044,8 @@ export function createSpace(container, src, opts = {}) {
   const toView = (e) => { const r = svg.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * SIZE, ((e.clientY - r.top) / r.height) * SIZE]; };
   let drag = null;
   svg.addEventListener('pointerdown', (e) => {
+    // 已经有一根手指按着：第二根不接（这里没有两指的手势；以前第二根顶掉了第一根，抬第一根时多收一个点、拖点不发 dragend）
+    if (drag) { e.preventDefault(); return; }
     const name = e.target?.getAttribute?.('data-handle');
     state.spinning = false;
     try { svg.setPointerCapture(e.pointerId); } catch { /* 合成事件 */ }
@@ -1074,6 +1086,7 @@ export function createSpace(container, src, opts = {}) {
     draw();
   });
   const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return; // 别的手指抬起来：不算
     const d = drag;
     drag = null;
     svg.classList.remove('dragging');

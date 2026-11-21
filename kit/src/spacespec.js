@@ -57,6 +57,12 @@ export function parseSpace(src) {
     else throw new Error(`看不懂这一行：${t}`);
   }
   for (const k in fields) fields[k] = fields[k].trim();
+  // let … drag 的两处静默（以前什么都不画、也不说）：on= 指的曲面不存在；拖的是三维的点（只拖得了地面上的 [x, y]）
+  for (const c of cmds) {
+    if (c.kind !== 'let' || !c.mods.drag) continue;
+    if (c.mods.on !== undefined && !cmds.some((k) => k.kind === 'surface' && k.name === String(c.mods.on))) throw new Error(`let ${c.name} … drag on=${c.mods.on}：没有叫 ${c.mods.on} 的曲面（on= 后面写前面起了名字的曲面：surface S = …）`);
+    if (/^\[[^\]]*,[^\]]*,[^\]]*\]$/.test(String(c.src || '').trim())) throw new Error(`let ${c.name} … drag：能拖的是地面上的点 [x, y]（写 on=S 时它在曲面上的那一点跟着走），三维的点拖不了`);
+  }
   return { fields, cmds, defs, rad, notes: !angle && rad ? degreeNotes(lines, cmds) : [] };
 }
 
@@ -98,6 +104,16 @@ function words(s) {
   return out;
 }
 // 「名字 = 后面的」：后面的还得像一条内容（有等号、或者是 [ 开头的），不然 z = 2 会被当成起名叫 z
+// 这条命令自己的旗标（tangent 的 plane、region 的 hide）：和 color= 这些公共的修饰先后不限（照 graphspec 的 mods）
+function ownFlag(body, mods, flag) {
+  const re = new RegExp(`\\s+${flag}$`, 'i');
+  for (;;) {
+    if (!re.test(body)) return { body, mods };
+    const more = splitMods(body.replace(re, ''));
+    body = more.body;
+    mods = { ...more.mods, ...mods, [flag]: true };
+  }
+}
 function named(body, ok = (r) => /(?<![<>=!])=(?!=)/.test(r) || r.startsWith('[')) {
   const m = /^([A-Za-z_]\w*)\s*=(?!=)\s*(.*)$/.exec(body);
   return m && ok(m[2].trim()) ? { name: m[1], rest: m[2].trim() } : { name: undefined, rest: body };
@@ -177,7 +193,7 @@ function parseCmd(kind, rest, { C, cmds = [], defs, rad }) {
   if (kind === 'let') {
     const m = body.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
     if (!m) throw new Error('let 的写法：let 名字 = 表达式');
-    return { kind, name: m[1], expr: C(m[2]), mods };
+    return { kind, name: m[1], expr: C(m[2]), src: m[2], mods };
   }
   if (kind === 'slider') {
     const m = body.match(/^([A-Za-z_]\w*)\s+(\S+)\s+(\S+)(?:\s*=\s*(\S+))?$/);
@@ -249,15 +265,15 @@ function parseCmd(kind, rest, { C, cmds = [], defs, rad }) {
     return { kind, axis: m[1], at: C(m[2]), of: m[3], mods };
   }
   if (kind === 'tangent') {
-    const pl = /\s+plane$/i.test(body);
-    if (pl) { body = body.replace(/\s+plane$/i, ''); mods = { ...mods, plane: true }; }
+    ({ body, mods } = ownFlag(body, mods, 'plane'));
     const m = body.match(/^([A-Za-z_]\w*)\s+at\s+(.+)$/);
     if (!m) throw new Error('tangent 的写法：tangent S at [a, b]（曲面 S 在这一点的切平面和法线）、tangent C at t0（曲线 C 的切线；末尾加 plane 画法平面）');
     need(['surface', 'curve'], m[1], '曲面或曲线');
     return { kind, of: m[1], at: C(m[2]), mods };
   }
   if (kind === 'revolve') {
-    const { name, rest: r } = named(body, () => true);
+    // revolve y = sqrt(x) …：y = 是曲线 y = f(x) 的写法，不是给体积起名叫 y（以前体积成了 y）
+    const { name, rest: r } = /^y\s*=(?!=)/.test(body) ? { name: undefined, rest: body.replace(/^y\s*=\s*/, '') } : named(body, () => true);
     const m = r.match(/^(.*\S)\s+for\s+x\s+(.+)\s+about\s+(\S+)$/);
     const w = m ? words(m[2]) : [];
     if (w.length !== 2) throw new Error('revolve 的写法：revolve sqrt(x) for x 0 4 about x（y = f(x) 绕 x 轴转；about y 绕 y 轴；前面可以起名 revolve V = …，V 是体积）');
@@ -278,8 +294,7 @@ function parseCmd(kind, rest, { C, cmds = [], defs, rad }) {
     return { kind, of: m[1], at: C(m[2]), mods };
   }
   if (kind === 'region') {
-    const hide = /\s+hide$/i.test(body);
-    if (hide) { body = body.replace(/\s+hide$/i, ''); mods = { ...mods, hide: true }; }
+    ({ body, mods } = ownFlag(body, mods, 'hide'));
     const { name, rest: r } = named(body, () => true);
     const t = r.match(/^(y|x|r)\s+from\s+(.+?)\s+to\s+(.+?)\s+for\s+([A-Za-z_]\w*)\s+(.+)$/);
     const w = t ? words(t[5]) : [];

@@ -43,7 +43,7 @@ test('示例页里学生能动手的图占多数（滑块、拖点），有目�
   assert.ok(demo.every((src) => parseSpace(src).cmds.some((c) => c.kind === 'slider' || c.kind === 'pick' || (c.kind === 'let' && c.mods.drag))));
 });
 
-test('手册里三维图的例子照抄就能画，第 3 批的命令每样至少一个例子', () => {
+test('手册里三维图的例子照抄读得懂（真的画一遍在 npm run check:pages 的 tools/manual-figs.mjs），第 3 批的命令每样至少一个例子', () => {
   assert.ok(inManual.length >= 6, `手册里只有 ${inManual.length} 个 space 例子`);
   const kinds = new Set();
   inManual.forEach((src, i) => check(src, `手册第 ${i + 1} 个例子`).cmds.forEach((c) => kinds.add(c.kind === 'plane' && c.eq ? 'plane-eq' : c.kind === 'surface' ? `surface-${c.form}` : c.kind)));
