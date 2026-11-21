@@ -59,7 +59,7 @@ export function resolveAsks(ask, steps) {
   const tags = new Set();
   steps.forEach((s, k) => { if (k > 0) asksOf(s).forEach((a) => tags.add(a.tag)); });
   const askable = steps.map((s, k) => (k > 0 && asksOf(s).length ? k : -1)).filter((k) => k > 0);
-  const put = (k, a) => { if (!which.has(k)) { which.set(k, a); asks.add(k); } };
+  const put = (k, a) => { if (which.has(k)) return false; which.set(k, a); asks.add(k); return true; };
   for (const t0 of ask.tags) {
     // rotate#2：只问第 2 次（老师看不到页面、数不出步号，按「第几次」指）
     const [t, nth] = t0.split('#');
@@ -71,7 +71,9 @@ export function resolveAsks(ask, steps) {
       put(at[n - 1], asksOf(steps[at[n - 1]]).find((x) => x.tag === t));
       continue;
     }
-    at.forEach((k) => put(k, asksOf(steps[k]).find((x) => x.tag === t)));
+    // 一步只问一个：这一种的每一处都和前面写的问题挤在同一步，就一次也问不到——报出来，别悄悄丢了
+    const got = at.map((k) => put(k, asksOf(steps[k]).find((x) => x.tag === t))).filter(Boolean).length;
+    if (at.length && !got) errors.push(`ask: 「${t}」每一处都和前面写的问题在同一步（一步只问一个），一次也问不到：少写一种，或者换成 ${t}#1 这样指定第几次`);
   }
   if (ask.all) askable.forEach((k) => put(k, asksOf(steps[k])[0]));
   for (const n of ask.nums) {

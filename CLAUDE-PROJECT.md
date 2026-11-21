@@ -85,12 +85,12 @@ goal A*x = [3, 5] msg="命中！"
 
 修饰词 `after` / `before`：只在 `predict` 揭晓之后 / 之前显示。`from=k` / `until=k`：图绑定了 `steps`（写 `link:`）时，揭开到第 k 步起 / 为止才显示，见下文 `steps`。标签末尾的数字自动变下标（`a1` → a₁）。
 
-
 还有 `polygon`、`text`、`curve`（参数曲线、单位圆的像）、`eigen`（特征方向）、`conic A = 3`（二次曲线 $\mathbf x^{\mathsf T}A\mathbf x=3$）。
 
 <!-- 完整写法 -->
 
 颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
+
 | 命令 | 作用 |
 |---|---|
 | `polygon P, Q, R, …` | 多边形 |
@@ -293,10 +293,10 @@ explain: $\operatorname{tr}A=\calc{tr(A)}$，所以 $A^3=\calc{A^3}$。
 - `let 名字 = 表达式`：由取到的数算出来的量。`where 条件`：一行一个，不满足就重取（比如 `where det(A) != 0`、`where abs(tr(A)) <= 4`），用来保证数字干净、题目有意义。
 - `q:`、`hint:`、`explain:`、`before:` 里用 `\calc{…}` 写出这一题的数；`answer:` 是答案的表达式，可以是数、向量、矩阵，也可以配 `formula: n` 让我写式子。`check: basis` / `check: eigvec` / `check: bin` / `check: hex`（配 `width:`）同 `answer` 的 `type`。
 
-
 <!-- 完整写法 -->
 
 - 发布时页面先取十几组数试一遍：算不出来、条件取不到都会报出来。
+
 需要新的内置题型时告诉我，我会去 GitHub 上让人加。
 - 取数的其他写法：`choice(2, 1/2, -3)`（从几个值里挑）、`vec(3, -2, 2)`（3 维随机整数向量，分量在 −2 到 2）、`mat(2, 2, -3, 3)`（2×2 随机整数矩阵，元素在 −3 到 3）。
 - `int()` 的上下界可以用前面取过的数：`pick b = int(a + 1, 9)`。`n`、`E`、`I` 都是普通的名字，可以 `pick n = int(3, 6)`、`let E = …`（阶码；单独写 `E` 就是它，`E(3)` 照样是单位矩阵）；只有配了 `formula: n`（答案是含 n 的式子）时不能再取一个叫 n 的数。
@@ -754,7 +754,6 @@ height: 260
 - 设计计算题时，可以鼓励我「先在草稿区写出完整过程，再填答案」。
 
 ### steps：一步步揭开的例题（带着动脑）
-
 
 ```steps
 id: ex-rank1
@@ -1776,7 +1775,7 @@ ask: pop, out
 id: cq1
 size: 6
 ops: enqueue a b c d e, dequeue 2, enqueue f g h
-ask: rear, full
+ask: rear#1, full
 ```
 
 - `size:` MaxSize；`ops:` 入队 `enqueue a b`、出队 `dequeue`（`dequeue 2` 出两个），一个元素一步。
@@ -2111,7 +2110,6 @@ ask: next
 - `ask: order`：bfs / dfs / topo / dijkstra / prim 在第 1 步之前让我在图上依次点出顶点（拓扑序列任何一个对的都算）。
 - 错法诊断认得出：BFS 和 DFS 弄反、邻接点按 edges 顺序（或按编号）走反了；Dijkstra 用了 Prim 的更新、有向图当无向图；Prim 用了 Dijkstra 的更新、只看刚加进来的顶点；Kruskal 不判环、判环判错；拓扑排序选了出度为 0 的、栈和队列弄混；关键路径 ve 取最小、vl 取最大、活动的 e 用了终点的 ve。
 
-
 ### store：图、树的存储结构（原图和存储并排）
 
 <!-- 科目：数据结构 -->
@@ -2133,7 +2131,6 @@ ask: list
 - 口径：链表默认尾插（按边的先后接在后面），`insert: head` 头插；十字链表、多重表的指针写弧 / 边的编号（按 edges 的先后从 0 数），空指针写 ∧；带权的邻接矩阵对角线 0、没边 ∞；双亲表示按层序编号、下标从 0 数，根的双亲 −1；顺序存储从 A[1] 开始，编号 i 的孩子是 2i、2i+1，空的写 #，`tree:` 写二叉树（`A(B(, D), C)`，逗号前是左子树）。
 - 错法诊断认得出：无向边只存了一个方向、头插尾插弄反、双亲表示按先序编号、顺序存储下标从 0 数。
 
-
 ### deque：双端队列（输入受限、输出受限）
 
 <!-- 科目：数据结构 -->
@@ -2153,7 +2150,6 @@ ask: possible, op
 <!-- 完整写法 -->
 
 - 错法诊断认得出：把输入受限当成输出受限（或者反过来）。
-
 
 ### slist：静态链表
 
@@ -3196,7 +3192,6 @@ count: 3
 - 写板时就知道是重点的，直接写进字里：`==只有这四类==` 是要背的（粉色荧光底，不压字），`=={yellow}谓语动词加 -s==` 换一种颜色标关键说明（`yellow` `blue` `green` `red`）；公式里 `\boxed{…}`、`\cancel{…}`、彩色粉笔 `\chalk{pink}{…}`。讲着讲着才要指的，用 mark。
 
 **unmark：撤掉标注。**`unmark id=m3`（一条）、`unmark target=b5`（这个目标上的全部）、`unmark all`。
-
 
 ---
 

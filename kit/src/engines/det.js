@@ -200,7 +200,8 @@ export function run(input) {
     M = [[ONE]];
     steps.push({ view: view({ op: opTeX(op), before, done: true }), msg: `按第 ${op.i + 1} ${WHAT[op.dim]}展开：每个元素乘它的代数余子式（余子式直接算出来）：${terms} = ${total.toString()}。`, ask: { tag: 'sign', kind: 'choice', q: `按第 ${op.i + 1} ${WHAT[op.dim]}展开时，第 ${asked.i + 1} 行第 ${asked.j + 1} 列的 ${asked.x.toString()} 乘它的余子式，前面的符号是？`, choices: ['+', '−'], answer: asked.s > 0 ? '+' : '−' } });
   };
-  if (input.ops) for (const op of input.ops) { if (M.length === 1) break; doOp(op); }
+  // 展开到一阶就已经算出 D 了：后面还写了 ops 是写法错误（以前悄悄不做）
+  if (input.ops) input.ops.forEach((op, k) => { if (M.length === 1) throw new Error(`ops: 第 ${k + 1} 步以前已经展开到一阶、算出 D 了，后面的 ${input.ops.length - k} 步用不上`); doOp(op); });
   // 还没化成上三角：自动接着化
   const upper = () => M.every((r, i) => r.slice(0, i).every((x) => x.zero));
   if (M.length > 1 && !upper()) {
@@ -340,7 +341,9 @@ function parseOpsParam(src, n, name) {
   });
 }
 
-const vTeX = (name) => (name === 'λ' ? '\\lambda' : /[α-ω]/.test(name) ? `\\${{ α: 'alpha', β: 'beta', γ: 'gamma', μ: 'mu', θ: 'theta' }[name] || 'lambda'}` : name);
+// 参数名的 TeX：希腊字母照它自己（以前没列到的都写成了 λ）
+const GREEK = { α: 'alpha', β: 'beta', γ: 'gamma', δ: 'delta', ε: 'varepsilon', ζ: 'zeta', η: 'eta', θ: 'theta', ι: 'iota', κ: 'kappa', λ: 'lambda', μ: 'mu', ν: 'nu', ξ: 'xi', π: 'pi', ρ: 'rho', σ: 'sigma', τ: 'tau', υ: 'upsilon', φ: 'varphi', χ: 'chi', ψ: 'psi', ω: 'omega' };
+const vTeX = (name) => (GREEK[name] ? `\\${GREEK[name]} ` : name);
 // 多项式写成学生能照着写的样子（a^3 - 3*a + 2），quiz 的标准答案用
 function polyPlain(p, name) {
   const terms = [];
@@ -382,7 +385,8 @@ function runParam(input) {
       const k = op.k;
       if (k.isConst) return opTeX({ ...op, k: k.constValue() });
       const neg = k.lead && k.lead.n < 0n, kk = neg ? k.neg() : k;
-      return `${name_(op.dim, op.i)} ${neg ? '-' : '+'} ${kk.c.filter((x) => !x.zero).length > 1 ? `\\left(${tx(kk)}\\right)` : tx(kk)}${name_(op.dim, op.j)}`;
+      // 倍数和 r_{1} 之间留一点空：\\lambda r_{1} 不能粘成 \\lambdar
+      return `${name_(op.dim, op.i)} ${neg ? '-' : '+'} ${kk.c.filter((x) => !x.zero).length > 1 ? `\\left(${tx(kk)}\\right)` : tx(kk)}\\,${name_(op.dim, op.j)}`;
     }
     if (op.kind === 'scale' && op.pullP) return `${name_(op.dim, op.i)} \\div ${op.pullP.c.filter((x) => !x.zero).length > 1 ? `\\left(${tx(op.pullP)}\\right)` : tx(op.pullP)}`;
     return opTeX(op);
@@ -422,7 +426,8 @@ function runParam(input) {
     M = [[Poly.const(1)]];
     steps.push({ view: view({ op: opTeX(op), before, done: true }), msg: `按第 ${op.i + 1} ${WHAT[op.dim]}展开：每个元素乘它的代数余子式：$${terms} = ${fx(total)}$。`, ask: { tag: 'sign', kind: 'choice', q: `按第 ${op.i + 1} ${WHAT[op.dim]}展开时，第 ${asked.i + 1} 行第 ${asked.j + 1} 列的元素乘它的余子式，前面的符号是？`, choices: ['+', '−'], answer: asked.s > 0 ? '+' : '−' } });
   };
-  if (input.ops) for (const op of input.ops) { if (M.length === 1) break; doOp(op); }
+  // 展开到一阶就已经算出 D 了：后面还写了 ops 是写法错误（以前悄悄不做）
+  if (input.ops) input.ops.forEach((op, k) => { if (M.length === 1) throw new Error(`ops: 第 ${k + 1} 步以前已经展开到一阶、算出 D 了，后面的 ${input.ops.length - k} 步用不上`); doOp(op); });
   const upper = () => M.every((r, i) => r.slice(0, i).every((x) => x.zero));
   let zeroCol;
   if (M.length > 1 && !upper()) {

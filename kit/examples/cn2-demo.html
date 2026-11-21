@@ -104,7 +104,7 @@ id: sw-hub
 title: 端口 1 接了集线器
 hosts: A 1, B 1, C 2, D 3
 frames: A→B, B→A, C→*, D→C, A→D
-ask: out, learn
+ask: out#1, learn
 ```
 
 ```switch
@@ -143,7 +143,7 @@ title: C 收到 B、D、E 的距离向量
 router: C
 vectors: B (5,0,8,12,6,2), D (16,12,6,0,9,10), E (7,6,3,9,0,4)
 cost: B 6, D 3, E 5
-ask: dist, hop
+ask: dist#1, hop
 ```
 
 ```dv
@@ -243,6 +243,6 @@ http: pipeline
 dns: 2
 rtt: 20ms
 dnsrtt: 10ms
-ask: obj, total, time
+ask: obj, total
 ```
 </script>

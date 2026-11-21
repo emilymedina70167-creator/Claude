@@ -468,7 +468,6 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 
 **unmark：撤掉标注。**`unmark id=m3`（一条）、`unmark target=b5`（这个目标上的全部）、`unmark all`。
 
-
 ---
 
 ## 五、外部的课（`kind: ext`）

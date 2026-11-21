@@ -379,6 +379,10 @@ export function stepperBlock(engine) {
       if (empty) return;
       const { ask, at } = pending;
       const r = checkAsk(ask, given);
+      // 同一个错答案连着再交：不算新的一次（第 4 批定的规矩；不然连点两下就出「看答案」）
+      const sig = Array.isArray(given) ? given.map(String).sort().join('|') : String(given).trim();
+      if (!r.ok && pending.lastWrong === sig) return;
+      pending.lastWrong = r.ok ? null : sig;
       pending.attempts++;
       const shown = Array.isArray(given) ? given.join('、') : String(given).trim();
       // 错了：同一个问题（题面一样）在常见错法下的答案和学生的一样，就是那种错法

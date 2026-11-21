@@ -9,7 +9,7 @@
 //   vector A*x color=green label=Ax
 //   show $A\mathbf x = {A*x}$
 //   goal A*x = [3, 2] msg="命中！"
-import { compile as compileRad, isNum, isVec, isMat, valueTeX, numText } from './expr.js';
+import { compile as compileRad, isNum, isVec, isMat, valueTeX, numText, NOT_BASIS } from './expr.js';
 import { createPlane, snap as snapTo, figureControls, sliderText } from './plot.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { session } from './session.js';
@@ -106,6 +106,8 @@ function parseCmd(kind, rest) {
   }
   const exprs = splitTop(body).map(compile);
   if (kind === 'decomp' && exprs.length !== 3) throw new Error('decomp 的写法：decomp v, b1, b2（把 v 沿着基 b1、b2 分解）');
+  // 两段上的名字照写的：decomp v, e1, e2 写 2·e₁；写的是式子（[1, 1]）就叫 b₁、b₂
+  if (kind === 'decomp') { const raw = splitTop(body).map((x) => x.trim()); return { kind, exprs, mods, names: [1, 2].map((k) => (/^[A-Za-z]\w*$/.test(raw[k]) ? raw[k] : `b${k}`)) }; }
   return { kind, exprs, mods };
 }
 
@@ -220,6 +222,14 @@ export function createScene(container, src, opts = {}) {
       checkGoals(v, ctl.quiet);
     }
     plane.cmd = null;
+    // 学生拖出来的基向量共线：不是写法错误，图边写一句（一开始就共线的照旧当写法错误报）
+    const notes = plane.drawIn ? [] : errors.filter((m) => m.includes(NOT_BASIS));
+    if (notes.length) for (let i = errors.length - 1; i >= 0; i--) if (errors[i].includes(NOT_BASIS)) errors.splice(i, 1);
+    let noteBox = container.querySelector('.scene-note');
+    if (notes.length) {
+      if (!noteBox) { noteBox = document.createElement('div'); noteBox.className = 'scene-note'; side.appendChild(noteBox); }
+      noteBox.textContent = `现在${NOT_BASIS}：坐标定不下来，把它们拖开一点。`;
+    } else noteBox?.remove();
     const errText = errors.join('；');
     if (errText !== lastError) {
       lastError = errText;
@@ -300,11 +310,11 @@ export function createScene(container, src, opts = {}) {
         // 坐标分解：先沿 b1 走 c1 倍（蓝），再沿 b2 走 c2 倍（粉）到 v；平行四边形的另外两条边画成虚线
         const [p0, b1, b2] = c.exprs.map((e) => vec2(e(v), 'decomp '));
         const d = decompParts(p0, b1, b2);
-        if (!d) throw new Error('decomp 的两个基向量共线：不是一组基');
+        if (!d) throw new Error(`decomp：${NOT_BASIS}`);
         for (const [a0, a1] of d.guides) plane.line(a0, a1, 'guide').style.stroke = 'var(--muted)';
         const [l1, l2] = d.legs;
-        if (Math.hypot(l1[1][0] - l1[0][0], l1[1][1] - l1[0][1]) > 1e-9) plane.arrow(l1[0], l1[1], 'var(--v1)', { label: c.mods.label === 'off' ? '' : prettyLabel(`${numText(d.c[0])}·b1`), width: 3.6 });
-        if (Math.hypot(l2[1][0] - l2[0][0], l2[1][1] - l2[0][1]) > 1e-9) plane.arrow(l2[0], l2[1], 'var(--v2)', { label: c.mods.label === 'off' ? '' : prettyLabel(`${numText(d.c[1])}·b2`), width: 3.6 });
+        if (Math.hypot(l1[1][0] - l1[0][0], l1[1][1] - l1[0][1]) > 1e-9) plane.arrow(l1[0], l1[1], 'var(--v1)', { label: c.mods.label === 'off' ? '' : prettyLabel(`${numText(d.c[0])}·${c.names[0]}`), width: 3.6 });
+        if (Math.hypot(l2[1][0] - l2[0][0], l2[1][1] - l2[0][1]) > 1e-9) plane.arrow(l2[0], l2[1], 'var(--v2)', { label: c.mods.label === 'off' ? '' : prettyLabel(`${numText(d.c[1])}·${c.names[1]}`), width: 3.6 });
         break;
       }
       case 'polygon': {

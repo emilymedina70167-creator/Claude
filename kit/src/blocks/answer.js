@@ -94,6 +94,7 @@ export function answerWidget(body, spec, onDone) {
     photo.disable();
     onDone?.({ ok, attempts, revealed, first, last: input.text(), work, note: lastNote || undefined });
   };
+  let lastWrongText = null; // 上一次判错的原文：一模一样再交不算新的一次
   let lastNote = ''; // 写式子的题：最后一次代值检查的结果（进作答记录，课堂 Claude 看得到错在哪个 n）
 
   function doCheck() {
@@ -116,13 +117,17 @@ export function answerWidget(body, spec, onDone) {
       lastNote = r.note;
       r = { ...r, msg: r.msg ? mdToHtml(r.msg) : '' };
     }
+    if (text) r = text.check(given);
+    else if (spec.cond) r = checkConditions(spec.cond, given, (typeof spec.vars === 'function' ? spec.vars() : spec.vars) || {});
+    else if (!formula) r = check(given, spec.answer, spec.type);
+    // 同一个错答案连着再点「检查」：不算新的一次，上一次的提示还在（第 4 批定的规矩）
+    const nowText = input.text();
+    if (r.ok === false && nowText === lastWrongText) return;
+    lastWrongText = r.ok === false ? nowText : null;
     attempts++;
     lastTried = input.partial();
     spec.onGiven?.(given);
     if (first === null) first = input.text();
-    if (text) r = text.check(given);
-    else if (spec.cond) r = checkConditions(spec.cond, given, (typeof spec.vars === 'function' ? spec.vars() : spec.vars) || {});
-    else if (!formula) r = check(given, spec.answer, spec.type);
     spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work, note: lastNote || undefined });
     // 页面判不了（实数取点取不到点、算不出来）：不算对也不算错，待外部核；记录里 ok 是 null（计划 3）
     // （不锁输入框、不算做完：学生可以改了再交；交了两次以上出「看答案」）

@@ -32,6 +32,7 @@ explain: $\operatorname{tr}A=\calc{tr(A)}$，所以 $A^3=\calc{A^3}$。
 - `q:`、`hint:`、`explain:`、`before:` 里用 `\calc{…}` 写出这一题的数；`answer:` 是答案的表达式，可以是数、向量、矩阵，也可以配 `formula: n` 让我写式子。`check: basis` / `check: eigvec` / `check: bin` / `check: hex`（配 `width:`）同 `answer` 的 `type`。
 
 - 发布时页面先取十几组数试一遍：算不出来、条件取不到都会报出来。
+
 需要新的内置题型时告诉我，我会去 GitHub 上让人加。
 - 取数的其他写法：`choice(2, 1/2, -3)`（从几个值里挑）、`vec(3, -2, 2)`（3 维随机整数向量，分量在 −2 到 2）、`mat(2, 2, -3, 3)`（2×2 随机整数矩阵，元素在 −3 到 3）。
 - `int()` 的上下界可以用前面取过的数：`pick b = int(a + 1, 9)`。`n`、`E`、`I` 都是普通的名字，可以 `pick n = int(3, 6)`、`let E = …`（阶码；单独写 `E` 就是它，`E(3)` 照样是单位矩阵）；只有配了 `formula: n`（答案是含 n 的式子）时不能再取一个叫 n 的数。

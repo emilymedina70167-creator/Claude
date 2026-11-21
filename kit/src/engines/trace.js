@@ -548,7 +548,7 @@ export function stackFrames(s) {
   return frames.map((f, i) => ({
     label: `${f.fn}(${f.args || ''})`,
     // 参数已经写在名字后面的括号里（fact(n = 2)）：不再写一遍
-    vars: (f.vars || []).filter((v) => !v.data && !(v.ref && v.arr) && !v.fields).map((v) => `${v.name} = ${v.value ?? '?'}`).filter((t) => !String(f.args || '').includes(t)),
+    vars: (f.vars || []).filter((v) => !v.data && !(v.ref && v.arr) && !v.fields).map((v) => `${v.name} = ${v.value ?? '?'}`).filter((t) => !String(f.args || '').split(/,\s*/).includes(t)), // 整项比：n = 1 不因为 n = 10 里有它就藏起来
     top: i === frames.length - 1,
     ret: i === frames.length - 1 ? ret : null,
   })).reverse();

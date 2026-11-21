@@ -10,6 +10,9 @@
 
 import { DIST } from './fx/special.js';
 import { numIntegral, numIntegral2, cubature2 } from './fx/integral.js';
+// 基向量共线：学生拖出来的（不是写法错误，scene 在图边写一句）和写死的（写法错误）都用这一句
+export const NOT_BASIS = '两个基向量共线，不是一组基';
+
 const FUNCS = {
   det: (M) => det(asMat(M)),
   inv: (M) => inv(asMat(M)),
@@ -29,7 +32,7 @@ const FUNCS = {
   coords: (v, b1, b2) => {
     const [x, y] = asVec(v), [a, c] = asVec(b1), [b, d] = asVec(b2);
     const det = a * d - b * c;
-    if (Math.abs(det) <= 1e-12 * Math.max(1, Math.hypot(a, c) * Math.hypot(b, d))) throw new Error('coords 的两个基向量共线：不是一组基');
+    if (Math.abs(det) <= 1e-12 * Math.max(1, Math.hypot(a, c) * Math.hypot(b, d))) throw new Error(NOT_BASIS);
     return [(x * d - b * y) / det, (a * y - c * x) / det];
   },
   cross: (u, v) => { const [a, b, c] = asVec(u), [d, e, f] = asVec(v); return [b * f - c * e, c * d - a * f, a * e - b * d]; },

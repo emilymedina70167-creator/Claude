@@ -39,7 +39,7 @@ test('写法错误：kind 写错、序列不是 push 的排列', () => {
 test('提问、测验、错法：先问得不得到；quiz 从几个里挑得到的；把输入受限当成输出受限', () => {
   const input = E.parse({ kind: 'in', push: '1 2 3 4', seq: '4 2 1 3', ask: 'possible' });
   const r = E.run(input);
-  assert.equal(r.steps[1].ask?.tag, 'possible', '问在第 1 步之前');
+  assert.equal(r.steps[1].ask?.tag, 'possible', '单独一步，在操作之前');
   assert.equal(r.steps[1].ask.answer, '得不到');
   const q = E.quiz(E.parse({ kind: 'in', push: '1 2 3 4', options: '4 1 3 2, 4 2 1 3, 4 2 3 1, 1 2 3 4' }), null);
   assert.equal(q.answer, '4132 1234');

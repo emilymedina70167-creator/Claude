@@ -46,14 +46,13 @@ export function run(input) {
       const slot = a.findIndex((c, idx) => idx > 0 && c.next === -2);
       if (slot < 0) throw new Error(`ops: insert ${o.i} ${o.x}：数组没有空闲的格了（size 再大一点）`);
       const pre = o.i === 1 ? 0 : chain[o.i - 2];
-      steps.push({ view: view({ at: [slot, pre] }), msg: `插入 ${o.x} 到第 ${o.i} 个位置：从 1 往后找第一个 next = −2 的格是 a[${slot}]；从头结点走 ${o.i - 1} 步找到前驱 a[${pre}]${pre ? `（${a[pre].data}）` : '（头结点）'}。`, ...(input.ask.includes('slot') ? { ask: { tag: 'slot', kind: 'number', q: `插入 ${o.x}：新结点放在第几格？`, answer: slot } } : {}) });
+      // 一步一件事、一步一个问题（外壳一步只问一个；问题在走到那一步之前问，所以答案在那一步才说）
+      steps.push({ view: view({ at: [slot] }), msg: `插入 ${o.x} 到第 ${o.i} 个位置：先从 1 往后找第一个 next = −2 的格，是 a[${slot}]，${o.x} 放在这里。`, ...(input.ask.includes('slot') ? { ask: { tag: 'slot', kind: 'number', q: `插入 ${o.x}：新结点放在第几格？`, answer: slot } } : {}) });
+      steps.push({ view: view({ at: [slot, pre] }), msg: `再从头结点走 ${o.i - 1} 步找到前驱：a[${pre}]${pre ? `（${a[pre].data}）` : '（头结点）'}。`, ...(input.ask.includes('pre') ? { ask: { tag: 'pre', kind: 'number', q: `插到第 ${o.i} 个位置：前驱是第几格？（头结点是 0）`, answer: pre } } : {}) });
       const oldNext = a[pre].next;
       if (input.mistake === 'order') { a[pre].next = slot; a[slot] = { data: o.x, next: a[pre].next }; }
       else { a[slot] = { data: o.x, next: oldNext }; a[pre].next = slot; }
-      const asks = [];
-      if (input.ask.includes('next')) asks.push({ tag: 'next', kind: 'number', q: `插入以后，前驱 a[${pre}] 的 next 是几？`, answer: a[pre].next });
-      if (input.ask.includes('pre')) asks.push({ tag: 'pre', kind: 'number', q: `插入 ${o.x} 的前驱是第几格？（头结点是 0）`, answer: pre });
-      steps.push({ view: view({ changed: [slot, pre], done: true }), msg: `插入：先 a[${slot}].next = a[${pre}].next = ${oldNext}（新结点接上后面），再 a[${pre}].next = ${slot}（前驱指向新结点）。链：${chainOf(a).map((p) => a[p].data).join(' → ')}。`, ...(asks.length ? { ask: asks[0], asks: asks.slice(1) } : {}) });
+      steps.push({ view: view({ changed: [slot, pre], done: true }), msg: `插入：先 a[${slot}].next = a[${pre}].next = ${oldNext}（新结点接上后面），再 a[${pre}].next = ${slot}（前驱指向新结点）。链：${chainOf(a).map((p) => a[p].data).join(' → ')}。`, ...(input.ask.includes('next') ? { ask: { tag: 'next', kind: 'number', q: `插入以后，前驱 a[${pre}] 的 next 是几？`, answer: a[pre].next } } : {}) });
     } else {
       if (o.i < 1 || o.i > chain.length) throw new Error(`ops: delete ${o.i} 的位置不对：现在有 ${chain.length} 个`);
       const pre = o.i === 1 ? 0 : chain[o.i - 2], q = chain[o.i - 1];

@@ -4,7 +4,7 @@
 id: cq1
 size: 6
 ops: enqueue a b c d e, dequeue 2, enqueue f g h
-ask: rear, full
+ask: rear#1, full
 ```
 
 - `size:` MaxSize；`ops:` 入队 `enqueue a b`、出队 `dequeue`（`dequeue 2` 出两个），一个元素一步。

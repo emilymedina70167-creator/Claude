@@ -122,18 +122,21 @@ function runGraph(input) {
     if (show.includes('list')) parts.push(`${e.v} ${input.insert === 'head' ? '插到' : '接在'} ${e.u} 的边表${input.insert === 'head' ? '最前面' : '后面'}${directed ? '' : `，${e.u} 也${input.insert === 'head' ? '插到' : '接在'} ${e.v} 的边表里`}`);
     if (show.includes('cross')) parts.push(`弧 ${k}（${e.u}→${e.v}）挂进 ${e.u} 的出弧链和 ${e.v} 的入弧链`);
     if (show.includes('multi')) parts.push(`边 ${k}（${e.u}—${e.v}）同时挂进 ${e.u}、${e.v} 两条链`);
+    // 外壳一步只问一个：matrix、list 都写了时一条边问一种（轮着来）
     const asks = [];
-    if (input.ask.includes('matrix')) asks.push({ tag: 'matrix', kind: 'number', q: `加上 ${e.u}${directed ? '→' : '—'}${e.v} 以后，A[${e.u}][${e.v}] 是多少？`, answer: Number(v.matrix[i][j]) });
-    if (input.ask.includes('list')) asks.push({ tag: 'list', kind: 'text', q: `加上这条边以后，${e.u} 的边表依次是？（顶点名，空格隔开）`, answer: v.list[e.u].join(' ') });
+    const both = input.ask.includes('matrix') && input.ask.includes('list');
+    if (input.ask.includes('matrix') && (!both || k % 2 === 0)) asks.push({ tag: 'matrix', kind: 'number', q: `加上 ${e.u}${directed ? '→' : '—'}${e.v} 以后，A[${e.u}][${e.v}] 是多少？`, answer: Number(v.matrix[i][j]) });
+    if (input.ask.includes('list') && (!both || k % 2 === 1)) asks.push({ tag: 'list', kind: 'text', q: `加上这条边以后，${e.u} 的边表依次是？（顶点名，空格隔开）`, answer: v.list[e.u].join(' ') });
     steps.push({ view: v, msg: `加上边 ${e.u}${directed ? '→' : '—'}${e.v}${input.weighted ? `（权 ${e.w}）` : ''}：${parts.join('；')}。`, ...(asks.length ? { ask: asks[0], asks: asks.slice(1) } : {}) });
   });
   if (input.ask.includes('degree')) {
+    // 度单独一步（外壳一步只问一个）：边都加完了再问
     const fin = graphStore(input, edges.length, input.mistake);
-    const x = names.reduce((b, y) => (directed ? fin.deg[y].out + fin.deg[y].in : fin.deg[y]) > (directed ? fin.deg[b].out + fin.deg[b].in : fin.deg[b]) ? y : b, names[0]);
-    steps.at(-1).asks = [...(steps.at(-1).asks || []), directed
-      ? { tag: 'degree', kind: 'number', q: `顶点 ${x} 的出度是多少？（数邻接矩阵第 ${x} 行不是 0 / ∞ 的格）`, answer: fin.deg[x].out }
-      : { tag: 'degree', kind: 'number', q: `顶点 ${x} 的度是多少？`, answer: fin.deg[x] }];
-    if (!steps.at(-1).ask) { steps.at(-1).ask = steps.at(-1).asks[0]; steps.at(-1).asks = steps.at(-1).asks.slice(1); }
+    const tot = (y) => (directed ? fin.deg[y].out + fin.deg[y].in : fin.deg[y]);
+    const x = names.reduce((b, y) => (tot(y) > tot(b) ? y : b), names[0]);
+    const hint = input.show.includes('matrix') ? `（数邻接矩阵第 ${x} 行不是 0 / ∞ 的格）` : input.show.includes('list') ? `（数 ${x} 的边表有几个结点）` : '';
+    const right = graphStore(input, edges.length, null);
+    steps.push({ view: view(edges.length), msg: directed ? `顶点 ${x} 的出度是 ${right.deg[x].out}、入度是 ${right.deg[x].in}。` : `顶点 ${x} 的度是 ${right.deg[x]}。`, ask: directed ? { tag: 'degree', kind: 'number', q: `顶点 ${x} 的出度是多少？${hint}`, answer: fin.deg[x].out } : { tag: 'degree', kind: 'number', q: `顶点 ${x} 的度是多少？`, answer: fin.deg[x] } });
   }
   return { steps, store: graphStore(input, edges.length, input.mistake) };
 }
@@ -228,8 +231,10 @@ function runTree(input) {
       parts.push(i === 0 ? (p === undefined ? '是第一棵树的根' : `是 ${F.nodes[p].key} 的第一个孩子：${F.nodes[p].key} 的 firstchild 指它`) : `是 ${F.nodes[sibs[i - 1]].key} 右边的兄弟：${F.nodes[sibs[i - 1]].key} 的 nextsibling 指它`);
     }
     const asks = [];
-    const mine = wrong.parent[k];
-    if (input.ask.includes('parent')) asks.push({ tag: 'parent', kind: 'number', q: `${key} 放在下标 ${k}，它的双亲下标是多少？（根写 −1）`, answer: mine[1] });
+    // 错法（按先序编号）也问同一个结点：它的双亲在那种编号里是第几个
+    const orderM = treeOrder(F, input.mistake);
+    const mine = p === undefined ? -1 : orderM.indexOf(p);
+    if (input.ask.includes('parent')) asks.push({ tag: 'parent', kind: 'number', q: `${key} 放在下标 ${k}，它的双亲下标是多少？（根写 −1）`, answer: mine });
     if (input.ask.includes('cs') && p !== undefined) {
       const sibs = F.nodes[p].kids, i = sibs.indexOf(id);
       asks.push({ tag: 'cs', kind: 'choice', q: `${key} 挂在哪个指针上？`, choices: [`${F.nodes[p].key} 的 firstchild`, i > 0 ? `${F.nodes[sibs[i - 1]].key} 的 nextsibling` : `${F.nodes[p].key} 的 nextsibling`], answer: i === 0 ? `${F.nodes[p].key} 的 firstchild` : `${F.nodes[sibs[i - 1]].key} 的 nextsibling` });
