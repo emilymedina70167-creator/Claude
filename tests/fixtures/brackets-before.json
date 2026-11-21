@@ -1,0 +1,625 @@
+[
+ {
+  "src": "[S The man [RC who lives next door]] [V gave] [IO me] [DO a book].",
+  "out": {
+   "text": "The man who lives next door gave me a book.",
+   "tokens": [
+    {
+     "w": "The",
+     "i": 0,
+     "word": true
+    },
+    {
+     "w": "man",
+     "i": 1,
+     "word": true
+    },
+    {
+     "w": "who",
+     "i": 2,
+     "word": true
+    },
+    {
+     "w": "lives",
+     "i": 3,
+     "word": true
+    },
+    {
+     "w": "next",
+     "i": 4,
+     "word": true
+    },
+    {
+     "w": "door",
+     "i": 5,
+     "word": true
+    },
+    {
+     "w": "gave",
+     "i": 6,
+     "word": true
+    },
+    {
+     "w": "me",
+     "i": 7,
+     "word": true
+    },
+    {
+     "w": "a",
+     "i": 8,
+     "word": true
+    },
+    {
+     "w": "book",
+     "i": 9,
+     "word": true
+    },
+    {
+     "w": ".",
+     "i": 10,
+     "word": false
+    }
+   ],
+   "spans": [
+    {
+     "role": "S",
+     "from": 0,
+     "to": 5,
+     "depth": 0
+    },
+    {
+     "role": "RC",
+     "from": 2,
+     "to": 5,
+     "depth": 1
+    },
+    {
+     "role": "V",
+     "from": 6,
+     "to": 6,
+     "depth": 0
+    },
+    {
+     "role": "IO",
+     "from": 7,
+     "to": 7,
+     "depth": 0
+    },
+    {
+     "role": "DO",
+     "from": 8,
+     "to": 9,
+     "depth": 0
+    }
+   ]
+  }
+ },
+ {
+  "src": "[S Tom], [App my best friend], [V is] [P a doctor].",
+  "out": {
+   "text": "Tom, my best friend, is a doctor.",
+   "tokens": [
+    {
+     "w": "Tom",
+     "i": 0,
+     "word": true
+    },
+    {
+     "w": ",",
+     "i": 1,
+     "word": false
+    },
+    {
+     "w": "my",
+     "i": 2,
+     "word": true
+    },
+    {
+     "w": "best",
+     "i": 3,
+     "word": true
+    },
+    {
+     "w": "friend",
+     "i": 4,
+     "word": true
+    },
+    {
+     "w": ",",
+     "i": 5,
+     "word": false
+    },
+    {
+     "w": "is",
+     "i": 6,
+     "word": true
+    },
+    {
+     "w": "a",
+     "i": 7,
+     "word": true
+    },
+    {
+     "w": "doctor",
+     "i": 8,
+     "word": true
+    },
+    {
+     "w": ".",
+     "i": 9,
+     "word": false
+    }
+   ],
+   "spans": [
+    {
+     "role": "S",
+     "from": 0,
+     "to": 0,
+     "depth": 0
+    },
+    {
+     "role": "App",
+     "from": 2,
+     "to": 4,
+     "depth": 0
+    },
+    {
+     "role": "V",
+     "from": 6,
+     "to": 6,
+     "depth": 0
+    },
+    {
+     "role": "P",
+     "from": 7,
+     "to": 8,
+     "depth": 0
+    }
+   ]
+  }
+ },
+ {
+  "src": "[AdvC When [S he] [V arrived]], [S we] [V had left].",
+  "out": {
+   "text": "When he arrived, we had left.",
+   "tokens": [
+    {
+     "w": "When",
+     "i": 0,
+     "word": true
+    },
+    {
+     "w": "he",
+     "i": 1,
+     "word": true
+    },
+    {
+     "w": "arrived",
+     "i": 2,
+     "word": true
+    },
+    {
+     "w": ",",
+     "i": 3,
+     "word": false
+    },
+    {
+     "w": "we",
+     "i": 4,
+     "word": true
+    },
+    {
+     "w": "had",
+     "i": 5,
+     "word": true
+    },
+    {
+     "w": "left",
+     "i": 6,
+     "word": true
+    },
+    {
+     "w": ".",
+     "i": 7,
+     "word": false
+    }
+   ],
+   "spans": [
+    {
+     "role": "AdvC",
+     "from": 0,
+     "to": 2,
+     "depth": 0
+    },
+    {
+     "role": "S",
+     "from": 1,
+     "to": 1,
+     "depth": 1
+    },
+    {
+     "role": "V",
+     "from": 2,
+     "to": 2,
+     "depth": 1
+    },
+    {
+     "role": "S",
+     "from": 4,
+     "to": 4,
+     "depth": 0
+    },
+    {
+     "role": "V",
+     "from": 5,
+     "to": 6,
+     "depth": 0
+    }
+   ]
+  }
+ },
+ {
+  "src": "[S The claim [AppC that [S the earth] [V is] [P flat]]] [V is not supported] by research.",
+  "out": {
+   "text": "The claim that the earth is flat is not supported by research.",
+   "tokens": [
+    {
+     "w": "The",
+     "i": 0,
+     "word": true
+    },
+    {
+     "w": "claim",
+     "i": 1,
+     "word": true
+    },
+    {
+     "w": "that",
+     "i": 2,
+     "word": true
+    },
+    {
+     "w": "the",
+     "i": 3,
+     "word": true
+    },
+    {
+     "w": "earth",
+     "i": 4,
+     "word": true
+    },
+    {
+     "w": "is",
+     "i": 5,
+     "word": true
+    },
+    {
+     "w": "flat",
+     "i": 6,
+     "word": true
+    },
+    {
+     "w": "is",
+     "i": 7,
+     "word": true
+    },
+    {
+     "w": "not",
+     "i": 8,
+     "word": true
+    },
+    {
+     "w": "supported",
+     "i": 9,
+     "word": true
+    },
+    {
+     "w": "by",
+     "i": 10,
+     "word": true
+    },
+    {
+     "w": "research",
+     "i": 11,
+     "word": true
+    },
+    {
+     "w": ".",
+     "i": 12,
+     "word": false
+    }
+   ],
+   "spans": [
+    {
+     "role": "S",
+     "from": 0,
+     "to": 6,
+     "depth": 0
+    },
+    {
+     "role": "AppC",
+     "from": 2,
+     "to": 6,
+     "depth": 1
+    },
+    {
+     "role": "S",
+     "from": 3,
+     "to": 4,
+     "depth": 2
+    },
+    {
+     "role": "V",
+     "from": 5,
+     "to": 5,
+     "depth": 2
+    },
+    {
+     "role": "P",
+     "from": 6,
+     "to": 6,
+     "depth": 2
+    },
+    {
+     "role": "V",
+     "from": 7,
+     "to": 9,
+     "depth": 0
+    }
+   ]
+  }
+ },
+ {
+  "src": "[S What [S he] [V said]] [V surprised] [O everyone [RC who [V heard] [O it]]].",
+  "out": {
+   "text": "What he said surprised everyone who heard it.",
+   "tokens": [
+    {
+     "w": "What",
+     "i": 0,
+     "word": true
+    },
+    {
+     "w": "he",
+     "i": 1,
+     "word": true
+    },
+    {
+     "w": "said",
+     "i": 2,
+     "word": true
+    },
+    {
+     "w": "surprised",
+     "i": 3,
+     "word": true
+    },
+    {
+     "w": "everyone",
+     "i": 4,
+     "word": true
+    },
+    {
+     "w": "who",
+     "i": 5,
+     "word": true
+    },
+    {
+     "w": "heard",
+     "i": 6,
+     "word": true
+    },
+    {
+     "w": "it",
+     "i": 7,
+     "word": true
+    },
+    {
+     "w": ".",
+     "i": 8,
+     "word": false
+    }
+   ],
+   "spans": [
+    {
+     "role": "S",
+     "from": 0,
+     "to": 2,
+     "depth": 0
+    },
+    {
+     "role": "S",
+     "from": 1,
+     "to": 1,
+     "depth": 1
+    },
+    {
+     "role": "V",
+     "from": 2,
+     "to": 2,
+     "depth": 1
+    },
+    {
+     "role": "V",
+     "from": 3,
+     "to": 3,
+     "depth": 0
+    },
+    {
+     "role": "O",
+     "from": 4,
+     "to": 7,
+     "depth": 0
+    },
+    {
+     "role": "RC",
+     "from": 5,
+     "to": 7,
+     "depth": 1
+    },
+    {
+     "role": "V",
+     "from": 6,
+     "to": 6,
+     "depth": 2
+    },
+    {
+     "role": "O",
+     "from": 7,
+     "to": 7,
+     "depth": 2
+    }
+   ]
+  }
+ },
+ {
+  "src": "[NF To see] [V is] [P to believe].",
+  "out": {
+   "text": "To see is to believe.",
+   "tokens": [
+    {
+     "w": "To",
+     "i": 0,
+     "word": true
+    },
+    {
+     "w": "see",
+     "i": 1,
+     "word": true
+    },
+    {
+     "w": "is",
+     "i": 2,
+     "word": true
+    },
+    {
+     "w": "to",
+     "i": 3,
+     "word": true
+    },
+    {
+     "w": "believe",
+     "i": 4,
+     "word": true
+    },
+    {
+     "w": ".",
+     "i": 5,
+     "word": false
+    }
+   ],
+   "spans": [
+    {
+     "role": "NF",
+     "from": 0,
+     "to": 1,
+     "depth": 0
+    },
+    {
+     "role": "V",
+     "from": 2,
+     "to": 2,
+     "depth": 0
+    },
+    {
+     "role": "P",
+     "from": 3,
+     "to": 4,
+     "depth": 0
+    }
+   ]
+  }
+ },
+ {
+  "src": "[S It] [V is] [P important] [SC that [S we] [V act] [A now]].",
+  "out": {
+   "text": "It is important that we act now.",
+   "tokens": [
+    {
+     "w": "It",
+     "i": 0,
+     "word": true
+    },
+    {
+     "w": "is",
+     "i": 1,
+     "word": true
+    },
+    {
+     "w": "important",
+     "i": 2,
+     "word": true
+    },
+    {
+     "w": "that",
+     "i": 3,
+     "word": true
+    },
+    {
+     "w": "we",
+     "i": 4,
+     "word": true
+    },
+    {
+     "w": "act",
+     "i": 5,
+     "word": true
+    },
+    {
+     "w": "now",
+     "i": 6,
+     "word": true
+    },
+    {
+     "w": ".",
+     "i": 7,
+     "word": false
+    }
+   ],
+   "spans": [
+    {
+     "role": "S",
+     "from": 0,
+     "to": 0,
+     "depth": 0
+    },
+    {
+     "role": "V",
+     "from": 1,
+     "to": 1,
+     "depth": 0
+    },
+    {
+     "role": "P",
+     "from": 2,
+     "to": 2,
+     "depth": 0
+    },
+    {
+     "role": "SC",
+     "from": 3,
+     "to": 6,
+     "depth": 0
+    },
+    {
+     "role": "S",
+     "from": 4,
+     "to": 4,
+     "depth": 1
+    },
+    {
+     "role": "V",
+     "from": 5,
+     "to": 5,
+     "depth": 1
+    },
+    {
+     "role": "A",
+     "from": 6,
+     "to": 6,
+     "depth": 1
+    }
+   ]
+  }
+ }
+]

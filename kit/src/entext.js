@@ -227,12 +227,19 @@ export const ROLES = {
   S: '主语', V: '谓语', O: '宾语', IO: '间接宾语', DO: '直接宾语', P: '表语', C: '补语', OC: '宾补', A: '状语', Attr: '定语', App: '同位语',
   RC: '定语从句', SC: '主语从句', ObC: '宾语从句', PC: '表语从句', AppC: '同位语从句', AdvC: '状语从句', NF: '非谓语', Conj: '连接词',
 };
+// 层次图、句子变换用的两个成分（视觉第 5 批）。不放进 ROLES：舞台的句子（stage/types/sentence.js）拿 ROLES 当它认得的成分名，那边的行为不变
+export const MORE_ROLES = { Par: '插入语', Emp: '被强调的部分' };
+const ALL_ROLES = { ...ROLES, ...MORE_ROLES };
+/** 成分的中文名（不认识的原样返回） */
+export const roleName = (k) => ALL_ROLES[k] || k;
+// 层次图里「另起一层」的：从句和插入语（主语、谓语这些短的成分留在所在的那一行里）
+export const CLAUSE_ROLES = new Set(['RC', 'SC', 'ObC', 'PC', 'AppC', 'AdvC', 'Par']);
 
 /** roles: 「S V O」或「S=主语 V=谓语 RC=定语从句」→ [{ key, name }] */
 export function parseRoles(src, fallback = []) {
   const items = String(src ?? '').split(/[\s,，、]+/).filter(Boolean);
-  const out = items.map((x) => { const [k, n] = x.split(/[=＝]/); return { key: k.trim(), name: (n || ROLES[k.trim()] || k).trim() }; });
-  return out.length ? out : fallback.map((k) => ({ key: k, name: ROLES[k] || k }));
+  const out = items.map((x) => { const [k, n] = x.split(/[=＝]/); return { key: k.trim(), name: (n || ALL_ROLES[k.trim()] || k).trim() }; });
+  return out.length ? out : fallback.map((k) => ({ key: k, name: ALL_ROLES[k] || k }));
 }
 
 /**
@@ -244,16 +251,17 @@ export function parseBrackets(src) {
   const words = [];
   const spans = [];
   const stack = [];
-  const re = /\[([A-Za-z][\w]*)\s+|\]|[^\s[\]]+/g;
+  // [S~1 …]：~1 是分裂结构的记号（同一个号的两段本来是连着的）
+  const re = /\[([A-Za-z][\w]*)(?:~(\d+))?\s+|\]|[^\s[\]]+/g;
   let m;
   const pieces = [];
   while ((m = re.exec(s))) {
-    if (m[1]) { stack.push({ role: m[1], from: null, depth: stack.length }); continue; }
+    if (m[1]) { stack.push({ role: m[1], from: null, depth: stack.length, ...(m[2] ? { join: Number(m[2]) } : {}) }); continue; }
     if (m[0] === ']') {
       const top = stack.pop();
       if (!top) throw new Error('多了一个 ]');
       if (top.from === null) throw new Error(`[${top.role} …] 里面没有词`);
-      spans.push({ role: top.role, from: top.from, to: lastWord(top.from), depth: top.depth });
+      spans.push({ role: top.role, from: top.from, to: lastWord(top.from), depth: top.depth, ...(top.join ? { join: top.join } : {}) });
       continue;
     }
     // 一段文字：再按句子的切法切开（标点单独成词）
@@ -271,7 +279,94 @@ export function parseBrackets(src) {
   }
   if (!spans.length) throw new Error('answer 里要用 [角色 词…] 标出成分，比如 [S The man] [V gave] [O me]');
   const tokens = tokenizeSentence(words.join(' '));
-  return { text: joinWords(words), tokens, spans: spans.sort((a, b) => a.from - b.from || b.to - a.to) };
+  const sorted = spans.sort((a, b) => a.from - b.from || b.to - a.to);
+  joinsOf(sorted); // ~n 只写了一段、写了三段：这里就报
+  return { text: joinWords(words), tokens, spans: sorted };
+}
+
+// —— 层次：括号套出来的树、一层层的行 ——
+
+/** 成分按包含关系排成树：[{ index（在 spans 里的下标）, children }]，同一层按位置。交叉的范围（学生标出来的可能有）报错 */
+export function nestSpans(spans) {
+  const order = spans.map((_, i) => i).sort((a, b) => spans[a].from - spans[b].from || spans[b].to - spans[a].to || (spans[a].depth ?? 0) - (spans[b].depth ?? 0) || a - b);
+  const root = { index: -1, children: [] }, stack = [root];
+  for (const i of order) {
+    const sp = spans[i];
+    while (stack.length > 1 && spans[stack.at(-1).index].to < sp.from) stack.pop();
+    const top = stack.at(-1);
+    if (top.index >= 0 && sp.to > spans[top.index].to) throw new Error(`「${spans[top.index].role}」和「${sp.role}」两段的范围交叉了（一段要么整个在另一段里面，要么在外面）`);
+    const node = { index: i, children: [] };
+    top.children.push(node); stack.push(node);
+  }
+  return root.children;
+}
+
+/**
+ * 给层次图排行：主干的词在最外面，每个从句、插入语另起缩进的一行；fold 里的（spans 的下标）收成一个「…」，前后的词接回一行。
+ * 回 [{ depth, clause（这一行属于哪个从句，最外层是 null）, pieces: [{ from, to, role, span } | { folded: 下标, role }] }]
+ */
+export function layerRows(p, { fold = [] } = {}) {
+  const { spans, tokens } = p, folded = new Set(fold);
+  const clauses = spans.map((s, i) => i).filter((i) => CLAUSE_ROLES.has(spans[i].role)).sort((a, b) => spans[a].from - spans[b].from || spans[b].to - spans[a].to);
+  const inside = (i, t) => spans[i].from <= t && t <= spans[i].to;
+  const rows = [];
+  const push = (key, depth, piece) => {
+    let row = rows.at(-1);
+    if (!row || row.clause !== key) { row = { depth, clause: key, pieces: [] }; rows.push(row); }
+    const last = row.pieces.at(-1);
+    if (last && piece.folded === undefined && last.folded === undefined && last.span === piece.span && last.to === piece.from - 1) last.to = piece.to; else row.pieces.push(piece);
+  };
+  for (let t = 0; t < tokens.length; t++) {
+    const chain = clauses.filter((i) => inside(i, t)); // 从外到里
+    const cut = chain.findIndex((i) => folded.has(i));
+    if (cut >= 0) {
+      // 折起来的从句：只在它的第一个词那里放一个「…」，放在它外面那一层的行里
+      const f = chain[cut];
+      if (t === spans[f].from) push(cut ? chain[cut - 1] : null, cut, { folded: f, role: spans[f].role });
+      continue;
+    }
+    const key = chain.length ? chain.at(-1) : null;
+    // 这个词的成分：包着它的、不是从句的、最里面的那一个——而且要整个在这一行的从句里面（外面的主语不算从句里的词的成分）
+    let own = -1;
+    spans.forEach((s, i) => {
+      if (CLAUSE_ROLES.has(s.role) || !inside(i, t)) return;
+      if (key !== null && !(s.from >= spans[key].from && s.to <= spans[key].to)) return;
+      if (own < 0 || s.to - s.from < spans[own].to - spans[own].from || (s.to - s.from === spans[own].to - spans[own].from && (s.depth ?? 0) > (spans[own].depth ?? 0))) own = i;
+    });
+    push(key, chain.length, { from: t, to: t, role: own >= 0 ? spans[own].role : null, span: own });
+  }
+  // 只剩标点的一行（从句后面孤零零的句号）并到上一行的末尾；一个从句被里面的从句隔成两截时，后一截标 cont（接着上面那一块）
+  const out = [], seen = new Set();
+  for (const row of rows) {
+    const onlyPunct = row.pieces.every((x) => x.folded === undefined && !x.role && tokens.slice(x.from, x.to + 1).every((tk) => !tk.word));
+    if (onlyPunct && out.length) { out.at(-1).pieces.push(...row.pieces.map((x) => ({ ...x, tail: true }))); continue; }
+    if (row.clause !== null) { if (seen.has(row.clause)) row.cont = true; seen.add(row.clause); }
+    out.push(row);
+  }
+  return out;
+}
+
+/** 分裂结构：~n 一样的两段。回 [{ id, parts: [下标, 下标] }]；一个号只有一段、多于两段报错 */
+export function joinsOf(spans) {
+  const by = new Map();
+  spans.forEach((s, i) => { if (s.join) by.set(s.join, [...(by.get(s.join) || []), i]); });
+  const out = [];
+  for (const [id, parts] of [...by].sort((a, b) => a[0] - b[0])) {
+    if (parts.length < 2) throw new Error(`~${id} 只有一段：分裂的两段都要写 ~${id}（[S~${id} The rumor] … [AppC~${id} that …]）`);
+    if (parts.length > 2) throw new Error(`~${id} 写了 ${parts.length} 段：一个记号只连两段`);
+    out.push({ id, parts });
+  }
+  return out;
+}
+/** 学生连的（[[下标, 下标], …]）对不对：{ ok: true | false | null（一对都没连）, text } */
+export function judgeJoins(mine = [], joins = []) {
+  if (!mine.length) return { ok: null, text: '还没连：先点一段，再点和它本来连着的那一段。' };
+  const pk = ([a, b]) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+  const want = new Set(joins.map((j) => pk(j.parts))), got = new Set(mine.map(pk));
+  const wrong = [...got].filter((k) => !want.has(k)).length, missing = [...want].filter((k) => !got.has(k)).length;
+  if (wrong) return { ok: false, text: `有 ${wrong} 对连错了：这两段不是一家。` };
+  if (missing) return { ok: false, text: `还有 ${missing} 对没连。` };
+  return { ok: true, text: '对，这两段本来是连着的。' };
 }
 
 // 词连回句子：标点贴在前一个词后面
@@ -305,7 +400,7 @@ export const spanText = (tokens, s) => joinWords(tokens.slice(s.from, s.to + 1).
 /** 判分结果给学生的一句话（不说答案） */
 export function spansHint(r, roles = []) {
   if (r.ok) return '';
-  const name = (k) => roles.find((x) => x.key === k)?.name || ROLES[k] || k;
+  const name = (k) => roles.find((x) => x.key === k)?.name || ALL_ROLES[k] || k;
   const bits = [];
   if (r.right.length) bits.push(`对了 ${r.right.length} 处`);
   if (r.wrongRole.length) bits.push(`${r.wrongRole.length} 处范围对了、成分标错了（${r.wrongRole.map((x) => name(x.span.role)).join('、')}）`);
@@ -582,4 +677,81 @@ export function glossMatches(text, items = []) {
     out.push({ index: m.index, length: m[0].length, item: sorted[k] });
   }
   return out;
+}
+
+// —— 平行结构 parallel（视觉第 5 批）：She likes [reading novels], [writing letters], and [to swim]. ——
+
+const COORD = new Set(['and', 'or', 'but', 'nor', 'yet']);
+const zhCount = (n) => ['零', '一', '两', '三', '四', '五', '六', '七', '八'][n] || String(n);
+
+/**
+ * 方括号括出并列的几项 → { text, tokens, items: [{ from, to }], stem: { from, to } | null（公共的开头）, conj: 最后一项前面那个并列连词的下标（没有是 -1）}。
+ * 括号不配对、套了括号、不到两项都报错
+ */
+export function parseParallel(src) {
+  const s = String(src ?? '').trim();
+  if (!s) throw new Error('要写 text:（句子，用方括号括出并列的几项）');
+  const words = [], marks = [];
+  let open = -1;
+  for (const m of s.matchAll(/\[|\]|[^\s[\]]+/g)) {
+    if (m[0] === '[') { if (open >= 0) throw new Error('括号套了括号：并列的每一项各括一对方括号，不能套'); open = words.length; continue; }
+    if (m[0] === ']') { if (open < 0) throw new Error('括号不配对：多了一个 ]'); if (words.length === open) throw new Error('方括号里是空的'); marks.push([open, words.length - 1]); open = -1; continue; }
+    for (const t of tokenizeSentence(m[0])) words.push(t.w);
+  }
+  if (open >= 0) throw new Error('括号不配对：有一个 [ 没有合上');
+  if (marks.length < 2) throw new Error('并列的要至少两项：每一项各括一对方括号');
+  const tokens = tokenizeSentence(words.join(' '));
+  // 项的头尾不含标点
+  const items = marks.map(([a, b]) => { let from = a, to = b; while (from < to && !tokens[from].word) from++; while (to > from && !tokens[to].word) to--; return { from, to }; });
+  let conj = -1;
+  for (let i = items.at(-1).from - 1; i > items.at(-2).to; i--) if (COORD.has(tokens[i].w.toLowerCase())) { conj = i; break; }
+  return { text: joinWords(words), tokens, items, stem: items[0].from > 0 ? { from: 0, to: items[0].from - 1 } : null, conj };
+}
+
+/**
+ * 排成对齐的几行：[{ lead: 这一项前面的词的下标（第一行是公共的开头，后面几行是连接词）, item: { from, to } | null, trail: 跟在后面的标点 }]。
+ * 最后一项后面还有话的，另起一行（item 是 null）
+ */
+export function parallelRows(p) {
+  const { tokens, items } = p, rows = [];
+  items.forEach((it, k) => {
+    const start = k ? items[k - 1].to + 1 : 0, lead = [], prevTrail = [];
+    // 上一项后面紧跟的标点归上一行，别的（and、but also……）是这一行的开头
+    let i = start;
+    if (k) { while (i < it.from && !tokens[i].word) { prevTrail.push(i); i++; } rows.at(-1).trail.push(...prevTrail); }
+    for (; i < it.from; i++) lead.push(i);
+    rows.push({ lead, item: it, trail: [] });
+  });
+  const rest = [];
+  for (let i = items.at(-1).to + 1; i < tokens.length; i++) rest.push(i);
+  const words = rest.filter((i) => tokens[i].word);
+  if (!words.length) rows.at(-1).trail.push(...rest);
+  else { let i = 0; while (i < rest.length && !tokens[rest[i]].word) { rows.at(-1).trail.push(rest[i]); i++; } rows.push({ lead: rest.slice(i), item: null, trail: [] }); }
+  return rows;
+}
+
+/** 学生点的「每一项的第一个词」对不对：{ ok: true | false | null（一个都没点）, right, extra, missing, text } */
+export function judgeStarts(mine = [], p) {
+  const want = new Set(p.items.map((it) => it.from)), got = new Set(mine);
+  if (!got.size) return { ok: null, right: 0, extra: 0, missing: want.size, text: '还没点：点出并列的每一项的第一个词。' };
+  const right = [...got].filter((i) => want.has(i)).length, extra = got.size - right, missing = want.size - right;
+  if (!extra && !missing) return { ok: true, right, extra, missing, text: `对，这${zhCount(want.size)}处是并列的${zhCount(want.size)}项的开头。` };
+  const bits = [right ? `点对了 ${right} 项` : '', extra ? `有 ${extra} 处不是并列项的开头` : '', missing ? `还差 ${missing} 项` : ''].filter(Boolean);
+  return { ok: false, right, extra, missing, text: `${bits.join('，')}。` };
+}
+/** 学生挑的「不平行的那一项」（从 0 数）对不对；spec.answer 从 1 数 */
+export function judgeOdd(pick, spec) {
+  if (pick === Number(spec.answer) - 1) return { ok: true, text: '对，是这一项：它的形式和另外几项不一样。' };
+  return { ok: false, text: '这一项的形式和别的一样，再比一比每一项开头的那个词。' };
+}
+/** 改法的选项：对的（fix）和错的（decoys，| 隔开）打乱。顺序按题目定（同一道题每次一样）。回 { options, right } */
+export function fixOptions(spec, seedText = '') {
+  const fix = String(spec.fix ?? '').trim(), decoys = parseAlts(spec.decoys).filter((d) => d !== fix);
+  const all = [fix, ...decoys];
+  let h = 2166136261;
+  for (const c of `${seedText}|${all.join('|')}`) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); }
+  const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return (h >>> 0) / 4294967296; };
+  const order = all.map((x, i) => i);
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  return { options: order.map((i) => all[i]), right: order.indexOf(0) };
 }
