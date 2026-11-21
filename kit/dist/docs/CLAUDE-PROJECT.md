@@ -160,6 +160,8 @@ b = [1, 1, -2]
 - `cloze`（英语）：英语填空（一句或一段里几个空） → `components/cloze.md`
 - `errfind`（英语）：英语改错（点出用错的词，再写改成什么） → `components/errfind.md`
 - `parse`（英语）：句子成分标注（长难句，能套从句） → `components/parse.md`
+- `parallel`（英语）：平行结构（并列的几项上下对齐） → `components/parallel.md`
+- `shift`（英语）：句子变换（主动变被动、强调句、倒装还原……） → `components/shift.md`
 - `chunk`（英语）：意群断句（长难句、翻译） → `components/chunk.md`
 - `link`（英语）：连线（点一个词，再点它连着的那个词） → `components/link.md`
 - `translate`（英语）：翻译（页面按要点判） → `components/translate.md`

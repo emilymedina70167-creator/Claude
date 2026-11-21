@@ -70,6 +70,7 @@ export function parallel(el, src) {
     body.querySelector('.pl-check').addEventListener('click', () => {
       if (closed || !picked.size) return;
       const r = judgeStarts([...picked], p);
+      if (!r.ok && said() === tried) return; // 同一个答案连点检查：不算新的一次
       attempts++; tried = said();
       rec({ liveOnly: true, ok: r.ok, attempts, value: tried, detail: r.text });
       fb.hidden = false; fb.className = `q-feedback ${r.ok ? 'is-ok' : 'is-bad'}`;
@@ -113,6 +114,7 @@ export function parallel(el, src) {
     const b = e.target.closest('.pl-item[data-k]');
     if (!b || closed || stage !== 'pick') return;
     const k = Number(b.dataset.k), r = judgeOdd(k, { answer });
+    if (!r.ok && state[k]?.cls === 'is-wrong') return; // 再点刚点错的那一项：不算新的一次
     attempts++;
     rec({ liveOnly: true, ok: r.ok, attempts, value: `点了${nth(k)}`, detail: r.text, more: (r.ok && !!opts) || undefined });
     for (const key of Object.keys(state)) delete state[key];

@@ -68,3 +68,14 @@ test('不认识的字段报出来', async () => {
   assert.match(shiftFieldProblems({ from: 'a', to: 'b', answr: '1' })[0], /answr/);
   assert.match(shiftFieldProblems({ from: 'a', to: 'b', mode: 'drag' })[0], /mode/);
 });
+
+test('[O=S …]：按前面的名字配对，画出来的成分是后面那个（主动变被动，宾语成了主语）', () => {
+  const s = parseShift({ from: '[S The committee] [V approved] [O the plan].', to: '[O=S The plan] [V was approved] [S=A by the committee].' });
+  const plan = shiftPlan(s);
+  assert.deepEqual(plan.order, ['O', 'V', 'S']);
+  const to = s.to.filter((x) => x.key);
+  assert.deepEqual(to.map((x) => [x.key, x.role]), [['O', 'S'], ['V', 'V'], ['S', 'A']]);
+  assert.deepEqual(s.from.filter((x) => x.key).map((x) => [x.key, x.role]), [['S', 'S'], ['V', 'V'], ['O', 'O']]);
+  assert.equal(judgeOrder(['O', 'V', 'S'], s).ok, true);
+  assert.throws(() => parseShift({ from: '[S He] [V left].', to: '[S= He] [V left].' }), /=/);
+});

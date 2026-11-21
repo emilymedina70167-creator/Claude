@@ -10,14 +10,16 @@ function parseLine(src, which) {
   const out = [], count = {};
   let loose = [];
   const flush = () => { if (loose.length) { out.push({ text: joinWords(loose) }); loose = []; } };
-  for (const m of s.matchAll(/\[([A-Za-z][\w]*)(?:#(\d+))?\s+([^[\]]*)\]|[[\]]|[^\s[\]]+/g)) {
+  // [O the plan]：成分 O；[O=S The plan]：和另一行的 O 配对，在这一行里是主语（被动句里原来的宾语当了主语）
+  for (const m of s.matchAll(/\[([A-Za-z][\w]*)(?:#(\d+))?(?:=([A-Za-z]\w*)?)?\s+([^[\]]*)\]|[[\]]|[^\s[\]]+/g)) {
     if (m[0] === '[' || m[0] === ']') throw new Error(`${which} 的括号不配对，或者括号套了括号（这里一个成分一对方括号，不套）`);
     if (m[1]) {
       flush();
-      const role = m[1], text = joinWords(tokenizeSentence(m[3]).map((t) => t.w));
-      if (!text) throw new Error(`${which} 里 [${role} …] 是空的`);
-      const n = m[2] ? Number(m[2]) : (count[role] = (count[role] || 0) + 1);
-      out.push({ key: n === 1 ? role : `${role}#${n}`, role, text });
+      if (/=/.test(m[0].split(/\s/)[0]) && !m[3]) throw new Error(`${which} 里 [${m[1]}= …] 的 = 后面要写这一行里它是什么成分，比如 [O=S The plan]`);
+      const name = m[1], role = m[3] || name, text = joinWords(tokenizeSentence(m[4]).map((t) => t.w));
+      if (!text) throw new Error(`${which} 里 [${name} …] 是空的`);
+      const n = m[2] ? Number(m[2]) : (count[name] = (count[name] || 0) + 1);
+      out.push({ key: n === 1 ? name : `${name}#${n}`, role, text });
       continue;
     }
     for (const t of tokenizeSentence(m[0])) { if (t.word) loose.push(t.w); else { flush(); out.push({ text: t.w, punct: true }); } }

@@ -30,7 +30,9 @@ export function shift(el, src) {
   const fromOf = (k) => s.from.find((x) => x.key === k), toOf = (k) => s.to.find((x) => x.key === k);
   const changed = new Map(plan.changed.map((c) => [c.key, c]));
   const added = new Set(plan.added.map((t) => t.toLowerCase())), dropped = new Set(plan.dropped.map((t) => t.toLowerCase()));
-  const label = (k) => escapeHtml(roleName(fromOf(k).role));
+  // 成分名：原句那一行照 from 写的，变换以后照 to 写的（[O=S The plan]：原来的宾语，现在是主语）
+  const label = (k, row = 'from') => escapeHtml(roleName((row === 'to' ? toOf(k) : fromOf(k)).role));
+  const roleMoved = s.from.filter((x) => x.key && toOf(x.key).role !== x.role);
   // decoys: V = approved | has approved（排对以后，变了形式的成分让学生选）
   const decoys = {};
   for (const line of String(fields.decoys || '').split('\n')) { const m = /^\s*([\w#]+)\s*=\s*(.+)$/.exec(line); if (m) decoys[m[1]] = m[2]; }
@@ -53,7 +55,7 @@ export function shift(el, src) {
       const k = placed[n];
       if (k === undefined) return slots ? `<button type="button" class="sh-slot${bad === n ? ' is-bad' : ''}" data-slot="${n}" aria-label="第 ${n + 1} 个位置"></button>` : '<span class="sh-slot is-empty"></span>';
       const ch = changed.get(k), text = final ? toOf(k).text : fromOf(k).text;
-      const was = final && ch ? `<small class="sh-was">原来：${escapeHtml(ch.before)}</small>` : `<small>${label(k)}</small>`;
+      const was = final ? `<small${ch ? ' class="sh-was"' : ''}>${label(k, 'to')}${ch ? ` · 原来：${escapeHtml(ch.before)}` : ''}</small>` : `<small>${label(k)}</small>`;
       const cls = `sh-chunk ${color(k)}${final && ch ? ' is-changed' : ''}${bad === n ? ' is-bad' : ''}`;
       return slots ? `<button type="button" class="${cls}" data-slot="${n}" data-key="${k}"><span class="sh-text">${escapeHtml(text)}</span>${was}</button>` : `<span class="${cls}" data-key="${k}"><span class="sh-text">${escapeHtml(text)}</span>${was}</span>`;
     }).join(' ');
@@ -64,6 +66,8 @@ export function shift(el, src) {
     plan.added.length ? `新加的词：${plan.added.map((t) => `「${t}」`).join('、')}` : '',
     plan.dropped.length ? `去掉的词：${plan.dropped.map((t) => `「${t}」`).join('、')}` : '',
     ...plan.changed.map((c) => `${roleName(fromOf(c.key).role)}：${c.before} → ${c.after}`),
+    ...roleMoved.map((x) => `「${toOf(x.key).text}」原来是${roleName(x.role)}，现在是${roleName(toOf(x.key).role)}`),
+    !plan.added.length && !plan.dropped.length && !plan.changed.length && !roleMoved.length ? '词一个没变，只是顺序变了。' : '',
   ].filter(Boolean).map((t) => `<div class="sh-note">${escapeHtml(t)}</div>`).join('');
 
   if (!doing) {

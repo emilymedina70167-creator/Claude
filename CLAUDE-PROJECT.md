@@ -2957,6 +2957,53 @@ explain: 先找谓语 gave，往前是主语，who 引导的定语从句修饰 t
 - `mode: show`：不作答，直接把句子结构画在板上（讲解时用）。
 - 一道题只拆一层最清楚：先拆主干，下一道再拆从句里面。
 - **一层层拆**：加 `steps: V | S O | RC`：第 1 步只标谓语，对了固定在句子上，第 2 步标主语、宾语，第 3 步标从句。每一步的成分在 `answer:` 里都要有；哪一步错了停在哪一步，记录里写第几步。长难句先找谓语就用它。
+- 从句套了两层以上、或者有分裂结构（`~n`）时画成一层层缩进的层次图；`view:`、分裂结构、`ask: join` 的写法见完整写法。
+
+<!-- 完整写法 -->
+
+- **层次图**：从句套了两层以上、或者有分裂结构时，句子画成一层层缩进的块（主干在最外面，每个从句、插入语一块，左上角写是什么从句）；点块的标签折起来只剩「…」，主干连成一句读。作答的题我标对一个从句，下面的层次图长出一块。`view: layers` 只套一层也这样画，`view: line` 照旧画成一行括号。
+- 成分还有 `Par` 插入语、`Emp` 被强调的部分。
+- **分裂结构**：被隔开、本来连着的两段，成分名后面写同一个 `~n`：`[S~1 The rumor] [V spread] [AppC~1 that he had resigned]`，层次图上两段之间画一条弧。加 `ask: join`：成分标对以后（`mode: show` 时一上来）我先点一段、再点和它连着的那一段；连错只说「这两段不是一家」，三次不对能看答案。
+
+### parallel：平行结构（并列的几项上下对齐）
+
+<!-- 科目：英语 -->
+
+```parallel
+id: pl-odd
+title: 哪一项不平行
+text: She likes [reading novels], [writing letters], and [to swim].
+ask: odd
+answer: 3
+fix: swimming
+decoys: swim | to swimming
+explain: 并列的三项要同一种形式：前两项是 doing，第三项也写 swimming。
+```
+
+- `text:` 里用方括号括出并列的每一项（至少两项，不套）。页面把公共的开头（She likes）放在左边，每一项另起一行上下排齐、开头的词加粗，并列连词标出来。
+- 不写 `ask:` 只展示。`ask: starts`：句子先是普通的一行，我点每一项的第一个词，点对了那一项跳到对齐的位置上。`ask: odd`：我点出不平行的那一项（`answer:` 第几项），再从改法里选（`fix:` 是对的，`decoys:` 是错的，`|` 隔开）。
+- 判错只说哪里不对，不说答案；三次不对能看答案。
+
+### shift：句子变换（主动变被动、强调句、倒装还原……）
+
+<!-- 科目：英语 -->
+
+```shift
+id: sh-pass
+title: 主动变被动
+from: [S The committee] [V approved] [O the plan] [A yesterday].
+to: [O=S The plan] [V was approved] [S=A by the committee] [A yesterday].
+mode: do
+decoys: V = approved | has approved
+```
+
+- `from:` 原句、`to:` 变换以后，都用 `[成分 词…]` 括出成分（不套）；两行按成分名一一对上，同名的第二个写 `A#2`；成分变了写 `[O=S The plan]`（和原句的 O 配对，这里是主语）。新加的词（`It was` `that`、there）写在括号外面，页面认成新加的、去掉的；句首的大小写、标点不算词变了。
+- `mode: show`（默认）：点「下一步」，一个成分带着颜色挪到新位置，原处留一个淡的影子；挪完标出哪些词变了（原来是什么）、新加和去掉的词。课堂里 `figure set step=2` / `figure play step 0 4 4s`（step 是挪了几个）。
+- `mode: do`：我自己排顺序，再选变了的词的形式（`decoys:`）。
+
+<!-- 完整写法 -->
+
+- `mode: do` 细说：我把上面的成分点下来（或者拖到某个空位上）排顺序，放好的能拖着对调、点一下拿回去；放错只说第几个位置不对。顺序对了以后，`decoys:` 里写了的成分（一行一个：`V = 错的 | 错的`）再让我选它在新句子里的形式；没写 `decoys:` 的不问。
 
 ### chunk：意群断句（长难句、翻译）
 

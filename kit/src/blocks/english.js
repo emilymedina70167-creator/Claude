@@ -185,6 +185,7 @@ function joinStage(host, { ans, roles, title, el, onDone }) {
   const fb = box.querySelector('.pz-join-fb');
   const found = new Set();
   let first = null, attempts = 0, closed = false;
+  const wrongPairs = new Set();
   const say = (i) => `${roleName(ans.spans[i].role)}「${short(spanText(ans.tokens, ans.spans[i]), 40)}」`;
   const finish = (ok, revealed = false) => {
     closed = true;
@@ -198,8 +199,13 @@ function joinStage(host, { ans, roles, title, el, onDone }) {
       if (closed) return;
       if (first === null || first === i) { first = first === i ? null : i; view.choose(first === null ? [] : [first]); return; }
       const pair = [first, i];
-      first = null; attempts++;
+      first = null;
       const hit = joins.find((j) => !found.has(j.id) && judgeJoins([pair], [j]).ok);
+      // 同一对连错的再连一次：不算新的一次（两段的先后不论）
+      const sig = [...pair].sort((x, y) => x - y).join('-');
+      if (!hit && wrongPairs.has(sig)) { view.choose([]); return; }
+      if (!hit) wrongPairs.add(sig);
+      attempts++;
       session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: '分裂结构', value: pair.map(say).join(' — '), ok: !!hit, attempts, el });
       view.choose([]);
       if (hit) {

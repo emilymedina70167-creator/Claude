@@ -1,0 +1,199 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>英语：长难句的层次、平行结构、句子变换</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+unit: 长难句的层次、分裂结构、平行结构、句子变换（视觉交互第 5 批）
+subject: 英语
+---
+
+# 英语：长难句的层次、分裂结构、平行结构、句子变换
+
+## 三大从句：一层层缩进
+
+```parse
+id: e2-noun
+title: 主语从句、表语从句
+mode: show
+view: layers
+answer: [SC What [S he] [V wants]] [V is] [PC that [S we] [V stay] [A here]].
+explain: 主语、表语各是一个从句；主干是「什么 is 什么」。
+```
+
+```parse
+id: e2-adv
+title: 状语从句在句首
+mode: show
+view: layers
+answer: [AdvC Although [S the experiment] [V failed]], [S the team] [V learned] [O a great deal].
+```
+
+```parse
+id: e2-steps
+title: 一层层拆：先谓语，再主宾，再从句
+q: 先找谓语，再标主语、宾语，最后标出两个从句。
+answer: [S The news [AppC that [S he] [V said] [ObC that [S she] [V left]]]] [V shocked] [O us].
+steps: V | S O | AppC | ObC
+view: layers
+explain: 谓语 shocked；主语 the news 后面跟着同位语从句，同位语从句里又套了一个宾语从句。
+```
+
+## 嵌套结构：套三层、四层
+
+```parse
+id: e2-three
+title: 套三层（点从句的标签折起来）
+mode: show
+answer: [S The fact [AppC that [S he] [V said] [ObC that [S she] [V had left] [AdvC before [S we] [V arrived]]]]] [V surprised] [O everyone].
+explain: 折起同位语从句，主干只剩 The fact … surprised everyone。
+```
+
+```parse
+id: e2-grow
+title: 自己标：标对一个从句，层次图长出一块
+q: 标出主语、谓语、宾语，再标出同位语从句和它里面的宾语从句。
+answer: [S The news [AppC that [S he] [V said] [ObC that [S she] [V left]]]] [V shocked] [O us].
+roles: S V O AppC ObC
+```
+
+```parse
+id: e2-long
+title: 一句长的（真题的长度）
+mode: show
+answer: [S The studies [RC that [S the committee] [V reviewed] [AdvC when [S it] [V met] [A last year in the capital of the country]]]] [V suggest] [ObC that [S the policies [RC which [V were introduced] [A a decade ago]]] [V have not produced] [O the results [RC that [S their designers] [V had promised]]]].
+```
+
+## 同位语、插入语
+
+```parse
+id: e2-app
+title: 同位语和插入语
+mode: show
+view: layers
+answer: [S Darwin], [App the author of the theory], [V was], [Par as we all know], [P a careful observer].
+roles: S V P App Par
+explain: 两个逗号之间的同位语、插入语拿掉，主干是 Darwin was a careful observer。
+```
+
+```parse
+id: e2-appc
+title: 自己标：同位语从句
+q: 标出主语、谓语、宾语，再标出说明 idea 的那个从句。
+answer: [S The idea [AppC that [S everyone] [V can learn] [O a language]]] [V encouraged] [O the students].
+roles: S V O AppC
+view: layers
+```
+
+## 分裂结构：把隔开的两段连起来
+
+```parse
+id: e2-split
+title: 同位语从句被谓语隔开
+mode: show
+ask: join
+answer: [S~1 The rumor] [V spread] [A quickly] [AppC~1 that [S the manager] [V had resigned]].
+explain: that 从句说明的是 the rumor，被 spread quickly 隔开了。
+```
+
+```parse
+id: e2-split2
+title: 定语从句和先行词被隔开
+mode: show
+ask: join
+answer: [S~1 A new theory] [V has emerged] [RC~1 that [V challenges] [O the old view]].
+```
+
+## 并列和平行结构
+
+```parallel
+id: e2-pl-show
+title: 对齐着看
+text: The report explains [what the problem is], [why it matters], and [how we can solve it].
+```
+
+```parallel
+id: e2-pl-starts
+title: 找出并列的几项
+q: 这句话里并列的是哪几项？点每一项的第一个词。
+text: Good teachers [listen carefully], [explain clearly], and [give honest feedback].
+ask: starts
+explain: 三个谓语并列，主语都是 good teachers。
+```
+
+```parallel
+id: e2-pl-odd
+title: 哪一项不平行
+text: She likes [reading novels], [writing letters], and [to swim].
+ask: odd
+answer: 3
+fix: swimming
+decoys: swim | to swimming
+explain: 前两项是动名词，第三项也写 swimming。
+```
+
+```parallel
+id: e2-pl-notonly
+title: not only … but also
+text: The plan is not only [to cut costs] but also [raising quality].
+ask: odd
+answer: 2
+fix: to raise quality
+decoys: raise quality | raised quality
+```
+
+## 语态：主动变被动
+
+```shift
+id: e2-pass-show
+title: 主动变被动：谁挪到哪
+from: [S The committee] [V approved] [O the plan] [A yesterday].
+to: [O=S The plan] [V was approved] [S=A by the committee] [A yesterday].
+explain: 宾语到句首当主语，谓语变成 be + 过去分词，原来的主语前面加 by。
+```
+
+```shift
+id: e2-pass-do
+title: 自己排：被动变主动
+from: [S The letter] [V was written] [A by my sister].
+to: [A=S My sister] [V wrote] [S=O the letter].
+mode: do
+decoys: V = written | has written
+```
+
+## 强调句：It is … that
+
+```shift
+id: e2-cleft-show
+title: 强调时间状语
+from: [S Tom] [V broke] [O the window] [A yesterday].
+to: It was [A yesterday] that [S Tom] [V broke] [O the window].
+explain: 被强调的部分挪进 It was … that 中间，其余照原来的顺序。
+```
+
+```shift
+id: e2-cleft-do
+title: 自己排：强调宾语
+from: [S Tom] [V broke] [O the window] [A yesterday].
+to: It was [O the window] that [S Tom] [V broke] [A yesterday].
+mode: do
+```
+
+## 倒装：还原成正常语序
+
+```shift
+id: e2-inv-do
+title: 部分倒装还原
+from: [A Never] [Aux have] [S I] [V seen] [O such a sight].
+to: [S I] [Aux have] [A never] [V seen] [O such a sight].
+mode: do
+explain: 否定词放句首时助动词提到主语前面；还原时助动词回到主语后面。
+```
+
+```shift
+id: e2-inv-full
+title: 完全倒装还原
+from: [A On the hill] [V stands] [S an old temple].
+to: [S An old temple] [V stands] [A on the hill].
+```
+</script>
