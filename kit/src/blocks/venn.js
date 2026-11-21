@@ -136,7 +136,7 @@ export function venn(el, src) {
     const count = v.asks.length > 1 ? `<span class="vn-count">${state.i + 1} / ${v.asks.length}</span>` : '';
     askBox.innerHTML = `
       <div class="vn-q">${count}${mdToHtml(a.q, { inline: true })}</div>
-      ${a.kind === 'region' ? '<div class="w-hint">在图上点区域（圆外面那一块也能点）；点错了再点一下去掉。</div>'
+      ${a.kind === 'region' ? ''
     : '<div class="vn-fill"><input class="vn-input" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="分数或小数，如 7/10" aria-label="填概率"></div>'}
       <div class="vn-actions"><button type="button" class="btn btn-primary vn-check">检查</button></div>
       <div class="vn-fb" aria-live="polite"></div>`;

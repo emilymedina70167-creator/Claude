@@ -107,7 +107,7 @@ export function createExamCard(root, { db, getData, assets = null }) {
     const live = uploads.filter((d) => d.status !== 'void').sort((a, b) => (b.at || 0) - (a.at || 0));
     const mb = (n) => `${(Number(n) / 1048576).toFixed(1)} MB`;
     up.innerHTML = `<h3 class="dk-sc-h">放考试资料</h3>
-      <p class="dk-sub muted">真题卷、解析、考试大纲的 PDF 传到这里（每份 15 MB 以内，大的拆开传）。只存着等入库，不会当成教材带进课堂。${escapeHtml(waitingLine(live))}</p>
+      <p class="dk-sub muted">${escapeHtml(waitingLine(live))}</p>
       <div class="dk-mrow dk-exup-row">
         <label class="mm-f"><span>是什么</span><select class="dk-exup-kind"><option value="">照文件名猜</option>${Object.entries(UPLOAD_KINDS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
         <label class="mm-f"><span>补一句（科目、年份）</span><input class="dk-exup-note" placeholder="比如 408 2015–2024" autocomplete="off"></label>

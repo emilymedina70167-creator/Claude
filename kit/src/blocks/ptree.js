@@ -40,7 +40,6 @@ export function ptree(el, src) {
       <div class="pt-finds"></div>
       <div class="pt-tip" hidden></div>
       <div class="pt-ask" hidden></div>
-      ${spec.drag ? `<div class="w-hint">${spec.blanks.length + spec.asks.length ? '答完上面的题以后，' : ''}面积图上的分界线可以拖：竖的改每个原因占多少，横的改这一列里结果占多少。</div>` : ''}
       ${spec.fields.note ? `<div class="w-note">${mdToHtml(spec.fields.note)}</div>` : ''}
     </div>`;
   const treeBox = body.querySelector('.pt-tree'), areaBox = body.querySelector('.pt-area'), postBox = body.querySelector('.pt-post');

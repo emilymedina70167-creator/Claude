@@ -112,7 +112,7 @@ export function limitsLine(limits) {
 
 // —— 画面：管理页的「测速」一段 ——
 export function mountSpeed(box, { getAI, put, saved, padSource }) {
-  box.innerHTML = `<p class="dk-sub muted">同一个一问一答的回合，把说明加长（4～260 KB，用组件手册垫）、对话拉长（2～30 轮），各调一次 Opus 5.5 high。一次只调一个，跑的时候别离开这一页。结果存进学习台，开发那边直接读。</p>
+  box.innerHTML = `
     <div class="dk-sp-btns"><button type="button" class="btn btn-primary dk-sp-quick">快速：6 次（约 3～5 分钟）</button><button type="button" class="btn dk-sp-full">完整：15 次（约 8～12 分钟）</button><button type="button" class="btn dk-sp-big">量大说明：8 次</button><button type="button" class="btn dk-sp-tools">量工具：连着调 20 次</button><button type="button" class="btn dk-sp-stop" hidden>停</button></div>
     <p class="dk-sp-now muted"></p><div class="dk-sp-table"></div><p class="dk-sp-sum"></p>`;
   const q = (s) => box.querySelector(s);

@@ -135,7 +135,8 @@ test('黑板指令说明：每条规则都写到了', () => {
 
 test('黑板指令说明：例子本身写对了（指令格式、组件 id、图的命令、highlight 序号）', () => {
   const blocks = boardBlocks(PROTOCOL_DOC);
-  assert.equal(blocks.length, 16);
+  // 2026-11-21：点着问收起来了，说明里不再写 board why
+  assert.equal(blocks.length, 15);
   const ID = '[A-Za-z0-9_\\-.~:@+]{1,64}';
   const grammar = [
     new RegExp(`^(new|add|replace|pin) id=${ID}( title=("[^"]*"|“[^”]*”))?$`),
@@ -177,7 +178,7 @@ test('黑板指令说明：例子本身写对了（指令格式、组件 id、�
 
 test('黑板指令说明：protocol.js 能把文档里的例子都解析出来', { skip: !protocol && 'protocol.js 还不存在' }, () => {
   const { ops } = protocol.parseOutput(PROTOCOL_DOC, { final: true });
-  assert.deepEqual(ops.map((o) => o.op + (o.action ? ':' + o.action : '')), ['new', 'add', 'replace', 'hide', 'figure:set', 'figure:play', 'figure:highlight', 'mark', 'mark', 'pin', 'unpin', 'react', 'why', 'judge', 'new', 'add']);
+  assert.deepEqual(ops.map((o) => o.op + (o.action ? ':' + o.action : '')), ['new', 'add', 'replace', 'hide', 'figure:set', 'figure:play', 'figure:highlight', 'mark', 'mark', 'pin', 'unpin', 'react', 'judge', 'new', 'add']);
   assert.equal(ops[0].id, 'b3');
   assert.equal(ops[0].title, 'Ax 落在哪');
   assert.ok(ops[0].body.includes('```scene') && ops[0].body.includes('```answer'), '内层组件留在 new 的内容里');

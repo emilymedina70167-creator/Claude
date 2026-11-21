@@ -31,7 +31,7 @@ export function scene(el, src) {
   el.querySelector('.widget').insertAdjacentHTML('afterbegin', `<div class="w-title">${md(titleText, { inline: true })}</div>`);
   if (fields.q) body.insertAdjacentHTML('beforebegin', `<div class="w-q">${md(fields.q)}</div>`);
   if (fields.note) body.querySelector('.w-side').insertAdjacentHTML('beforeend', `<div class="w-note">${md(fields.note)}</div>`);
-  if (body.querySelector('.handle')) body.querySelector('.w-side').insertAdjacentHTML('beforeend', '<div class="w-hint">拖动圆点可以移动它。</div>');
+  // 2026-11-21 我说不要教怎么操作的小字：以前这里写「拖动圆点可以移动它。」
   const id = session.registerScene(el, api, titleText);
   // 学生拖完一个点（真的挪了位置才算）：课堂 / 实时黑板记成一个动作，数保留两位小数
   // 带上拖的过程（dr-batch4 第 6 条）：from 从哪拖起、path 中途停过的点、ms 拖了多久

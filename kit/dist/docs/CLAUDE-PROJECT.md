@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-21d**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-21e**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -313,14 +313,6 @@ done step=3: 例题看完了，下面这道你来。
 
 - 调用你一次学生要等几十秒。**只预写答案固定、你当场写也一样的**：`right` 答对（一句确认，`show=` 揭开这一轮写好、`board add id=b4 hold` 藏着的下一小问）、`done` steps 看完（可加 `step=3`）。页面把话写到板顶。
 - **教学不预写**：答错怎么引导、想不出来怎么提示，要看着这一次的作答当场写；页面不收 wrong / misread / giveup。要听理由、答对了也要追问的题不写 right。每条只用一次，答对整组收起，空块是撤掉。
-
-### why：预写一步的依据
-
-````board why target=ex-1
-step=2: 因为 $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数，能挪到最前面。
-````
-
-学生能点板上任何一处问「为什么 / 没看懂 / 举个例子」。`why` 写一句这一步的依据（哪条性质、哪个定义），点「为什么」时页面当场显示、不调用你（`step=`、`term=`（`\hl` 的名字）、`all`）。
 
 ### judge：解答题一步一步判
 

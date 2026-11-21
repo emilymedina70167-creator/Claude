@@ -218,7 +218,7 @@ export function joint(el, src) {
     const count = b.asks.length > 1 ? `<span class="jt-count">${state.i + 1} / ${b.asks.length}</span>` : '';
     const mid = a.kind === 'value' ? `<div class="jt-fill"><input class="jt-input" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${a.quantity.exact ? '分数或小数，如 9/10' : '小数（三位有效数字）'}" aria-label="填答案"></div>`
       : a.kind === 'independent' ? '<div class="jt-yns"><button type="button" class="btn jt-yn" data-yn="1">独立</button><button type="button" class="btn jt-yn" data-yn="0">不独立</button></div>'
-        : '<div class="w-hint">填在表里的格子里（分数、小数都行），填完点检查。</div>';
+        : '';
     askBox.innerHTML = `<div class="jt-q">${count}${md(a.q)}</div>${mid}
       <div class="jt-actions">${a.kind === 'independent' ? '' : '<button type="button" class="btn btn-primary jt-check">检查</button>'}</div>
       <div class="jt-fb" aria-live="polite"></div>`;

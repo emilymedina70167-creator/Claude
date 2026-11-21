@@ -119,6 +119,9 @@ body.has-keypad .class-bar, .class-bar.is-away {
 
 .cb-form { display: flex; align-items: flex-end; gap: 2px; margin: 0; padding: 5px 6px; }
 .cb-field { flex: 1; min-width: 0; }
+/* 以前的课（只读）：输入框、附图、发送都收起来，只留「⋯」（回学习台）——不挂说明，空着就是不能说话 */
+.class-readonly :is(.cb-pen, .cb-shot, .cb-field, .cb-send) { display: none; }
+.class-readonly .cb-pill { width: max-content; margin-left: auto; }
 .cb-field textarea {
   display: block; width: 100%; min-height: 44px; max-height: 128px; margin: 0; resize: none; overflow-y: hidden;
   padding: 9px 10px; border: 0; border-radius: 14px; background: transparent; color: var(--chalk);

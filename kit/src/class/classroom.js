@@ -347,7 +347,8 @@ export async function renderClass(root, meta, desk = null) {
   window.addEventListener('scroll', () => { if (echoEl && bv.view === bv.cur && window.scrollY < 40) hideEcho(); }, { passive: true });
   // 点着问（askhere.js）：点板上一行、一个公式、steps 的一步，问「为什么 / 没看懂 / 举个例子」；预写的「为什么」页面当场显示
   // 一问一答（第一批）先不挂：活板上的东西一轮轮在挪，点着问的锚点会跟着乱
-  const askHere = readOnly ? null : createAskHere({
+  // 2026-11-21 我说不要这种弹出来的话框：FEATURES.askHere 关着就不挂
+  const askHere = readOnly || !FEATURES.askHere ? null : createAskHere({
     board,
     onAsk: (spot, kind) => { if (teacher.available) enqueueStudent(askMessage(spot, kind), [], true); },
     onWhy: (spot) => matchWhy(whys, spot),
@@ -355,8 +356,9 @@ export async function renderClass(root, meta, desk = null) {
     onShown: (spot) => { const a = { source: 'page', type: 'why', text: whyShownText(spot) }; trigs.set(a, 'later'); queue.actions.push(a); lastActive = Date.now(); },
   });
   if (readOnly) {
+    // 以前的课：输入框整个收起来，只留「⋯」（回学习台）；不再挂一句「只能翻看」的说明（2026-11-21 我说页面要简洁）
     bar.setEnabled(false);
-    bar.setStatus('notice', '这是以前的课：只能翻看。作答不会记下来，也不调用 Claude。');
+    document.body.classList.add('class-readonly');
   } else if (!teacher.available) {
     bar.setEnabled(false);
     bar.setStatus('error', legacy ? '这个查看方式不能指定 Opus 5.5，课堂开不了。请在新版 claude.ai 里打开这个页面。'

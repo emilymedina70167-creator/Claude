@@ -14,7 +14,6 @@ export function matmul(el, src) {
   body.innerHTML = `
     <div class="mm-row"><div class="mm-a"></div><div class="mm-op">${tex2html('\\times')}</div><div class="mm-b"></div><div class="mm-op">${tex2html('=')}</div><div class="mm-c"></div></div>
     <div class="readout r-calc"></div>
-    <div class="w-hint">点右边结果矩阵里的任意一个数，看它是怎么算出来的。</div>
     ${fields.note ? `<div class="w-note">${mdToHtml(fields.note)}</div>` : ''}`;
 
   function show(i, j) {

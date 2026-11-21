@@ -21,8 +21,9 @@ const LONG_WAIT_TEXT = 'Claude 想得细，第一句话要等一会儿…';
 const STATES = new Set(['idle', 'thinking', 'writing', 'error', 'notice']);
 const MAX_SIDE = 2400;
 const PLACEHOLDER = {
-  on: '和 Claude 说点什么，黑板上的作答它也看得到', images: '和 Claude 说点什么，也可以粘贴截图', short: '和 Claude 说点什么…', off: '现在没法和 Claude 说话',
-  ink: '点发送，把板上写的给 Claude 看；也可以再说一句', inkShort: '点发送，给 Claude 看板书',
+  // 2026-11-21 我说页面要简洁：占位字只写一句短的，不教怎么用（以前写「也可以粘贴截图」「黑板上的作答它也看得到」）
+  on: '说点什么', images: '说点什么', short: '说点什么', off: '',
+  ink: '发送板书', inkShort: '发送板书',
 };
 
 // —— 纯函数（不碰 DOM，单元测试直接测）——
@@ -165,18 +166,18 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, endAsks = null,
   el.setAttribute('aria-label', '和 Claude 说话');
   el.innerHTML = `
     <div class="cb-slate" hidden role="dialog" aria-label="手写板">
-      <div class="cb-slate-head"><strong>手写</strong><span>写完点「附上」，和下一句话一起发给 Claude</span><button type="button" class="cb-slate-x" aria-label="收起手写板">收起</button></div>
+      <div class="cb-slate-head"><strong>手写</strong><button type="button" class="cb-slate-x" aria-label="收起手写板">收起</button></div>
       <div class="cb-slate-pad"></div>
     </div>
     <div class="cb-paste" hidden role="dialog" aria-label="附图">
-      <div class="cb-slate-head"><strong>附图</strong><span>长按下面的框选「粘贴」：Notability 圈选拷贝、系统截图都行</span><button type="button" class="cb-paste-x" aria-label="收起">收起</button></div>
+      <div class="cb-slate-head"><strong>附图</strong><button type="button" class="cb-paste-x" aria-label="收起">收起</button></div>
       <div class="cb-paste-row">
-        <div class="cb-paste-zone" contenteditable="true" role="textbox" aria-label="在这里粘贴图片" data-hint="长按这里，选「粘贴」" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+        <div class="cb-paste-zone" contenteditable="true" role="textbox" aria-label="在这里粘贴图片" data-hint="粘贴" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
         <button type="button" class="btn cb-pick">从相册选</button>
       </div>
     </div>
     <div class="cb-ctrl" hidden>
-      <div class="cb-quick" role="group" aria-label="快捷回答" hidden>${QUICK.map((q) => `<button type="button" class="cb-q" data-q="${q}">${q}</button>`).join('')}</div>
+      <div class="cb-quick" role="group" aria-label="快捷回答" hidden>${(FEATURES.quick ? QUICK : []).map((q) => `<button type="button" class="cb-q" data-q="${q}">${q}</button>`).join('')}</div>
     </div>
     <div class="cb-status" data-state="idle" hidden>
       <i class="cb-dot" aria-hidden="true"></i>
@@ -342,7 +343,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, endAsks = null,
   const pills = [...quick.querySelectorAll('.cb-q')];
   let quickState = { show: false, enabled: true };
   function syncQuick() {
-    quick.hidden = !quickState.show;
+    quick.hidden = !quickState.show || !FEATURES.quick;
     pills.forEach((b) => (b.disabled = !quickState.enabled || !enabled));
     syncCtrl();
   }

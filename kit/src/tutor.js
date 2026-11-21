@@ -55,7 +55,7 @@ export async function initTutor() {
     if (!pad) {
       pad = createPad(padBox, {
         height: 170,
-        hint: '写下你的算式或问题，写完点「附上」',
+        hint: '',
         actions: [{ label: '附上', primary: true, onClick: async (p) => { setAttach(await p.toBlob()); p.clear(); padBox.hidden = true; ta.focus(); } }],
       });
     }

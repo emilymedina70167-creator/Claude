@@ -28,4 +28,8 @@ export const FEATURES = {
   spec: true,
   // 老师的眼睛（class/boardeye.js，第十三轮）：黑板课每一轮把当前这块板的截图带给老师，板的样子由它自己设计
   eye: true,
+  // 2026-11-21 我说页面要简洁、不要多余的话框：底部「没懂 / 想不出来 / 换个说法 / 继续」那一排（quick）、
+  // 点板上一处弹出的「为什么 / 没看懂 / 举个例子 / 问点别的」（askHere，连同预写的 board why）都收起来；代码留着
+  quick: false,
+  askHere: false,
 };

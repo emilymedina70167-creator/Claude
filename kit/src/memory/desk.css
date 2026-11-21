@@ -686,6 +686,9 @@ html.fl-locked, html.fl-locked body { overflow: hidden; }
 .dk-trow + .dk-trow::before { content: ""; position: absolute; top: 0; left: 66px; right: 0; border-top: 0.5px solid rgb(var(--chalk-rgb) / 0.12); }
 .dk-trow b { font: 600 17px/1.3 var(--sans); }
 .dk-trow small { grid-column: 2; font: 400 14px/1.4 var(--sans); color: var(--muted); }
+/* 没有小字的行（补记、记书上的题）：标题居中，不留一行空（2026-11-21 去掉了说明的小字） */
+.dk-trow small:empty { display: none; }
+.dk-trow:has(> small:empty) > .dk-ic { grid-row: 1; }
 .dk-ic { grid-row: 1 / span 2; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; overflow: hidden; font: 700 19px/1 var(--display); background: var(--field); color: var(--chalk); }
 .dk-ic.is-review { background: rgb(var(--sp-rgb)); color: var(--card-solid); transition: background-color .6s var(--sheet); }
 .dk-ic.is-zero { background: var(--field); color: var(--muted); }

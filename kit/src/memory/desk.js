@@ -175,37 +175,36 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
     <div class="dk-days-slot"></div>
     <section class="dk-card dk-score" hidden aria-label="410 分"></section>
-    <p class="dk-sub muted dk-mainline">主讲在 claude.ai 的项目对话里。</p>
     <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
     <div class="dk-drawer" hidden>
     <div class="dk-part dk-later" hidden><h2 class="dk-h">验上次学的</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-retest" hidden><h2 class="dk-h">复测</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
-    <div class="dk-part dk-next" hidden><h2 class="dk-h">每块还能攒几分</h2><p class="dk-sub muted">按 410 分里每一块还能攒多少分排，页面算的。</p><div class="dk-body"></div></div>
-    <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><p class="dk-sub muted">先写出来，再看答案。隔 1、3、7、14、30 天各想一遍。</p><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
-    <div class="dk-part dk-drill" hidden><h2 class="dk-h">练一练</h2><p class="dk-sub muted">Claude 从题库里挑的题，页面判分，不调用 Claude。</p><div class="dk-body"></div></div>
-    <div class="dk-part dk-book" hidden><details class="dk-fold"><summary><h2 class="dk-h">记书上的题</h2><span class="muted">1000 题这些纸上做的：书、章、题号，每题对 / 错 / 拿不准 / 没做出</span></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
-    <div class="dk-part dk-manual" hidden><details class="dk-fold"><summary><h2 class="dk-h">补记</h2><span class="muted">在学习台外面做的题，写一句或贴张图</span></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
+    <div class="dk-part dk-next" hidden><h2 class="dk-h">每块还能攒几分</h2><div class="dk-body"></div></div>
+    <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
+    <div class="dk-part dk-drill" hidden><h2 class="dk-h">练一练</h2><div class="dk-body"></div></div>
+    <div class="dk-part dk-book" hidden><details class="dk-fold"><summary><h2 class="dk-h">记书上的题</h2></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
+    <div class="dk-part dk-manual" hidden><details class="dk-fold"><summary><h2 class="dk-h">补记</h2></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
     </div>
     </div>
     <div class="dk-col dk-col-side">
     <section class="dk-card dk-week" hidden><h2 class="dk-h">这一周</h2><div class="dk-body"></div></section>
-    <section class="dk-card dk-pending" hidden><h2 class="dk-h">还没写进去的</h2><p class="dk-sub muted">以前留下的，点「全部确认」写进去，或者「全部不要」。</p><div class="dk-popen"></div></section>
+    <section class="dk-card dk-pending" hidden><h2 class="dk-h">还没写进去的</h2><div class="dk-popen"></div></section>
     </div>
     </div>
     <div class="dk-manage" hidden>
-    <section class="dk-card dk-look"><h2 class="dk-h">样子</h2><p class="dk-sub muted">紫藤：学习台和课堂一起，跟着 iPad 的白天晚上换，也可以固定一种。这台设备记着。</p><div class="dk-body"></div></section>
-    <section class="dk-card dk-exam"><h2 class="dk-h">考试</h2><p class="dk-sub muted">考哪个学校哪个专业、目标多少分、哪天考。410 分的进度、距考研都照这里算。</p><div class="dk-body"></div></section>
+    <section class="dk-card dk-look"><h2 class="dk-h">样子</h2><div class="dk-body"></div></section>
+    <section class="dk-card dk-exam"><h2 class="dk-h">考试</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-instr"><h2 class="dk-h">项目指令</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-notebook"><h2 class="dk-h">笔记本</h2><div class="dk-body"></div></section>
-    <section class="dk-card dk-dev"><details class="dk-fold"><summary><h2 class="dk-h">给开发的</h2><span class="muted">要改页面代码才做得到的事，Claude 记在这里</span></summary><div class="dk-body"></div></details></section>
-    <section class="dk-card dk-journal"><details class="dk-fold"><summary><h2 class="dk-h">Claude 改过的</h2><span class="muted">每一次都记着，不对就撤销</span></summary><div class="dk-body"></div></details></section>
-    <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
+    <section class="dk-card dk-dev"><details class="dk-fold"><summary><h2 class="dk-h">给开发的</h2></summary><div class="dk-body"></div></details></section>
+    <section class="dk-card dk-journal"><details class="dk-fold"><summary><h2 class="dk-h">Claude 改过的</h2></summary><div class="dk-body"></div></details></section>
+    <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div><div class="dk-guard"></div><div class="dk-work"></div><div class="dk-health"></div><div class="dk-errs"></div></section>
-    <section class="dk-card dk-speed"><details class="dk-fold"><summary><h2 class="dk-h">测速</h2><span class="muted">说明和对话长短各要多等几秒</span></summary><div class="dk-body"></div></details></section>
-    <section class="dk-card dk-colls" hidden><details class="dk-fold"><summary><h2 class="dk-h">记忆库</h2><span class="muted">每一类有几条、谁写</span></summary><div class="dk-body"></div></details></section>
+    <section class="dk-card dk-speed"><details class="dk-fold"><summary><h2 class="dk-h">测速</h2></summary><div class="dk-body"></div></details></section>
+    <section class="dk-card dk-colls" hidden><details class="dk-fold"><summary><h2 class="dk-h">记忆库</h2></summary><div class="dk-body"></div></details></section>
     </div>
     <footer class="dk-foot">组件库 ${escapeHtml(VERSION)}</footer>
     </div>
@@ -519,7 +518,7 @@ export async function renderDesk(root, meta) {
     const when = (t) => { const d = new Date(Number(t) || 0); return `${d.getMonth() + 1}/${d.getDate()}`; };
     const carryN = Object.values(guardDoc?.carry || {}).reduce((n, l) => n + (l?.length || 0), 0);
     box.innerHTML = `<h3 class="dk-h3">守卫</h3>
-      <p class="dk-sub muted">Claude 写进记忆的每一条先过一遍：依据在不在、引的原话在这节课的记录里找不找得到、有没有重复、能不能改别人写的。写的话不改，只决定收不收。</p>
+      
       <p>${['flag', 'hold', 'reject'].map((k) => `${VERDICT[k]} ${Number(c[k]) || 0}`).join(' · ')}${carryN ? `<span class="muted"> · ${carryN} 条没收的等下一节课补</span>` : ''}</p>
       ${held.length ? `<p><b>先暂存的 ${held.length} 条</b>（事后写的、对不上这节课的记录）</p><div class="dk-held">${held.slice(0, 8).map((p) => `<div class="dk-edit-row" data-id="${escapeHtml(p.id)}"><span>${inline(pendingTitle(p, nameIn(() => data)))}<br><span class="muted">${escapeHtml((p.guard?.checks || []).map((x) => x.msg).join('；').slice(0, 160))}</span></span><button type="button" class="btn btn-sm dk-g-ok">放行</button><button type="button" class="btn btn-sm dk-g-no">不要</button></div>`).join('')}</div>` : ''}
       ${guardLogs.length ? `<details class="dk-soft"><summary>最近的 ${guardLogs.length} 次</summary><ul class="dk-errlist">${guardLogs.map((l) => `<li><b>${VERDICT[l.verdict] || l.verdict}</b> ${escapeHtml(COLL_NAME(l.coll))}<span class="muted">　${escapeHtml((l.checks || []).filter((x) => x.level !== 'info').map((x) => x.msg).join('；').slice(0, 140))} · ${escapeHtml(when(l.at))}</span></li>`).join('')}</ul></details>` : '<p class="dk-ok">还没有拦过东西。</p>'}`;
@@ -578,7 +577,7 @@ export async function renderDesk(root, meta) {
     const fixed = healthDoc.fixed || [], notes = healthDoc.notes || [];
     const when = (t) => { const d = new Date(Number(t) || 0); return `${d.getMonth() + 1}/${d.getDate()}`; };
     box.innerHTML = `<h3 class="dk-h3">体检</h3>
-      <p class="dk-sub muted">页面自己的数据（课的时间、科目、档位）按规则自己修；课堂里写的内容只看不改。</p>
+      
       ${notes.length ? `<p><b>${notes.length} 处要看</b></p><ul class="dk-errlist">${notes.slice(0, 8).map((n) => `<li>${escapeHtml(n.msg)}${n.id ? `<span class="muted">　${escapeHtml(n.coll)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="dk-ok">没有要看的。</p>'}
       ${fixed.length ? `<details class="dk-soft"><summary>最近自己修了 ${fixed.length} 处</summary><ul class="dk-errlist">${fixed.map((f) => `<li>${escapeHtml(f.what)}<span class="muted">　${escapeHtml(f.coll)}/${escapeHtml(f.id)} · ${escapeHtml(when(f.at))}</span></li>`).join('')}</ul></details>` : ''}`;
   }
@@ -596,7 +595,7 @@ export async function renderDesk(root, meta) {
     const when = (t) => { const d = new Date(Number(t) || 0); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
     const row = (e) => `<li class="${e.seen ? 'is-seen' : ''}"><b>${escapeHtml(e.msg || '')}</b><span class="muted">　${escapeHtml(e.where || '')} · ${escapeHtml(when(e.at))}${Number(e.count) > 1 ? ` · ${Number(e.count)} 次` : ''}${e.what ? ` · ${escapeHtml(e.what)}` : ''}</span>${e.trail?.length ? `<br><span class="muted dk-err-trail">之前：${escapeHtml(e.trail.slice(-3).join(' → '))}</span>` : ''}</li>`;
     box.innerHTML = `<h3 class="dk-h3">页面出过的错</h3>${!hard.length ? '<p class="dk-ok">页面没出过错。</p>' : `
-      <p class="dk-sub muted">${fresh.length ? `有 ${fresh.length} 种还没看过。` : '都看过了。'}开发那边每次开工先读这一份（版本 ${escapeHtml(errDoc?.kit || '')}）。</p>
+      <p class="dk-sub muted">${fresh.length ? `有 ${fresh.length} 种还没看过。` : '都看过了。'}</p>
       <ul class="dk-errlist">${hard.slice(0, 5).map(row).join('')}</ul>
       ${hard.length > 5 ? `<details class="dk-soft"><summary>还有 ${hard.length - 5} 种</summary><ul class="dk-errlist">${hard.slice(5).map(row).join('')}</ul></details>` : ''}
       <div class="dk-mrow">${fresh.length ? '<button type="button" class="btn btn-sm dk-err-seen">看过了</button>' : ''}<button type="button" class="btn btn-sm dk-err-clear">清掉</button></div>`}
@@ -913,7 +912,7 @@ export async function renderDesk(root, meta) {
     const bar = (x) => `<div class="dk-prog${x.space === space ? ' is-here' : ''}" data-space="${x.space}"><span class="dk-prog-k">${escapeHtml(x.label)}</span><span class="dk-prog-bar" role="img" aria-label="${x.total} 块里讲过 ${x.taught} 块、过了 ${x.passed} 块"><i class="is-taught" style="width:${Math.round((x.taught / x.total) * 100)}%"></i><i class="is-passed" style="width:${Math.round((x.passed / x.total) * 100)}%"></i></span><span class="dk-prog-n muted">过了 ${x.passed} · 讲过 ${x.taught} / ${x.total} 块</span></div>`;
     box.querySelector('.dk-body').innerHTML = `
       ${lines.length ? `<ul class="dk-week-l">${lines.map((l) => `<li class="is-${l.k}">${inline(l.text)}</li>`).join('')}</ul>` : ''}
-      ${prog.length ? `<div class="dk-progs">${prog.map(bar).join('')}</div><p class="dk-sub muted">深色是过了的块（基础题过、复现通过），浅色是讲过的。</p>` : ''}`;
+      ${prog.length ? `<div class="dk-progs">${prog.map(bar).join('')}</div>` : ''}`;
   }
 
   // —— 练一练（drills.js）：页面挑题、开一节 kind: drill 的练习 ——
@@ -1110,7 +1109,7 @@ export async function renderDesk(root, meta) {
     // 所以不再列出来让我改（数据都留着），写一句去哪改
     const sumOn = true; // 第十四轮：守则、关于我早就不发给老师了，这里不再列
     const keep = (key, html) => (sumOn && (key === 'lessons' || key === 'prefs') ? '' : html);
-    box.innerHTML = `${sumOn ? '<p class="dk-sub muted">老师现在读的是它自己的笔记本（上面那张卡）和你写的项目指令。这里只剩学习的账。</p>' : ''}
+    box.innerHTML = `${sumOn ? '' : ''}
       ${keep('lessons', fold('lessons', '教学守则：老师的失误归纳出来的', lessons.length, lessons.map((l) => `<div class="dk-edit-row" data-id="${escapeHtml(l.id)}"><span>${inline(l.text)}${(Number(l.hits) || 1) > 1 ? `<span class="muted">（犯过 ${Number(l.hits)} 次）</span>` : ''}</span><button type="button" class="btn btn-sm dk-lesson">改</button><button type="button" class="btn btn-sm dk-lesson-x">不用了</button></div>`).join('') || '<p class="muted">还没有：下课时课堂里的 Claude 会把这节课的失误归纳成守则。</p>'))}
       ${keep('prefs', fold('prefs', '关于我：讲法、习惯、目标', prefs.length, prefs.map((p) => `<div class="dk-edit-row" data-id="${escapeHtml(p.id)}"><span><span class="dk-k">${escapeHtml(p.topic || '')}</span>${inline(p.text)}</span><button type="button" class="btn btn-sm dk-pref">改</button></div>`).join('') || '<p class="muted">还没有。</p>'))}
       ${fold('recall', '要记的：不用再记的停掉', recs.length, recs.map((k) => `<div class="dk-edit-row" data-id="${escapeHtml(k.id)}"><span>${inline(k.q)}<span class="muted"> → ${inline(k.a)}（${k.result ? `${Number(k.tier) || 1} 天那档` : '还没想过'}${Number(k.lapses) ? `，没想起过 ${Number(k.lapses)} 次` : ''}）</span></span><button type="button" class="btn btn-sm dk-rvoid">不用记了</button></div>`).join('') || '<p class="muted">还没有。</p>')}
@@ -1439,10 +1438,11 @@ export async function renderDesk(root, meta) {
       later: later ? `${plainTitle(later.title) || '上一节课'} · ${later.holds.ids.length} 道` : '',
       retest: retest.length ? retest.map((r) => `${blockTitle(r.block)}（隔 ${r.days} 天）`).join('、') : '',
       today: nrev ? groups.map((g) => `${g.subject} ${g.total} 组`).join('，') : '今天没有要复现的',
-      recall: rc.total ? `${spaceCounts(rc.bySpace)}。先写出来，再看答案` : '今天没有要想的',
+      // 2026-11-21 我说页面要简洁：行下面只写数，不写「先写出来，再看答案」这类说明
+      recall: rc.total ? spaceCounts(rc.bySpace) : '今天没有要想的',
       drill: dpick ? `${dpick.label}${dpick.why ? ` · ${dpick.why}` : ''}` : '',
-      manual: '在学习台外面做的题，写一句或贴张图',
-      book: '1000 题这些：书、章、题号，每题对 / 错',
+      manual: '',
+      book: '',
       next: nextLine(),
     };
     const n = { later: later?.holds.ids.length || 0, retest: retest.length, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, book: null, next: null };
@@ -1530,7 +1530,7 @@ export async function renderDesk(root, meta) {
     const wd = '日一二三四五六'[new Date(y, mo - 1, d).getDay()];
     body.innerHTML = `<div class="dk-goal-card"><span class="dk-nju is-shield" aria-hidden="true"></span><div class="dk-goal-t"><small>目标</small><span class="dk-nju is-word" role="img" aria-label="南京大学"></span><span class="dk-nju is-en" aria-hidden="true"></span></div></div>
       <h2 class="dk-days-h">距考研</h2><p class="dk-days-n">${n}<small>天</small></p>
-      <p class="dk-sub muted">${y} 年 ${mo} 月 ${d} 日，星期${wd}。一格是一周，还剩 ${weeks} 周；紫的是这一周，最后一格是考试。</p>
+      <p class="dk-sub muted">${y} 年 ${mo} 月 ${d} 日，星期${wd} · 还剩 ${weeks} 周</p>
       <div class="dk-weeks">${Array.from({ length: weeks }, (_, i) => `<i class="${i === 0 ? 'is-now' : i === weeks - 1 ? 'is-exam' : ''}"></i>`).join('')}</div>
       ${weekLines(data, { today: toDate(Date.now()), space }).slice(0, 3).map((l) => `<p class="dk-days-l">${inline(l.text)}</p>`).join('')}`;
     if (animate) body.querySelectorAll('.dk-weeks i').forEach((i, k) => i.animate?.([{ transform: 'scale(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 420, delay: 260 + k * 9, easing: 'cubic-bezier(.34, 1.4, .64, 1)', fill: 'backwards' }));

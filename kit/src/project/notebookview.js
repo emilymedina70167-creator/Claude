@@ -33,7 +33,7 @@ export function createProjectView({ db, store, getData, notebook, charter = '', 
     if (!body) return;
     if (!body.dataset.wired) {
       body.dataset.wired = '1';
-      body.innerHTML = `<p class="dk-sub muted">每一轮原样给页面里的 Claude（学习台里开的课、练习教练），放在最前面；外部主讲读的是 claude.ai 项目里的指令，不读这里。写什么由你定；空着就是没有。</p>
+      body.innerHTML = `
         <div class="sm-doc"><textarea class="sm-text dk-instr-text" rows="8" spellcheck="false" aria-label="项目指令" placeholder="（还没写）"></textarea>
         <div class="sm-foot"><span class="muted dk-instr-meta"></span><span class="sm-btns"><button type="button" class="btn btn-primary dk-instr-save" disabled>存</button><button type="button" class="btn dk-instr-old">以前的版本</button></span></div>
         <div class="sm-old dk-instr-hist" hidden></div></div>
@@ -81,7 +81,7 @@ export function createProjectView({ db, store, getData, notebook, charter = '', 
     const live = docs.filter((d) => !d.deleted).sort((a, b) => a.path.localeCompare(b.path));
     const gone = docs.filter((d) => d.deleted && !d.movedTo);
     const cur = live.find((d) => d.path === openPath);
-    body.innerHTML = `<p class="dk-sub muted">外部主讲和页面里的 Claude 写的笔记（写什么、怎么分由它定）。标了 pin 的页面里的 Claude 每一轮都整份带着，标了 show 的在「笔记」页里。你可以直接改、退回以前的版本。</p>
+    body.innerHTML = `
       ${live.length ? live.map((d) => `<button type="button" class="dk-row dk-nb-row${d.path === openPath ? ' is-open' : ''}" data-path="${escapeHtml(d.path)}"><span class="dk-row-t">${escapeHtml(d.path)}<br><span class="muted">${d.pin ? 'pin · ' : ''}${d.show ? 'show · ' : ''}${day(d.at)} ${escapeHtml(BY[d.by] || '')}${d.quotes?.length ? ` · <span class="bad">${d.quotes.length} 句引号在记录里没找到</span>` : ''}</span></span></button>`).join('') : '<p class="muted">笔记本还是空的。</p>'}
       ${cur ? `<div class="sm-doc dk-nb-open" data-path="${escapeHtml(cur.path)}"><textarea class="sm-text dk-nb-text" rows="10" spellcheck="false" aria-label="${escapeHtml(cur.path)}"></textarea>
         ${cur.quotes?.length ? `<p class="dk-sub bad">这几句引号在记录里没找到：${cur.quotes.map((q) => `「${escapeHtml(q)}」`).join('、')}</p>` : ''}
@@ -136,7 +136,7 @@ export function createProjectView({ db, store, getData, notebook, charter = '', 
     const want = decodeURIComponent(String(hash).split('/').slice(1).join('/'));
     const cur = list.find((d) => d.id === want) || null;
     if (!cur) {
-      host.innerHTML = `<section class="dk-card"><h2 class="dk-h">笔记</h2>${list.length ? list.map((d) => `<a class="dk-row" href="#notes/${encodeURIComponent(d.id)}"><span class="dk-row-t">${escapeHtml(d.path)}<br><span class="muted">${day(d.at)}</span></span></a>`).join('') : '<p class="dk-sub muted">还没有。主讲觉得该给你整理什么，会放在这里。</p>'}</section>`;
+      host.innerHTML = `<section class="dk-card"><h2 class="dk-h">笔记</h2>${list.length ? list.map((d) => `<a class="dk-row" href="#notes/${encodeURIComponent(d.id)}"><span class="dk-row-t">${escapeHtml(d.path)}<br><span class="muted">${day(d.at)}</span></span></a>`).join('') : '<p class="dk-sub muted">还没有。</p>'}</section>`;
       return;
     }
     if (host.dataset.open === cur.id && host.dataset.v === String(cur.v || 0)) return;

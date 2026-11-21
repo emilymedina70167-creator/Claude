@@ -42,7 +42,9 @@ function offer(entry, el) {
     const sure = b.dataset.sure === '1';
     session.event('sure', el, { sure, key, ok: entry.ok, title: entry.title || undefined });
     box.classList.add('is-done');
-    box.innerHTML = `<span class="sure-q">记下了：${sure ? '有把握' : '没把握'}${!sure && entry.ok ? '（这题先不算过，再来一道同类的）' : ''}</span>`;
+    // 点完那一行收起来，不再写「记下了：…」的回执（2026-11-21 我说做了什么我都清楚，页面要简洁）
+    box.innerHTML = '';
+    box.hidden = true;
   });
   host.appendChild(box);
 }

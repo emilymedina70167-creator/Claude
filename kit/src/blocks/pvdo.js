@@ -139,7 +139,6 @@ export function pvDo(el, src) {
     askBox.innerHTML = `<div class="sv-ask-q"><span class="sv-ask-tag">先猜</span>${mdToHtml(a.q, { inline: true })}</div>
       ${a.kind === 'choice' ? `<div class="sv-choices">${a.choices.map((c) => `<button type="button" class="btn sv-choice" data-v="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>` : ''}
       ${a.kind === 'number' ? '<div class="sv-ask-row"><input type="text" class="sv-ask-input" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="写一个数（负数写 -1）" aria-label="你的答案"><button type="button" class="btn btn-primary sv-ask-ok">确定</button></div>' : ''}
-      ${a.kind === 'pick' ? '<div class="sv-ask-hint muted">在上面的图里点那个进程。</div>' : ''}
       <div class="sv-ask-fb" hidden></div>
       <div class="sv-ask-tools"><button type="button" class="link-btn sv-giveup">想不出来，直接看</button><button type="button" class="link-btn sv-reveal" hidden>看答案</button></div>`;
     const inp = askBox.querySelector('.sv-ask-input');

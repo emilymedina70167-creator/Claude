@@ -32,7 +32,7 @@ export function timedPad(host, { key = '', pause = PAUSE, now = () => Date.now()
       <button type="button" class="btn btn-sm ck-pad-pen is-on">写</button><button type="button" class="btn btn-sm ck-pad-strike">划掉</button>
       <button type="button" class="btn btn-sm ck-pad-undo" disabled>撤一下</button><button type="button" class="btn btn-sm ck-pad-step">下一步</button>
       <span class="ck-pad-gap"></span><button type="button" class="btn btn-sm ck-pad-more">加一页</button></div>
-    <div class="ck-pad-area"><canvas></canvas><div class="ck-pad-hint">用 Apple Pencil 在这里写；写错了用「划掉」</div></div>`;
+    <div class="ck-pad-area"><canvas></canvas><div class="ck-pad-hint"></div></div>`;
   host.appendChild(el);
   const area = el.querySelector('.ck-pad-area');
   const canvas = el.querySelector('canvas');

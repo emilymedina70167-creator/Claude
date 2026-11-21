@@ -24,7 +24,6 @@ export function vectors(el, src) {
         <label class="coef"><span class="coef-name">${tex2html('b')}</span><input type="range" min="-3" max="3" step="0.1" class="sb"><output class="ob"></output></label>` : ''}
       <div class="readout r-info"></div>
       ${fields.note ? `<div class="w-note">${mdToHtml(fields.note)}</div>` : ''}
-      <div class="w-hint">拖动箭头末端的圆点可以改变向量。</div>
     </div>`;
 
   const plane = createPlane(body.querySelector('.w-plot'), { range: Number(fields.range) || autoRange() });

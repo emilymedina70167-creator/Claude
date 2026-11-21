@@ -222,7 +222,6 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
     const sp = space();
     const mine = books.filter((b) => !b.space || b.space === sp).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
     return `<section class="dk-card"><h2 class="dk-h">导入资料</h2>
-        <p class="dk-sub muted">教材 PDF（扫描版也行）、截图和照片、视频课文稿（Word）、讲义（PowerPoint）。${TRANSCRIBE_HERE ? '扫描页由 Claude 看图转写成文字' : '扫描页这里只存原页图（不花额度），存好以后回 Claude Code 说「转 B几」，它看图转写成文字写回来'}，公式写成 LaTeX，每页的原图留着核对；文稿和讲义里的字页面自己取，不花额度。转写好的资料按「一条一条」存（定义、定理、例题……），上课时 Claude 只取要用的那几条。</p>
         <label class="btn bk-pick">选文件<input type="file" class="bk-file" multiple accept=".pdf,.docx,.pptx,image/*" hidden></label>
         ${picked.length ? pickForm() : ''}
         ${progressHtml()}

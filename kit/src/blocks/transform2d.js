@@ -29,7 +29,6 @@ export function transform2d(el, src) {
       </div>
       <div class="readout r-info"></div>
       ${fields.note ? `<div class="w-note">${mdToHtml(fields.note)}</div>` : ''}
-      ${editable ? '<div class="w-hint">提示：变换完成后可以直接拖动 î（第一列）和 ĵ（第二列）的箭头。</div>' : ''}
     </div>`;
 
   const plane = createPlane(body.querySelector('.w-plot'));

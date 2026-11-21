@@ -35,10 +35,9 @@ function figure(el, src, create, { cls, title }) {
 function tasks(el, api, titleText, body) {
   if (api.lonelyAfter) session.problem(el, 'graph', 'after / before 要配 goal 或 pick（图里没有要学生做的事，这两个修饰不管用）');
   const side = body.querySelector('.w-side');
-  if (body.querySelector('.handle')) side.insertAdjacentHTML('beforeend', '<div class="w-hint">拖动圆点可以移动它。</div>');
   const nGoals = api.goals || 0, nPicks = api.picks || 0;
   if (!nGoals && !nPicks) return;
-  if (nPicks) side.insertAdjacentHTML('beforeend', '<div class="w-hint">在图上点出来；点错了再点一下去掉。</div>');
+  // 2026-11-21：「拖动圆点可以移动它」「在图上点出来；点错了再点一下去掉」这类操作说明不写了（页面要简洁）
   const done = session.gate(el, titleText);
   let goals = 0, picks = 0;
   const maybe = () => { if (goals >= nGoals && picks >= nPicks) done(); };

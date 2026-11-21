@@ -260,7 +260,6 @@ export function matrix(el, src) {
 
   draw();
   if (cmds.some((c) => c.kind === 'product') && !calcBox.textContent) {
-    host.insertAdjacentHTML('afterend', '<div class="w-hint">点乘积里的任意一个数，看它是哪一行乘哪一列。</div>');
   }
 
   // 课堂：figure target=… set / play / highlight；板书标注跟着 change 重新摆

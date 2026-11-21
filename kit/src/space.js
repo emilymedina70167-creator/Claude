@@ -76,7 +76,7 @@ export function createSpace(container, src, opts = {}) {
   const hasTasks = goalIdx.length + pickIdx.length > 0;
   const revealed = () => hasTasks && goalIdx.every((i) => state.goalsHit.has(i)) && pickIdx.every((i) => state.picks.get(i).done);
 
-  container.innerHTML = `<div class="w-plot sp-plot g-plot"><div class="sp-tools"><button type="button" class="btn btn-sm sp-home" title="回到开始的视角">正视角</button><button type="button" class="btn btn-sm sp-spin" title="慢慢转一圈">转一转</button></div></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div><div class="goal-msg" hidden></div><div class="w-hint">拖动图可以旋转（手指或 Pencil 都行）。</div></div>`;
+  container.innerHTML = `<div class="w-plot sp-plot g-plot"><div class="sp-tools"><button type="button" class="btn btn-sm sp-home" title="回到开始的视角">正视角</button><button type="button" class="btn btn-sm sp-spin" title="慢慢转一圈">转一转</button></div></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div><div class="goal-msg" hidden></div></div>`;
   const side = container.querySelector('.w-side');
   // 用了第 3 批写法的图（微积分的、写方程的平面、交线、特征方向、有目标的）：上下排，图居中放大，读数在下面占一整行。
   // 老写法的图照旧左右两栏（一张不变）

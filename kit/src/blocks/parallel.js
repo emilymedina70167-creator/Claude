@@ -48,7 +48,7 @@ export function parallel(el, src) {
     const picked = new Set();
     let tried = '';
     body.innerHTML = `${head}
-      <div class="w-hint">点出并列的每一项的第一个词（再点一下去掉）。</div>
+      ${head ? '' : '<div class="w-hint">点出并列的每一项的第一个词</div>'}
       <div class="pl-sent en-words">${p.tokens.map((t, i) => (t.word ? `<button type="button" class="pz-w" data-i="${i}">${escapeHtml(t.w)}</button>` : `<span class="en-punct">${escapeHtml(t.w)}</span>`)).join(' ')}</div>
       <div class="ans-actions"><button type="button" class="btn btn-primary pl-check" disabled>检查</button><button type="button" class="btn pl-show" hidden>看答案</button></div>
       <div class="q-feedback" hidden></div>`;
@@ -94,7 +94,7 @@ export function parallel(el, src) {
   const state = {};
   let stage = 'pick', fixTries = 0;
   const nth = (k) => `第 ${k + 1} 项「${short(joinWords(p.tokens.slice(p.items[k].from, p.items[k].to + 1).map((t) => t.w)), 40)}」`;
-  body.innerHTML = `${head}<div class="w-hint">哪一项和别的不平行？点它。</div><div class="pl-slot"></div><div class="pl-fix" hidden></div><div class="q-feedback" hidden></div>`;
+  body.innerHTML = `${head || '<div class="w-hint">哪一项和别的不平行？</div>'}<div class="pl-slot"></div><div class="pl-fix" hidden></div><div class="q-feedback" hidden></div>`;
   const slot = body.querySelector('.pl-slot'), fixBox = body.querySelector('.pl-fix'), fb = body.querySelector('.q-feedback');
   const paint = () => { slot.innerHTML = grid({ pick: stage === 'pick' && !closed, state }); };
   const say = (ok, text, extra = '') => { fb.hidden = false; fb.className = `q-feedback ${ok ? 'is-ok' : 'is-bad'}`; fb.innerHTML = `<div class="q-verdict">${ok ? '✓ 对了' : '✗ 再想想'}</div><div>${escapeHtml(text)}</div>${extra}`; };
