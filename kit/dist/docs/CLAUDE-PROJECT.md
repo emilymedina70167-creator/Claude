@@ -126,6 +126,7 @@ b = [1, 1, -2]
 - `net`（数据结构）：图的算法（数据结构里的图；函数图是上面的 graph） → `components/net.md`
 - `store`（数据结构）：图、树的存储结构（原图和存储并排） → `components/store.md`
 - `deque`（数据结构）：双端队列（输入受限、输出受限） → `components/deque.md`
+- `slist`（数据结构）：静态链表 → `components/slist.md`
 - `trace`（数据结构、操作系统、组成原理）：代码逐行跟踪（真的把 C 代码跑一遍） → `components/trace.md`
 - `code`（数据结构）：写代码题（算法设计题，页面真的跑测试） → `components/code.md`
 - `sched` / `paging` / `banker` / `disk`（操作系统）：操作系统的过程 → `components/sched.md`

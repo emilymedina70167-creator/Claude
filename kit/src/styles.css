@@ -1986,6 +1986,15 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 .bk-scroll > .sv-arr { margin: 0 auto; }
 .bk-scroll > .sv-arr.sv-dense { --cell: 33px; }
 .bk-scroll > .sv-arr.sv-dense .sv-cell { font-size: 15px; }
+/* 静态链表 slist：数组表 + 按 next 连起来的链 */
+.sl-tab td.sl-i { color: var(--muted); }
+.sl-tab td.sl-hit { color: var(--yellow); font-weight: 700; }
+.sl-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font: 16px/1.2 var(--sans); }
+.sl-node { display: inline-flex; flex-direction: column; align-items: center; min-width: 40px; padding: 4px 8px 3px; border: 1px solid rgb(var(--chalk-rgb) / 0.4); border-radius: 8px; color: var(--chalk); }
+.sl-node small { font-size: 11px; color: var(--muted); }
+.sl-node.is-head { color: var(--muted); }
+.sl-node.sv-new { border-color: var(--yellow); }
+.sl-arrow, .sl-nil { color: var(--muted); }
 .bk-row { display: flex; gap: 6px; }
 .bk-idx { display: flex; flex-direction: column; align-items: center; min-width: 44px; }
 .bk-idx small { font-size: 11px; color: var(--muted); }

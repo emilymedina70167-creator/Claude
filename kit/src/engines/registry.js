@@ -33,6 +33,7 @@ import { threadEngine } from './thread.js';
 import { forestEngine } from './forest.js';
 import { storeEngine } from './store.js';
 import { dequeEngine } from './deque.js';
+import { slistEngine } from './slist.js';
 import { avlEngine, rbtEngine } from './balanced.js';
 import { btreeEngine } from './btree.js';
 import { stackEngine } from './stack.js';
@@ -94,6 +95,7 @@ export const ENGINES = {
   forest: forestEngine,
   store: storeEngine,
   deque: dequeEngine,
+  slist: slistEngine,
   avl: avlEngine,
   rbt: rbtEngine,
   btree: btreeEngine,

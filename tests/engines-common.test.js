@@ -33,6 +33,7 @@ import { threadEngine } from '../kit/src/engines/thread.js';
 import { forestEngine } from '../kit/src/engines/forest.js';
 import { storeEngine } from '../kit/src/engines/store.js';
 import { dequeEngine } from '../kit/src/engines/deque.js';
+import { slistEngine } from '../kit/src/engines/slist.js';
 import { avlEngine, rbtEngine } from '../kit/src/engines/balanced.js';
 import { btreeEngine } from '../kit/src/engines/btree.js';
 import { stackEngine } from '../kit/src/engines/stack.js';
@@ -59,7 +60,7 @@ import { fillSpec, fillOrder } from '../kit/src/stepperspec.js';
 
 const ENGINES = Object.fromEntries([sortEngine, treeEngine, kmpEngine, hashEngine, bsearchEngine, netEngine, traceEngine, schedEngine, pagingEngine, bankerEngine, diskEngine, addrEngine, bitsEngine, cacheEngine, pipeEngine, subnetEngine, tcpEngine, windowEngine, elimEngine, detEngine, eigEngine, schmidtEngine, quadEngine, framesEngine,
   crcEngine, hammingEngine, allocEngine, memexpEngine, faddEngine, mulEngine, fileidxEngine, pagetableEngine, fragEngine, encodeEngine,
-  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, storeEngine, dequeEngine, blocksearchEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine, asmEngine, divEngine, memEngine, bitmapEngine, deadlockEngine, eaEngine, opcodeEngine, layoutEngine, irqEngine, csmaEngine, dvEngine, switchEngine, utilEngine, rttEngine, pvEngine].map((e) => [e.name, e]));
+  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, storeEngine, dequeEngine, blocksearchEngine, slistEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine, asmEngine, divEngine, memEngine, bitmapEngine, deadlockEngine, eaEngine, opcodeEngine, layoutEngine, irqEngine, csmaEngine, dvEngine, switchEngine, utilEngine, rttEngine, pvEngine].map((e) => [e.name, e]));
 
 // 示例页里的每个演示组件，再加几个 408-demo 没有的写法
 const blocks = [];
@@ -69,7 +70,7 @@ for (const f of ['kit/examples/408-demo.html']) {
 }
 blocks.push(['bits', 'float: 0xC1260000'], ['bits', 'add: 100 + 50'], ['subnet', 'ip: 192.168.10.130/26'], ['subnet', 'aggregate: 192.168.0.0/24, 192.168.1.0/24, 192.168.2.0/24, 192.168.3.0/24'],
   ['tcp', 'close: u=500, v=800, w=900'], ['window', 'proto: sr\nframes: 6\nwindow: 4\nlost: 2'], ['net', 'edges: A-B 1, B-C 2, A-C 3\nrun: prim from A'], ['net', 'edges: A->B 2, A->C 3, B->D 2, C->D 1\nrun: critical'],
-  ['elim', 'vectors: (1,0), (0,1), (1,1)'], ['store', 'graph: A-B, A-C, B-D\nshow: matrix, list\nask: list'], ['store', 'graph: A->B 2, A->C 3, C->B 1\nshow: cross\nask: matrix, degree'], ['store', 'graph: A-B, B-C, A-C\nshow: multi'], ['store', 'tree: A(B(D, E), C(F))\nshow: parent, cs\nask: parent, cs'], ['store', 'tree: A(B(, D), C)\nshow: seq\nask: seq'], ['deque', 'kind: in\npush: 1 2 3 4\nseq: 4 1 3 2\nask: possible, op'], ['deque', 'kind: out\npush: a b c d\nseq: d a c b'], ['deque', 'kind: in\npush: 1 2 3 4\noptions: 4 1 3 2, 4 2 1 3, 4 2 3 1'], ['blocksearch', 'blocks: 22 12 13 | 33 42 44 | 60 58 74\nkey: 44\nask: block, pos'], ['blocksearch', 'blocks: 22 12 13 | 33 42 44 | 60 58 74\nkey: 58\nfind: binary\nasl: on\nask: asl'], ['sort', 'algo: binsert\narray: 49 38 65 97 76 13 27 49\'\nask: mid, pass, place'], ['elim', 'matrix: [[1,2],[3,4]]\ninverse: true'], ['det', 'matrix: [[2,1],[1,3]]'], ['eig', 'matrix: [[2,1],[1,2]]'], ['schmidt', 'vectors: (1,1,0), (1,0,1)'],
+  ['elim', 'vectors: (1,0), (0,1), (1,1)'], ['store', 'graph: A-B, A-C, B-D\nshow: matrix, list\nask: list'], ['store', 'graph: A->B 2, A->C 3, C->B 1\nshow: cross\nask: matrix, degree'], ['store', 'graph: A-B, B-C, A-C\nshow: multi'], ['store', 'tree: A(B(D, E), C(F))\nshow: parent, cs\nask: parent, cs'], ['store', 'tree: A(B(, D), C)\nshow: seq\nask: seq'], ['deque', 'kind: in\npush: 1 2 3 4\nseq: 4 1 3 2\nask: possible, op'], ['deque', 'kind: out\npush: a b c d\nseq: d a c b'], ['deque', 'kind: in\npush: 1 2 3 4\noptions: 4 1 3 2, 4 2 1 3, 4 2 3 1'], ['blocksearch', 'blocks: 22 12 13 | 33 42 44 | 60 58 74\nkey: 44\nask: block, pos'], ['slist', 'size: 7\nlist: a b c\nops: insert 2 x, delete 1\nask: slot, next, pre'], ['blocksearch', 'blocks: 22 12 13 | 33 42 44 | 60 58 74\nkey: 58\nfind: binary\nasl: on\nask: asl'], ['sort', 'algo: binsert\narray: 49 38 65 97 76 13 27 49\'\nask: mid, pass, place'], ['elim', 'matrix: [[1,2],[3,4]]\ninverse: true'], ['det', 'matrix: [[2,1],[1,3]]'], ['eig', 'matrix: [[2,1],[1,2]]'], ['schmidt', 'vectors: (1,1,0), (1,0,1)'],
   ['quad', 'f: x^2 + 2xy + 3y^2'], ['quad', 'f: 2x1^2 + 3x2^2 + 3x3^2 + 4x2x3\nmethod: orth'], ['frames', 'id: f\n---\narray: 1 2\n---\narray: 2 1\n? 换了吗 = 是'],
   ['tree', 'bst: 53 17 78 09 45\nops: delete 17'], ['sched', 'algo: sjf\nprocs: P1 0 8, P2 1 4, P3 2 9'], ['paging', 'refs: 1 2 3 4 1 2 5 1 2 3 4 5\nframes: 3\nalgo: clock']);
 
