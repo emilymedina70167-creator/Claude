@@ -84,12 +84,12 @@ goal A*x = [3, 5] msg="命中！"
 
 修饰词 `after` / `before`：只在 `predict` 揭晓之后 / 之前显示。`from=k` / `until=k`：图绑定了 `steps`（写 `link:`）时，揭开到第 k 步起 / 为止才显示，见下文 `steps`。标签末尾的数字自动变下标（`a1` → a₁）。
 
-颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
 
 还有 `polygon`、`text`、`curve`（参数曲线、单位圆的像）、`eigen`（特征方向）、`conic A = 3`（二次曲线 $\mathbf x^{\mathsf T}A\mathbf x=3$）。
 
 <!-- 完整写法 -->
 
+颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
 | 命令 | 作用 |
 |---|---|
 | `polygon P, Q, R, …` | 多边形 |
@@ -291,12 +291,12 @@ explain: $\operatorname{tr}A=\calc{tr(A)}$，所以 $A^3=\calc{A^3}$。
 - `pick 名字 = int(最小, 最大)`：随机取整数，后面加 `nonzero` 不取 0；还有 `choice` `vec` `mat`（见完整写法）。
 - `let 名字 = 表达式`：由取到的数算出来的量。`where 条件`：一行一个，不满足就重取（比如 `where det(A) != 0`、`where abs(tr(A)) <= 4`），用来保证数字干净、题目有意义。
 - `q:`、`hint:`、`explain:`、`before:` 里用 `\calc{…}` 写出这一题的数；`answer:` 是答案的表达式，可以是数、向量、矩阵，也可以配 `formula: n` 让我写式子。`check: basis` / `check: eigvec` / `check: bin` / `check: hex`（配 `width:`）同 `answer` 的 `type`。
-- 发布时页面先取十几组数试一遍：算不出来、条件取不到都会报出来。
 
-需要新的内置题型时告诉我，我会去 GitHub 上让人加。
 
 <!-- 完整写法 -->
 
+- 发布时页面先取十几组数试一遍：算不出来、条件取不到都会报出来。
+需要新的内置题型时告诉我，我会去 GitHub 上让人加。
 - 取数的其他写法：`choice(2, 1/2, -3)`（从几个值里挑）、`vec(3, -2, 2)`（3 维随机整数向量，分量在 −2 到 2）、`mat(2, 2, -3, 3)`（2×2 随机整数矩阵，元素在 −3 到 3）。
 - `int()` 的上下界可以用前面取过的数：`pick b = int(a + 1, 9)`。`n`、`E`、`I` 都是普通的名字，可以 `pick n = int(3, 6)`、`let E = …`（阶码；单独写 `E` 就是它，`E(3)` 照样是单位矩阵）；只有配了 `formula: n`（答案是含 n 的式子）时不能再取一个叫 n 的数。
 
@@ -754,7 +754,6 @@ height: 260
 
 ### steps：一步步揭开的例题（带着动脑）
 
-我不看一整道写好的例题，而是**每一步揭开前，先写下下一步要做什么、为什么**（打字，或者粘贴手写截图），然后才看到真实的一步。我的想法留在原处，和真实步骤并排对照。
 
 ```steps
 id: ex-rank1
@@ -785,6 +784,7 @@ show: $A^n=(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)^{n-1}A$
 
 <!-- 完整写法 -->
 
+我不看一整道写好的例题，而是**每一步揭开前，先写下下一步要做什么、为什么**（打字，或者粘贴手写截图），然后才看到真实的一步。我的想法留在原处，和真实步骤并排对照。
 - `do: true` 的判法：`answer:` 能算出数 / 向量 / 矩阵时（如 `answer: [1, 2]`），我在格子里填、程序判对错；加了 `formula: n` 时，`answer:` 是含 $n$ 的式子（如 `3^(n-1)*A`），我写式子、页面代值判对错（同 `answer` 组件）；其余情况我自由作答，再对照 `answer` / `show`。做完可以「对照答案」。
 
 ### steps 联动：图跟着步骤动
@@ -1603,13 +1603,13 @@ show {total} 个区间里 {miss} 个没盖住 $\mu$
 
 - `ask:` **先猜再揭晓**：走到某一步之前先问我，我答了才揭晓。写问题的种类（见各组件的说明），几种用逗号；`ask: rotate#2` 只问第 2 次；或者写步号 `ask: 3, 7`；`ask: all` 全问。
 - **三种做法**：`mode: demo`（默认，看过程 + `ask`）；`mode: quiz`（只给输入，我写出结果，页面判分；做完可以「看一步步的过程」）；**`mode: fill`（我自己把整张表填出来**，页面逐格批，标出第一处错；加 `by: row` 一行一行判：竖式、过程表写一行判一行）。
-- **错法诊断**：我的答案和某种常见错法算出来的一样时，作答记录里写「页面看出来：像是按 FIFO 换的」。只给你看：用它来追问，推我自己发现。
 - 字段还有 `id`、`title`、`q`（上方的题目或说明）、`note`、`start: end`（一开始停在最后）。输入的字段里可以用这节课 `let` 的量：`matrix: \calc{A}`。
-- **滑块 `vary:`**（只用在演示上）：`vary: d = 1..10 step 1 km`，字段里写 `\calc{d}`（`dist: \calc{d}km`），我拖滑块时整个演示按新值重算，看结果怎么变。
 - 课堂里：`figure target=s1 set step=5` / `play step 0 12 8s` / `highlight 3`，`board mark target=s1 item=3`（或 `label=B`）。
 
 <!-- 完整写法 -->
 
+- **错法诊断**：我的答案和某种常见错法算出来的一样时，作答记录里写「页面看出来：像是按 FIFO 换的」。只给你看：用它来追问，推我自己发现。
+- **滑块 `vary:`**（只用在演示上）：`vary: d = 1..10 step 1 km`，字段里写 `\calc{d}`（`dist: \calc{d}km`），我拖滑块时整个演示按新值重算，看结果怎么变。
 - 画面下面是一句说明和控制条（上一步 / 下一步 / 播放 / 进度条）；第 0 步是开始的样子。`ask` 问的时候「下一步」点不了；在图上点的题，可以点的格子会虚线框出来；种类、步号写错了自检会报。我点「想不出来」也会揭晓。
 - `mode: fill` 的表：每一趟之后的序列、每一轮的 dist、每次访问后的各物理块、每一步之后的系数……不给答案。错法诊断对猜的、quiz 写的、fill 填的都管用（「像是交换两行时忘了变号」）。作答记录里有我走到第几步、猜了什么、每一格填了什么。
 - 步与步之间有过渡（同一个数、同一个结点滑到新位置）。课堂里 `figure target=s1 set step=5` 跳到第 5 步（不问）、`play step 0 12 8s` 8 秒里从头走到第 12 步（跟着你说的话走）、`highlight 3` 第 3 个格子 / 结点闪一下；`board mark target=s1 item=3` 圈第 3 个格子、`label=B` 圈写着 B 的那个。
@@ -1823,7 +1823,7 @@ array: 49 38 65 97 76 13 27 49'
 ask: pivot
 ```
 
-- `algo:` 选算法：`insert`（直接插入）、`bubble`（冒泡）、`select`（简单选择）、`quick`（快排）、`merge`（二路归并）、`radix`（基数排序）、`shell`（希尔排序，`gaps: 5 3 1`，不写就是 ⌊n/2⌋ 每次减半；相隔 d 的一组、同组同色，一组一步做直接插入）。
+- `algo:` 选算法：`insert`（直接插入）、`binsert`（折半插入：每次折半的 low、high、mid 一步，相等往右，`ask: mid`）、`bubble`（冒泡）、`select`（简单选择）、`quick`（快排）、`merge`（二路归并）、`radix`（基数排序）、`shell`（希尔排序，`gaps: 5 3 1`，不写就是 ⌊n/2⌋ 每次减半；相隔 d 的一组、同组同色，一组一步做直接插入）。
 - `array:` 初始序列，位置从 1 数，最多 16 个；重复的数后面加 `'`（`49'`，画成带下划线的），看稳定性。
 - `ask:` 都有 `pass`（这一趟之后的序列；快排叫 `partition`），另外 insert `place`、bubble `swap`、select `min`、quick `pivot`（点出来）。
 - `mode: quiz` 配 `pass: 2`：只给初始序列，我写出第 2 趟（快排是第 2 次划分）之后的序列。
@@ -2051,7 +2051,7 @@ ask: parent
 - 正着时 `quiz:` 能写 `pre`、`in`、`post`、`level`（二叉树的）。`mode: fill`：正着填每个结点在二叉树里的双亲、是左还是右孩子；反过来填每个结点在森林里的双亲（根空着）。结点最多 24 个，名字不能重复。注意 `forest: A(B, C)` 里 B、C 都是孩子，`binary: A(B, C)` 里是左、右孩子。
 - 错法诊断认得出：第一个孩子放到右边（兄弟放到左边）、把最右边的孩子当第一个；还原时右孩子也当成孩子（没还原成兄弟）、左右当反。
 
-### kmp / hash / bsearch：查找
+### kmp / hash / bsearch / blocksearch：查找
 
 <!-- 科目：数据结构 -->
 
@@ -2063,15 +2063,20 @@ show: nextval
 ask: next, nextval
 ```
 
-- **`kmp`**：`pattern:` 模式串（最长 16）。`show: next` 一步步求 next 数组（王道：从 1 数，`next[1] = 0`，`next[j]` = T[1..j−1] 最长相等前后缀的长度 + 1，画面上把前后缀标出来）；`show: nextval` 接着求 nextval。写了 `text:`（主串）就是 `show: match`：KMP 匹配，主串和模式串对齐画，失配时 i 不动、j 退到 next[j]（`use: nextval` 改用 nextval）。`ask:` 能问 `next`、`nextval`（这一格是多少）、`slide`（失配后 j 变成多少）。`mode: quiz`：写出 next / nextval 数组，或者匹配成功的位置。
-- **`hash`**：`hash: 19 14 23 01 68 20 84 27 55 11 10 79`（非负整数），`p: 13`（H(key) = key % p），`probe:` 选 `linear`（线性探测，默认）、`quadratic`（平方探测：0, 1², −1², 2², −2², …）、`chain`（拉链法，新关键字接在链表末尾）；开放定址可以写 `size: 16`（表长，默认等于 p）。一个一个插入，冲突一次记一步；最后两步算 ASL成功 和 ASL失败（按王道的算法）。`ask:` 能问 `hash`（H(key) 是多少）、`place`（最后放在哪个地址，点出来）、`asl`、`aslfail`（可以写分数）。`mode: quiz`：写出整张表（空的写 #），或者 `quiz: asl` 写 ASL成功。
-- **`bsearch`**：`bsearch:` 有序表（从小到大、不重复，最多 31 个），`key: 32`（要查的，几个用逗号），`tree: true` 同时画判定树（并在最后算 ASL成功、ASL失败）。位置从 1 数，mid = ⌊(low + high)/2⌋。`ask:` 能问 `mid`（下一次和哪个比，点出来）、`asl`、`aslfail`。`mode: quiz`：写出查 `key` 时依次比较的元素。
+- **`kmp`**：`pattern:` 模式串（最长 16）。`show: next` 一步步求 next 数组（王道：从 1 数，`next[1] = 0`，`next[j]` = T[1..j−1] 最长相等前后缀的长度 + 1，画面上把前后缀标出来）；`show: nextval` 接着求 nextval。写了 `text:`（主串）就是 `show: match`：KMP 匹配，主串和模式串对齐画，失配时 i 不动、j 退到 next[j]（`use: nextval` 改用 nextval）。
+- **`hash`**：`hash: 19 14 23 01 68 20 84 27 55 11 10 79`（非负整数），`p: 13`（H(key) = key % p），`probe:` 选 `linear`（线性探测，默认）、`quadratic`（平方探测：0, 1², −1², 2², −2², …）、`chain`（拉链法，新关键字接在链表末尾）；开放定址可以写 `size: 16`（表长，默认等于 p）。一个一个插入，冲突一次记一步；最后两步算 ASL成功 和 ASL失败（按王道的算法）。
+- **`bsearch`**：`bsearch:` 有序表（从小到大、不重复，最多 31 个），`key: 32`（要查的，几个用逗号），`tree: true` 同时画判定树（并在最后算 ASL成功、ASL失败）。位置从 1 数，mid = ⌊(low + high)/2⌋。
+- **`blocksearch`** 分块查找：`blocks: 22 12 13 | 33 42 44 | 60 58 74`（`|` 分块，块和块之间有序），`key:`；先查索引表（每块最大的关键字、起始位置；`find: binary` 折半，默认顺序）再在块里顺序找。`ask:` `block` `pos` `asl`（`asl: on`，每块一样长）；`mode: quiz` 写依次比较的关键字。
 
 <!-- 完整写法 -->
 
+- `kmp` 的提问和测验：`ask:` 能问 `next`、`nextval`（这一格是多少）、`slide`（失配后 j 变成多少）。`mode: quiz`：写出 next / nextval 数组，或者匹配成功的位置。
+- `hash` 的提问和测验：`ask:` 能问 `hash`（H(key) 是多少）、`place`（最后放在哪个地址，点出来）、`asl`、`aslfail`（可以写分数）。`mode: quiz`：写出整张表（空的写 #），或者 `quiz: asl` 写 ASL成功。
+- `bsearch` 的提问和测验：`ask:` 能问 `mid`（下一次和哪个比，点出来）、`asl`、`aslfail`。`mode: quiz`：写出查 `key` 时依次比较的元素。
 - ASL失败按王道：开放定址查失败时，和空位置的那次比较也算；拉链法和空指针的比较不算；按 H 能算出的 p 个地址平均。
 - `mode: fill`：`kmp` 填每个 j 的 next、nextval（一列一个 j）；`hash` 填每个关键字的比较次数，下面写 ASL成功 和 ASL失败（可以写分数）；`bsearch` 填每一次比较的 low、high、mid、比的元素。
 - 错法诊断认得出：next 按「从 0 数、next[0] = −1」算的、写成了部分匹配值 PM、nextval 照抄 next；散列按别的探测方法、把表长当成 p、查失败时空位置那次没算、ASL失败按表长平均或除以关键字个数，拉链法和空指针比也算了；折半查找 mid 向上取整、位置从 0 数、判定树失败结点那层也算了比较、ASL失败除以 n。
+- `blocksearch` 的错法诊断认得出：顺序查索引表和折半查索引表弄反。
 
 ### net：图的算法（数据结构里的图；函数图是上面的 graph）
 
@@ -2086,7 +2091,6 @@ ask: next
 ```
 
 - `edges:` 边，逗号隔开：`A-B 4` 是无向边（权 4），`A->B 4` 是有向边；权可以都不写。顶点按名字排（1 < 2 < 10，V2 < V10），这就是「按顶点编号」的顺序；要别的顺序或者有孤立的顶点，写 `nodes: A B C D`。最多 14 个顶点。
-- 位置不写时自动摆；要和教材的图对上写 `pos: A(0,0) B(2,1)`（y 往上）。
 - `run:` 选算法：
   - `bfs from A` / `dfs from A`：广度 / 深度优先遍历。邻接点按顶点编号的顺序（`order: list` 按 edges 写的顺序，即邻接表）。`ask: visit`：下一个访问谁（点顶点）。
   - `prim from A` / `kruskal`：最小生成树（无向带权图）。Prim 的 `ask: next`：下一个加进来的顶点（点出来）；Kruskal 的 `ask: take`：这条边选不选（会不会成环）。
@@ -2094,15 +2098,59 @@ ask: next
   - `floyd`：一轮一个矩阵 A⁽⁻¹⁾、A⁽⁰⁾……，变小的格子标出来。
   - `topo`：拓扑排序。每次选入度为 0、编号最小的（`ask: next` 时任何一个入度为 0 的都算对；`use: stack` 用栈）。
   - `critical`：关键路径（有向带权图，边是活动）。算 ve、vl，再列出每个活动的 e、l、l − e。`ask:` 能问 `ve`、`vl`（这个事件的值）、`length`（关键路径长度）。
-- `mode: quiz`：bfs / dfs 写遍历序列；prim / kruskal 写权值之和；dijkstra 写各顶点被确定的顺序；topo 写一个拓扑序列（任何一个对的都算）；critical 写关键路径长度。floyd 没有 quiz。
 
 <!-- 完整写法 -->
 
+- 位置不写时自动摆；要和教材的图对上写 `pos: A(0,0) B(2,1)`（y 往上）。
+- `mode: quiz`：bfs / dfs 写遍历序列；prim / kruskal 写权值之和；dijkstra 写各顶点被确定的顺序；topo 写一个拓扑序列（任何一个对的都算）；critical 写关键路径长度。floyd 没有 quiz。
 - 自动摆的位置：圆上；拓扑排序、关键路径从左往右分层。有向图里一对反向的边画成两条弧。BFS / DFS 不连通时接着从下一个没访问的顶点开始；`order: list` 时邻接表画在下面。
 - Dijkstra 的表：每一轮一列，dist 和确定的顶点 ✓，下面是集合 S，还有 dist、path；不能有负权。拓扑排序图上标着每个顶点现在的入度，有回路会说出来。关键路径一步一个事件算 ve（拓扑序）、vl（逆拓扑序），关键活动标绿。
 - `mode: fill`：bfs / dfs / topo 填序列；dijkstra 每一轮一列（各顶点的 dist、这一轮确定谁）；prim / kruskal 填依次选的边；critical 填每个事件的 ve、vl，每个活动的 e、l、l − e，最后是关键路径长度。
 - `ask: order`：bfs / dfs / topo / dijkstra / prim 在第 1 步之前让我在图上依次点出顶点（拓扑序列任何一个对的都算）。
 - 错法诊断认得出：BFS 和 DFS 弄反、邻接点按 edges 顺序（或按编号）走反了；Dijkstra 用了 Prim 的更新、有向图当无向图；Prim 用了 Dijkstra 的更新、只看刚加进来的顶点；Kruskal 不判环、判环判错；拓扑排序选了出度为 0 的、栈和队列弄混；关键路径 ve 取最小、vl 取最大、活动的 e 用了终点的 ve。
+
+
+### store：图、树的存储结构（原图和存储并排）
+
+<!-- 科目：数据结构 -->
+
+```store
+id: st-g
+title: 邻接矩阵和邻接表
+graph: A-B, A-C, B-D, C-D
+show: matrix, list
+ask: list
+```
+
+- `graph:` 图的边（写法同 `net` 的 `edges:`），或者 `tree:` 树（写法同 `forest`，几棵并排是森林）。一条边（一个结点）一步，存储跟着长。
+- `show:` 一到两种。图：`matrix` 邻接矩阵、`list` 邻接表、`cross` 十字链表（有向图）、`multi` 邻接多重表（无向图）。树：`parent` 双亲表示、`child` 孩子表示、`cs` 孩子兄弟、`seq` 二叉树的顺序存储（单独用）。
+- `ask:` 图 `matrix` `list` `degree`；树 `parent` `child` `cs`；顺序存储 `seq`。`mode: quiz` 写一条链表 / 双亲数组 / 顺序存储；`mode: fill` 填邻接矩阵、双亲一列或数组。
+
+<!-- 完整写法 -->
+
+- 口径：链表默认尾插（按边的先后接在后面），`insert: head` 头插；十字链表、多重表的指针写弧 / 边的编号（按 edges 的先后从 0 数），空指针写 ∧；带权的邻接矩阵对角线 0、没边 ∞；双亲表示按层序编号、下标从 0 数，根的双亲 −1；顺序存储从 A[1] 开始，编号 i 的孩子是 2i、2i+1，空的写 #，`tree:` 写二叉树（`A(B(, D), C)`，逗号前是左子树）。
+- 错法诊断认得出：无向边只存了一个方向、头插尾插弄反、双亲表示按先序编号、顺序存储下标从 0 数。
+
+
+### deque：双端队列（输入受限、输出受限）
+
+<!-- 科目：数据结构 -->
+
+```deque
+id: dq-in
+title: 输入受限
+kind: in
+push: 1 2 3 4
+seq: 4 1 3 2
+ask: possible, op
+```
+
+- `kind:` `in` 输入受限（右端能进能出，左端只能出）、`out` 输出受限（右端能进能出，左端只能进）、`both`。`push:` 依次进队的元素，`seq:` 要得到的出队序列。页面找一种做法一步步走；得不到的走到卡住的那一步，说要出的是哪个、为什么出不来。
+- `ask:` `possible`（得不得到）、`op`（下一步做什么）。`options: 4 1 3 2, 4 2 1 3, 4 2 3 1` 配 `mode: quiz`：挑出得到的那几个。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：把输入受限当成输出受限（或者反过来）。
 
 ### trace：代码逐行跟踪（真的把 C 代码跑一遍）
 
@@ -2130,12 +2178,12 @@ void InsertSort(ElemType A[], int n){
 - 页面里有一个 C 的解释器，**每执行一行记一步**：左边代码高亮这一行，右边是调用栈、这一层的变量（这一步变了的亮一下）、数组（`i`、`j`、`low`、`high`、`mid` 这类下标变量画在格子下面；`pointers: i, j` 自己指定）、二维数组的表、输出。说明里写着这一行做了什么（哪个变量从几变成几、条件成立没有、调用、返回）。
 - `code:` **单独一行、放在最后**，下面全是代码（王道的写法照抄）。代码里有 `main` 就从 `main` 跑；没有就写 `call: 函数(参数)`，用 `let A = [0, 38, 49]`、`let n = 5` 给输入（一行一个，数组的下标从 0 数）。
 - 支持 C 的常用写法（数组、函数、递归、引用参数、结构体、指针）；**不支持 `switch`、指针运算（`p++`）**：写了会报出来。
-- 指针、结构体：`typedef struct LNode {…} LNode, *LinkList;` 照抄，`.` `->` `*p` `&x` `NULL` `malloc(sizeof(LNode))` `free(p)` `LinkList &L` 都行。结点画成框、指针画成箭头。`let L = list [头, 1, 2]`（带头结点）、`let T = tree A(B, C)` 直接给。`predict: 9 -> p`：问 p 指哪个结点（`->` 两边空格）。出错（空指针、越界、死循环……）都停在那一行说清楚。
 - `predict: 7 if i == 4 -> j`：先猜。走到第 7 行（`i == 4` 的那一次）先停下，问我「执行完这一行，j 是多少」，答了才往下走。几个用 `;` 隔开；`if` 可以不写（第一次走到就问）。写了 `predict` 就自动问；没走到的 predict 自检会提醒。
-- `mode: quiz`：只给代码，我写出结果：`quiz: output` 写输出（有 printf 时默认就是它），`quiz: A` 写运行完数组 A 的内容。
 
 <!-- 完整写法 -->
 
+- 指针、结构体：`typedef struct LNode {…} LNode, *LinkList;` 照抄，`.` `->` `*p` `&x` `NULL` `malloc(sizeof(LNode))` `free(p)` `LinkList &L` 都行。结点画成框、指针画成箭头。`let L = list [头, 1, 2]`（带头结点）、`let T = tree A(B, C)` 直接给。`predict: 9 -> p`：问 p 指哪个结点（`->` 两边空格）。出错（空指针、越界、死循环……）都停在那一行说清楚。
+- `mode: quiz`：只给代码，我写出结果：`quiz: output` 写输出（有 printf 时默认就是它），`quiz: A` 写运行完数组 A 的内容。
 - 下标越界、变量没赋值就用、死循环（超过 1 万步）、递归没出口，都会停在那一行说清楚（如果是有意的，正好给我看错在哪）。
 - 空指针、野指针、free 后再用、free 两次停在那一行；没 free 又没人指着的结点提醒内存泄漏。
 
