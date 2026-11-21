@@ -54,3 +54,17 @@ test('学生排的顺序：对；不对时只说第几个位置', () => {
   assert.equal(judgeOrder(['O', 'V'], s).ok, null, '没排完不判');
   assert.match(judgeOrder(['O', 'V'], s).text, /还有 2 个/);
 });
+
+test('空着的位置（undefined）也算没排完，不判', () => {
+  const s = parseShift({ from: '[S The committee] [V approved] [O the plan].', to: '[O The plan] [V was approved] [S by the committee].' });
+  const r = judgeOrder(['O', undefined, 'S'], s);
+  assert.equal(r.ok, null);
+  assert.match(r.text, /还有 1 个/);
+});
+
+test('不认识的字段报出来', async () => {
+  const { shiftFieldProblems } = await import('../kit/src/enshift.js');
+  assert.deepEqual(shiftFieldProblems({ title: 'x', from: 'a', to: 'b', mode: 'do', decoys: '', q: '', explain: '', id: 'a1' }), []);
+  assert.match(shiftFieldProblems({ from: 'a', to: 'b', answr: '1' })[0], /answr/);
+  assert.match(shiftFieldProblems({ from: 'a', to: 'b', mode: 'drag' })[0], /mode/);
+});

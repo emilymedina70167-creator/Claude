@@ -2968,3 +2968,34 @@ button.pl-item { width: 100%; cursor: pointer; -webkit-tap-highlight-color: tran
 .pl-opt { min-height: 44px; font-size: 17px; }
 .pl-opt.is-right { border-color: var(--green); color: var(--green); }
 .pl-opt.is-wrong { text-decoration: line-through; opacity: .55; }
+
+/* —— 句子变换 shift（视觉第 5 批）：成分是带颜色的块，挪走以后原处留虚线影子 —— */
+.sh-cap { margin: 10px 0 4px; font: 600 14px/1.4 var(--sans); color: var(--muted); }
+.sh-cap .muted { font-weight: 400; margin-left: 6px; }
+.sh-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 6px; min-height: 58px; padding: 6px 0; font: 18px/1.4 var(--sans); color: var(--chalk); }
+.sh-chunk { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-height: 52px; min-width: 44px; padding: 5px 10px 4px; border: 1.5px solid currentColor; border-radius: 10px; background: rgb(var(--chalk-rgb) / 0.05); font: inherit; line-height: 1.25; cursor: default; -webkit-tap-highlight-color: transparent; }
+button.sh-chunk { cursor: pointer; touch-action: none; }
+.sh-chunk .sh-text { color: var(--chalk); }
+.sh-chunk small { font: 600 11.5px/1.2 var(--sans); }
+.sh-chunk.is-ghost { border-style: dashed; opacity: 0.45; } /* 影子里的字留着：原句一直读得出来 */
+.sh-chunk.is-changed .sh-text { font-weight: 700; text-decoration: underline 2px; text-underline-offset: 3px; }
+.sh-chunk .sh-was { color: var(--muted); font-weight: 500; }
+.sh-chunk.is-drag { position: relative; z-index: 5; pointer-events: none; /* 手指下面找的是空位，不是自己 */ box-shadow: var(--lift, 0 6px 18px rgb(0 0 0 / 0.25)); }
+.sh-chunk.is-bad, .sh-slot.is-bad { border-color: var(--coral); box-shadow: 0 0 0 2px rgb(var(--coral-rgb) / 0.35); }
+.sh-slot { min-width: 64px; min-height: 52px; border: 1.5px dashed rgb(var(--chalk-rgb) / 0.4); border-radius: 10px; background: transparent; cursor: pointer; }
+.sh-slot.is-empty { display: inline-block; min-width: 56px; }
+.sh-slot.is-over, .sh-chunk.is-over { border-color: var(--yellow); background: rgb(var(--chalk-rgb) / 0.08); }
+.sh-loose { padding: 0 2px 10px; }
+.sh-loose.is-added { color: var(--green); font-weight: 600; }
+.sh-loose.is-dropped { color: var(--muted); text-decoration: line-through; }
+.sh-punct { margin-left: -4px; padding-bottom: 10px; }
+.sh-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 4px; }
+.sh-ctl .btn { min-height: 44px; }
+.sh-count { font: 14px/1 var(--sans); color: var(--muted); }
+.sh-notes { margin-top: 6px; }
+.sh-note { font: 15px/1.6 var(--sans); color: var(--body); }
+.sh-form { margin: 8px 0; }
+.sh-form-q { font: 16.5px/1.5 var(--sans); }
+.sh-form-opts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.sh-opt { min-height: 44px; font-size: 17px; }
+.sh-opt.is-wrong { text-decoration: line-through; opacity: .55; }

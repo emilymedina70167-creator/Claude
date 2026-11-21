@@ -64,8 +64,19 @@ export function shiftPlan(s) {
 /** 学生排的顺序（成分的 key 的数组）：{ ok: true | false | null（没排完）, firstWrong?, text }。不说答案，只说第几个位置不对 */
 export function judgeOrder(mine = [], s) {
   const { order } = shiftPlan(s);
-  if (mine.length < order.length) return { ok: null, text: `还有 ${order.length - mine.length} 个没放。` };
+  const left = order.length - order.filter((_, n) => mine[n] !== undefined && mine[n] !== null).length;
+  if (left > 0) return { ok: null, text: `还有 ${left} 个没放。` };
   const i = order.findIndex((k, n) => mine[n] !== k);
   if (i < 0) return { ok: true, text: '顺序对了。' };
   return { ok: false, firstWrong: i, text: `第 ${i + 1} 个位置不对。` };
+}
+
+// shift 认的字段；id、upload 是组件外面的通用字段
+const SHIFT_KEYS = ['title', 'q', 'from', 'to', 'mode', 'decoys', 'explain', 'id', 'upload'];
+/** 写错的字段、mode 的取值：返回给写的人看的话（空数组就是没问题） */
+export function shiftFieldProblems(fields = {}) {
+  const out = [];
+  for (const k of Object.keys(fields)) if (!SHIFT_KEYS.includes(k)) out.push(`shift 不认识字段 ${k}（认的是 ${SHIFT_KEYS.slice(0, 7).join('、')}）`);
+  if (fields.mode !== undefined && !/^(show|do)?$/i.test(String(fields.mode).trim())) out.push(`mode 只能写 show（一步步播）或 do（学生自己排），现在是 ${fields.mode}`);
+  return out;
 }
