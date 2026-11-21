@@ -15,9 +15,9 @@
 //   pick "题目" [on f(x) | on x] at 值, …   学生在图上点出来，页面判
 // 图里的式子一律弧度。
 import { splitMods, splitTop } from './mods.js';
-import { parseDef, makeDefs, addDef, compileWith, expandSrc } from './fx/defs.js';
+import { PLANE_MAX_LEVELS } from './fx/plane.js';
+import { parseDef, makeDefs, addDef, compileWith, expandSrc, guardedDiff } from './fx/defs.js';
 import { evaluate } from './expr.js';
-import { diffAst } from './fx/diff.js';
 
 export const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline', 'hline', 'segment', 'text', 'show', 'area', 'riemann', 'tangent', 'secant', 'osc', 'dots', 'goal', 'pick',
   // 平面上两个变量的（第 2 批）：参数曲线、极坐标、隐函数、等高线、方向场、向量场、解曲线、箭头、区域、区域里的一条
@@ -26,7 +26,8 @@ export const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline',
 const OWN_FLAGS = { riemann: ['left', 'right', 'mid'], point: ['hollow'], dots: ['join'], param: ['fill'], polar: ['fill'], region: ['hide'] };
 
 // 行尾的修饰：公共的（color= label= dashed……）和这条命令自己的旗标可以混着写，先后不限
-function mods(line, kind) {
+// keep：这一次不当修饰的词（末尾的词正好也是滑块的名字、当修饰读这条命令读不通时，parseGraph 再按名字读一遍）
+function mods(line, kind, keep = new Set()) {
   let { body, mods: m } = splitMods(line);
   const own = OWN_FLAGS[kind];
   if (!own) return { body, mods: m };
@@ -34,12 +35,15 @@ function mods(line, kind) {
   for (;;) {
     const f = re.exec(body);
     if (!f) return { body, mods: m };
+    if (keep.has(f[1])) return { body, mods: m };
     m[f[1].toLowerCase()] = true;
     const more = splitMods(body.slice(0, f.index));
     body = more.body;
     m = { ...more.mods, ...m };
   }
 }
+
+const namesOf = (cmds) => new Set(cmds.filter((c) => c.kind === 'let' || c.kind === 'slider').map((c) => c.name));
 
 // 按最外层的空白切（括号里的不切）：上下限写成 chi2inv(1 - al, n) 也是一个整体
 function words(s) {
@@ -84,8 +88,10 @@ export function parseGraph(src) {
   for (const raw of String(src).split('\n')) {
     const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
     if (!line.trim()) continue;
+    // 字段后面前面空了格的一行是那个字段的续行（note: 写好几行），长得像命令、定义也不当（以前 f(x) = … 被当成定义）
+    if (last && /^\s/.test(line)) { fields[last] += '\n' + line; continue; }
     const c = line.trim().match(re);
-    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2], { C, num, defs, cmds }), srcLine: line.trim() }); last = null; continue; }
+    if (c) { cmds.push({ ...parseCmdKeep(c[1].toLowerCase(), c[2], { C, num, defs, cmds }), srcLine: line.trim() }); last = null; continue; }
     const def = parseDef(line);
     if (def) { addDef(defs, def); last = null; continue; }
     const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
@@ -98,7 +104,19 @@ export function parseGraph(src) {
   return { fields, cmds, defs, xr: win(fields.x, [-5, 5]), yr: fields.y ? win(fields.y, null) : null };
 }
 
-function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
+// 一条命令：末尾的词既是这条命令的修饰（hide、fill、mid……）又是前面滑块 / let 的名字时，先当修饰读；
+// 读不通（region … for x 0 hide 少了上限）再当名字读一遍（以前一律当修饰吃掉，那个滑块悄悄没用上）
+function parseCmdKeep(kind, rest, ctx) {
+  try { return parseCmd(kind, rest, ctx); } catch (e) {
+    const w = /(?:^|\s)([A-Za-z_]\w*)\s*$/.exec(rest)?.[1];
+    if (w && OWN_FLAGS[kind]?.includes(w.toLowerCase()) && namesOf(ctx.cmds).has(w)) {
+      try { return parseCmd(kind, rest, { ...ctx, keep: new Set([w]) }); } catch { /* 照原来的错 */ }
+    }
+    throw e;
+  }
+}
+
+function parseCmd(kind, rest, { C, num, defs, cmds = [], keep = new Set() }) {
   if (kind === 'show') {
     // 读数末尾的 after / before：做到以后才显示（或者做到以前显示）；别的修饰读数没有
     const m = /^(.*\S)\s+(after|before)$/i.exec(rest.trim());
@@ -111,15 +129,23 @@ function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
     return { kind, label: m[1], at: C(body), mods: md };
   }
   if (kind === 'pick') return parsePick(rest, { C });
-  const { body, mods: md } = mods(rest, kind);
+  const { body, mods: md } = mods(rest, kind, keep);
   // goal 自己写了 after：它要等「全做到」才出来，而「全做到」又在等它——永远出不来
   if (kind === 'goal' && (md.after || md.before)) throw new Error('goal 不能写 after / before（它自己就是要学生做到的事）');
   if (kind === 'let') {
     const m = body.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
     if (!m) throw new Error('let 的写法：let 名字 = 表达式');
-    // on=：数的把手骑在曲线 y = f(x) 上（onF）；二维的点约束在曲线 G(x, y) = 0 上（onG，能写成「左 = 右」）
-    const is2d = m[2].trim().startsWith('[');
-    const on = md.on ? (is2d ? { onG: C(eqToZero(String(md.on))) } : { onF: C(md.on) }) : {};
+    // on=：数的把手骑在曲线 y = f(x) 上（onF）；二维的点约束在曲线 G(x, y) = 0 上（onG，能写成「左 = 右」）。
+    // 是数还是点画的时候按值认（P0 + [0, 1] 这种不以 [ 开头的也是点）：两种能编译的都编译好
+    let on = {};
+    if (md.on) {
+      const src = String(md.on);
+      if (/[<>≤≥]/.test(src)) throw new Error(`let ${m[1]} 的 on= 是一条曲线，写等式（on="x^2 + y^2 = 4"）或者数的把手骑的 y = f(x) 的 f(x)；「${src}」是不等式（一块区域），拖不上去`);
+      const tryC = (t) => { try { return C(t); } catch { return null; } };
+      const onG = tryC(eqToZero(src)), onF = /(?<![<>=!])=(?!=)/.test(src) ? null : tryC(src);
+      if (!onG && !onF) C(eqToZero(src)); // 都编译不了：照原来报那条错
+      on = { ...(onG ? { onG } : {}), ...(onF ? { onF } : {}) };
+    }
     return { kind, name: m[1], expr: C(m[2]), mods: md, ...on };
   }
   if (kind === 'slider') {
@@ -156,7 +182,7 @@ function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
     const m = body.match(/^(.*\S)\s+at\s+(.+)$/);
     if (!m) throw new Error('tangent 的写法：tangent f(x) at a');
     let dAst;
-    try { dAst = diffAst(expandSrc(m[1], defs), 'x', 1); } catch (e) { throw new Error(`tangent：${e.message}`); }
+    try { dAst = guardedDiff(expandSrc(m[1], defs), 'x', 1); } catch (e) { throw new Error(`tangent：${e.message}`); }
     return { kind, f: C(m[1]), df: (vars = {}) => evaluate(dAst, vars), at: C(m[2]), mods: md };
   }
   if (kind === 'osc') {
@@ -164,7 +190,8 @@ function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
     const m = r.match(/^(.*\S)\s+at\s+(.+)$/);
     if (!m) throw new Error('osc 的写法：osc f(x) at a（曲率圆；前面可以起名 osc K = f(x) at a，K 是曲率）');
     let d1, d2;
-    try { const src = expandSrc(m[1], defs); d1 = diffAst(src, 'x', 1); d2 = diffAst(src, 'x', 2); } catch (e) { throw new Error(`osc：${e.message}`); }
+    // 带守门：尖点上没有 f′、f″ 跳的地方没有 f″（曲率圆不画，以前照一侧画）
+    try { const src = expandSrc(m[1], defs); d1 = guardedDiff(src, 'x', 1); d2 = guardedDiff(src, 'x', 2); } catch (e) { throw new Error(`osc：${e.message}`); }
     return { kind, name, f: C(m[1]), df: (vars = {}) => evaluate(d1, vars), d2f: (vars = {}) => evaluate(d2, vars), at: C(m[2]), mods: md };
   }
   if (kind === 'secant') {
@@ -199,7 +226,7 @@ function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
     const levels = (vars = {}) => {
       const out = each.flatMap((f) => { const v = f(vars); return Array.isArray(v) ? v : [v]; });
       if (out.some((x) => typeof x !== 'number')) throw new Error('contour 的值要是数');
-      if (out.length > 12) throw new Error(`contour 最多 12 条（现在 ${out.length} 条）`);
+      if (out.length > PLANE_MAX_LEVELS) throw new Error(`contour 最多 ${PLANE_MAX_LEVELS} 条（现在 ${out.length} 条）`);
       return out;
     };
     return { kind, F: C(m[1]), levels, mods: md };
@@ -244,6 +271,7 @@ function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
     const reg = cmds.find((c) => c.kind === 'region' && c.name === m[1]);
     if (!reg) throw new Error(`strip：没有叫 ${m[1]} 的区域（前面先写 region ${m[1]} = y from … to … for x … …）`);
     if (reg.shape === 'where') throw new Error(`strip：条件围的区域没有「一条」，区域 ${m[1]} 要写成 y from … to … for x … …`);
+    for (const [k, nm] of [['lo', md.lo], ['hi', md.hi]]) if (nm && namesOf(cmds).has(nm)) throw new Error(`strip 的 ${k}= 起的名字 ${nm} 和前面的滑块 / let 重名（它会把那个值盖掉）：换个名字`);
     return { kind, of: m[1], at: C(m[2]), loName: md.lo, hiName: md.hi, mods: md };
   }
   if (kind === 'vline' || kind === 'hline') return { kind, at: C(body), mods: md };

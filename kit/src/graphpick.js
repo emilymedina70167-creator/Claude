@@ -51,3 +51,16 @@ export function snapPick(x, y, { on, f } = {}) {
   }
   return x;
 }
+
+/** 图上关卡的一行（黑板现状里给老师看）：目标做到几个、每道点一点点了哪几个、检查了几次。没有关卡回 '' */
+export function tasksText(t) {
+  if (!t) return '';
+  const out = [];
+  const [hit, all] = String(t.goals || '0/0').split('/').map(Number);
+  if (all) out.push(`目标 ${hit}/${all}`);
+  for (const p of t.picks || []) {
+    const q = String(p.q || '').replace(/\$/g, '').slice(0, 40);
+    out.push(p.done ? `「${q}」${p.giveup ? '看了答案' : '做完'}` : `「${q}」${p.picked?.length ? `点了 ${p.picked.join('、')}` : '还没点'}${p.tries ? `，检查了 ${p.tries} 次` : ''}`);
+  }
+  return out.join('；');
+}

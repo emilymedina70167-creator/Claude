@@ -26,9 +26,13 @@ export function parseSpace(src) {
   const lines = [];
   for (const raw of String(src).split('\n')) { const line = raw.replace(/\s+#\s.*$/, '').trimEnd(); if (line.trim()) lines.push(line); }
   const re = new RegExp(`^(${SPACE_CMDS.join('|')})\\s+(.*)$`, 'i');
+  // 字段后面前面空了格的一行是那个字段的续行（note: 写好几行）：长得像命令、定义也不当，也不让整张图改成弧度
+  const cont = new Set();
+  { let open = false; lines.forEach((line, k) => { if (open && /^\s/.test(line)) { cont.add(k); return; } open = /^[A-Za-z][\w-]*\s*[:：]/.test(line) && !re.test(line.trim()); }); }
   // 先过一遍定角度还是弧度：定义、命令都要按它编译
   let angle = null, calc = false;
-  for (const line of lines) {
+  for (const [k, line] of lines.entries()) {
+    if (cont.has(k)) continue;
     const t = line.trim(), c = t.match(re);
     if (c) { if (CALC_CMDS.includes(c[1].toLowerCase())) calc = true; continue; }
     if (isDef(t)) { calc = true; continue; }
@@ -41,7 +45,8 @@ export function parseSpace(src) {
   const fields = {};
   const cmds = [];
   let last = null;
-  for (const line of lines) {
+  for (const [k, line] of lines.entries()) {
+    if (cont.has(k) && last) { fields[last] += '\n' + line; continue; }
     const t = line.trim(), c = t.match(re);
     if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2], { C, cmds, defs, rad }), srcLine: t }); last = null; continue; }
     const def = parseDef(t);

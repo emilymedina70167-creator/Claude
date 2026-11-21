@@ -138,6 +138,8 @@ function d(n, x) {
       if (!has(n, x)) return N(0);
       const { name, args } = n;
       if (name === 'T') return d(d(args[0], x), x); // 实数题里 f' 是 f 的导数
+      // 求导的守门（fx/defs.js 加的）：再求一阶导，守门照旧（低一阶在这里有尖点，更高阶也没有定义）
+      if (name === '__kink') return C('__kink', d(args[0], x), ...args.slice(1));
       if (name === 'int') {
         if (args.length <= 2) {
           // 不定积分 int(g) / int(g, t)：对它自己的变量求导就是 g

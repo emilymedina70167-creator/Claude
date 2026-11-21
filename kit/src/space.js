@@ -20,6 +20,10 @@ import { quadricLines } from './quadric.js';
 import { parseSpace } from './spacespec.js';
 import { compileWith } from './fx/defs.js';
 import { judgePicks, pickFeedback } from './graphpick.js';
+import { canReveal, sameWrong } from './tries.js';
+import { markDraft } from './drafts.js';
+// 一道 pick 现在点了哪几个（先后不论）
+const pickSig = (st) => st.pts.map((p) => JSON.stringify(p)).sort().join(' ');
 import { close } from './scene.js';
 import { typedRegion, contourLines } from './fx/plane.js';
 import {
@@ -68,7 +72,7 @@ export function createSpace(container, src, opts = {}) {
   cmds.filter((c) => c.kind === 'slider').forEach((c) => (state.slider[c.name] = c.init));
   const goalIdx = cmds.map((c, i) => (c.kind === 'goal' ? i : -1)).filter((i) => i >= 0);
   const pickIdx = cmds.map((c, i) => (c.kind === 'pick' ? i : -1)).filter((i) => i >= 0);
-  pickIdx.forEach((i) => state.picks.set(i, { pts: [], tries: 0, done: false, giveup: false, res: null, msg: '' }));
+  pickIdx.forEach((i) => state.picks.set(i, { pts: [], tries: 0, done: false, giveup: false, res: null, msg: '', again: sameWrong(), checked: '' }));
   const hasTasks = goalIdx.length + pickIdx.length > 0;
   const revealed = () => hasTasks && goalIdx.every((i) => state.goalsHit.has(i)) && pickIdx.every((i) => state.picks.get(i).done);
 
@@ -985,7 +989,7 @@ export function createSpace(container, src, opts = {}) {
       row.querySelector('.g-pick-count').textContent = st.done ? '' : st.pts.length ? `点了 ${st.pts.length} 个` : c.on ? '在曲面上点出来（可以先转一转）' : '在地面（xy 平面）上点出来';
       row.querySelector('.g-pick-check').disabled = st.done || i !== act || bad;
       row.querySelector('.g-pick-clear').hidden = st.done || !st.pts.length;
-      row.querySelector('.g-pick-show').hidden = st.done || st.tries < 3;
+      row.querySelector('.g-pick-show').hidden = st.done || !canReveal(st.tries);
       const m = row.querySelector('.g-pick-msg');
       m.textContent = bad ? `图形描述有误：${targetsOf(c).message}` : st.msg;
       m.className = `g-pick-msg${bad ? ' is-bad' : st.done && !st.giveup ? ' is-ok' : st.res && !st.res.ok ? ' is-bad' : ''}`;
@@ -1007,11 +1011,17 @@ export function createSpace(container, src, opts = {}) {
     row.innerHTML = `<div class="g-pick-q">${mdToHtml(c.q, { inline: true })}</div><div class="g-pick-row"><span class="g-pick-count"></span><button type="button" class="btn btn-sm g-pick-clear" hidden>清空</button><button type="button" class="btn btn-primary g-pick-check">检查</button><button type="button" class="btn btn-sm g-pick-show" hidden>看答案</button></div><div class="g-pick-msg"></div>`;
     row.querySelector('.g-pick-clear').addEventListener('click', () => { st.pts = []; st.res = null; st.msg = ''; draw(); syncPicks(); });
     row.querySelector('.g-pick-show').addEventListener('click', () => finishPick(i, true));
+    // 点了还没检查的点是草稿（课堂里跟着下一条告诉老师；以前没人知道学生点了哪几个）
+    markDraft(row, () => (!st.done && st.pts.length && pickSig(st) !== st.checked ? `点了 ${st.pts.map(fmt).join('、')}，还没检查` : ''));
     row.querySelector('.g-pick-check').addEventListener('click', () => {
       const ts = targetsOf(c);
       if (ts instanceof Error) return;
+      const sig = pickSig(st);
+      if (st.again.repeat(sig)) return; // 同一组点连着再检查：不算新的一次，上一次的提示还在
       st.tries++;
+      st.checked = sig;
       st.res = judgePicks(st.pts, ts, tolOf(c));
+      st.again.after(sig, st.res.ok);
       st.msg = pickFeedback(st.res);
       if (st.res.ok) { finishPick(i, false); return; }
       ctl.emit('pick', i, { q: c.q, ok: false, done: false, attempts: st.tries, value: st.pts.map(fmt).join(', '), text: st.msg });

@@ -115,6 +115,26 @@ const N0 = { t: 'num', v: 0 };
 // f 没定义的地方导数也没定义：ln x 的导数 1/x 在 x < 0 算得出数，但那里没有 ln。加上 0·f，f 是 NaN 时导数也是 NaN
 const guarded = (d, f) => ({ t: 'bin', op: '+', a: d, b: { t: 'bin', op: '*', a: N0, b: f } });
 
+// 尖点、分段的分界上没有导数（以前符号求导给的是一侧的式子的值）：d 是 lower 对 x 的导数，
+// 在 x ± h 上看 lower 左右的斜率对不对得上（expr.js 的 __kink），对不上这一点就是 NaN
+const V = (name) => ({ t: 'var', name });
+function kinkGuard(d, lower, x) {
+  const h = { t: 'bin', op: '*', a: { t: 'num', v: 1e-6 }, b: { t: 'call', name: 'max', args: [{ t: 'num', v: 1 }, { t: 'call', name: 'abs', args: [V(x)] }] } };
+  const at = (op) => substAll(lower, { [x]: { t: 'bin', op, a: V(x), b: h } });
+  return { t: 'call', name: '__kink', args: [d, at('-'), lower, at('+'), h] };
+}
+// 一个变量接一个变量求导（f'' 是 x、x；f_xy 是 x、y），守门只看最后那一下：低一阶的光不光滑
+function diffChain(body, xs, diff) {
+  let lower = body, cur = body;
+  for (const x of xs) { lower = cur; cur = diff(cur, x); }
+  return kinkGuard(cur, lower, xs.at(-1));
+}
+
+/** 对 x 求 order 阶导，带守门（尖点、分段的分界、f″ 跳的地方是 NaN）：osc、tangent 直接对式子求导也用它 */
+export function guardedDiff(ast, x = 'x', order = 1) {
+  return diffChain(ast, Array(order).fill(x), (b, v) => diffAst(b, v, 1));
+}
+
 // 把定义过的函数的调用换成它的式子
 function inline(n, defs) {
   if (!n || n.t === 'num' || n.t === 'var') return n;
@@ -125,7 +145,10 @@ function inline(n, defs) {
   if (!def) return out;
   // 多元函数只给了一个实参：当成一个点（向量），分量依次代进去——f(P)、f_grad(P)
   let args = out.args;
-  if (def.params.length > 1 && args.length === 1 && args[0].t !== 'num') args = def.params.map((_, i) => ({ t: 'call', name: 'el', args: [args[0], { t: 'num', v: i + 1 }] }));
+  if (def.params.length > 1 && args.length === 1 && args[0].t !== 'num') {
+    const pt = { t: 'call', name: '__dim', args: [args[0], { t: 'num', v: def.params.length }] };
+    args = def.params.map((_, i) => ({ t: 'call', name: 'el', args: [pt, { t: 'num', v: i + 1 }] }));
+  }
   if (args.length !== def.params.length) throw new Error(`${def.name} 要 ${def.params.length} 个参数（这里写了 ${out.args.length} 个）${def.params.length > 1 ? `，或者给一个 ${def.params.length} 维的点` : ''}`);
   const diff = (body, x, order = 1) => {
     try { return diffAst(body, x, order); } catch (e) {
@@ -133,9 +156,9 @@ function inline(n, defs) {
     }
   };
   let body = def.ast;
-  if (dm?.[1]) body = guarded(diff(body, def.params[0], Number(dm[1])), def.ast);
-  else if (dm?.[2]) body = guarded([...dm[2]].reduce((b, x) => diff(b, x), body), def.ast);
-  else if (dm?.[3]) body = { t: 'list', items: def.params.map((x) => guarded(diff(def.ast, x), def.ast)) };
+  if (dm?.[1]) body = guarded(diffChain(body, Array(Number(dm[1])).fill(def.params[0]), diff), def.ast);
+  else if (dm?.[2]) body = guarded(diffChain(body, [...dm[2]], diff), def.ast);
+  else if (dm?.[3]) body = { t: 'list', items: def.params.map((x) => guarded(kinkGuard(diff(def.ast, x), def.ast, x), def.ast)) };
   return substAll(body, Object.fromEntries(def.params.map((p, i) => [p, args[i]])));
 }
 

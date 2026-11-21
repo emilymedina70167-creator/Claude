@@ -47,6 +47,20 @@ const FUNCS = {
   I: (n = 2) => eye(num(n)),
   sqrt: (x) => Math.sqrt(num(x)),
   abs: (x) => Math.abs(num(x)),
+  // 多元函数给了一个点（f(P)）：点要正好 n 维（fx/defs.js 加的，主讲不写）。以前三维的点悄悄只用前两个、给一个数报「需要一个向量」
+  __dim: (v, n) => {
+    if (!Array.isArray(v)) throw new Error(`这个函数要 ${n} 个参数（或者一个 ${n} 维的点），这里只给了一个数`);
+    if (v.length !== n) throw new Error(`给的点是 ${v.length} 维的，这个函数要 ${n} 个参数（${n} 维的点）`);
+    return v;
+  },
+  // 求导的守门（fx/defs.js 展开 f'、f_x 时自己加的，主讲不写）：低一阶的那个在这一点左右的斜率对不上
+  // （尖点、分段的分界、跳跃）——这一阶在这里没有定义。一边没定义（定义域的端点）、冲到无穷的不拦
+  __kink: (d, l, y, r, h) => {
+    if (typeof d !== 'number' || ![l, y, r, h].every((v) => typeof v === 'number')) return d;
+    const dl = (y - l) / h, dr = (r - y) / h;
+    if (![dl, dr].every(Number.isFinite)) return d;
+    return Math.abs(dl - dr) <= 0.02 * Math.max(1, Math.abs(dl), Math.abs(dr)) ? d : NaN;
+  },
   sin: (x) => Math.sin(num(x)),
   cos: (x) => Math.cos(num(x)),
   tan: (x) => Math.tan(num(x)),

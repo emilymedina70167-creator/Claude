@@ -221,8 +221,9 @@ test('二维的拖点；on= 约束在曲线上；第 1 批的写法不变', () =
   const g = parseGraph('f(x) = x^2\nlet P = [1, 2] drag snap=0.25\nlet Q = [2, 1] drag on="x + y = 3"\nlet a = 1 drag on=f(x)\nlet R = [0, 1] drag on=x^2+y^2-1');
   assert.equal(g.cmds[0].mods.drag, true); assert.equal(g.cmds[0].onG, undefined);
   assert.equal(g.cmds[1].onG({ x: 1, y: 2 }), 0); assert.equal(g.cmds[1].onG({ x: 1, y: 1 }), -1);
-  assert.equal(g.cmds[2].onF({ x: 3 }), 9); assert.equal(g.cmds[2].onG, undefined);
-  assert.equal(g.cmds[3].onG({ x: 1, y: 0 }), 0); assert.equal(g.cmds[3].onF, undefined);
+  // 2026-11-21：是数还是点画的时候按值认（P0 + [0, 1] 也是点），所以两种能编译的都编译好；数用 onF、点用 onG
+  assert.equal(g.cmds[2].onF({ x: 3 }), 9);
+  assert.equal(g.cmds[3].onG({ x: 1, y: 0 }), 0);
 });
 
 test('region：几个条件用逗号隔开（都成立）；in D 限在前面起了名字的区域里；hide 只起名字不画', () => {

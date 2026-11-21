@@ -467,3 +467,32 @@ export function nearestOn(G, [px, py], box, { n = 64 } = {}) {
   const inBox = (r) => r[0] >= box.x0 && r[0] <= box.x1 && r[1] >= box.y0 && r[1] <= box.y1;
   return q && Math.hypot(q[0] - best[0], q[1] - best[1]) <= cell && inBox(q) ? q : best;
 }
+
+/**
+ * 条件围的区域画出来几乎什么都没有时说一句（写法提醒，2026-11-21）：
+ *   一处都不成立（x == 1 这种等式、窗口外）→ 区域画不出来；只占窗口一点点、又碎成很多小块（很细的带子
+ *   abs(x² + y² − 4) < 0.02 画成一圈点）→ 那是一条曲线。都提示用 implicit 画曲线。正常的区域回 ''
+ */
+export function whereNote(runs, box) {
+  if (!runs.length) return 'region 的条件在窗口里一处都不成立（等式 == 围不出面积）：要画一条曲线用 implicit，比如 implicit x = 1';
+  const area = runs.reduce((s, r) => s + (r.x1 - r.x0) * (r.y1 - r.y0), 0), all = (box.x1 - box.x0) * (box.y1 - box.y0);
+  if (area < 0.005 * all && runs.length > 24) return 'region 的条件围出来的是一条很细的带子（画出来是一圈点）：要画曲线用 implicit，比如 implicit x^2 + y^2 = 4';
+  return '';
+}
+
+/**
+ * implicit 的式子在窗口里不变号、却碰到 0（(x − y)² = 0、|x| + |y| = 0 这种）：按变号找线的画法找不到它，
+ * 说一句让主讲写成变号的式子。完全碰不到 0 的（x² + y² + 1 = 0，空集）不说。网格上的最小值比最大值小三个数量级算碰到
+ */
+export function implicitNote(F, box, n = 48) {
+  let lo = Infinity, hi = 0, pos = false, neg = false;
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
+    let v; try { v = F(box.x0 + ((box.x1 - box.x0) * i) / n, box.y0 + ((box.y1 - box.y0) * j) / n); } catch { continue; }
+    if (!Number.isFinite(v)) continue;
+    if (v > 0) pos = true; else if (v < 0) neg = true;
+    lo = Math.min(lo, Math.abs(v)); hi = Math.max(hi, Math.abs(v));
+  }
+  if (pos && neg) return '';
+  if (!(hi > 0) || lo > 1e-3 * hi) return '';
+  return 'implicit 的式子在窗口里不变号（平方等于 0 这种）：页面按变号找线，画不出来；写成变号的式子，比如 (x − y)^2 = 0 写 x − y = 0';
+}

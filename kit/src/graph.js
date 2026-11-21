@@ -19,7 +19,11 @@ import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls, dragHandles } from './plot.js';
 import { judgePicks, pickFeedback, snapPick } from './graphpick.js';
-import { contourLines, paramCurve, slopeMarks, fieldArrows, flowLine, flowField, typedRegion, stripOf, whereRuns, inTyped, projectTo, nearestOn, longestLine, indexAt } from './fx/plane.js';
+import { canReveal, sameWrong } from './tries.js';
+import { markDraft } from './drafts.js';
+// 一道 pick 现在点了哪几个（先后不论）
+const pickSig = (st) => st.pts.map((p) => JSON.stringify(p)).sort().join(' ');
+import { contourLines, paramCurve, slopeMarks, fieldArrows, flowLine, flowField, typedRegion, stripOf, whereRuns, inTyped, projectTo, nearestOn, longestLine, indexAt, whereNote, implicitNote } from './fx/plane.js';
 import { close } from './scene.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -66,7 +70,7 @@ export function createGraph(container, src, opts = {}) {
   cmds.filter((c) => c.kind === 'slider').forEach((c) => (state.slider[c.name] = c.init));
   const goalIdx = cmds.map((c, i) => (c.kind === 'goal' ? i : -1)).filter((i) => i >= 0);
   const pickIdx = cmds.map((c, i) => (c.kind === 'pick' ? i : -1)).filter((i) => i >= 0);
-  pickIdx.forEach((i) => state.picks.set(i, { pts: [], tries: 0, done: false, giveup: false, res: null, msg: '' }));
+  pickIdx.forEach((i) => state.picks.set(i, { pts: [], tries: 0, done: false, giveup: false, res: null, msg: '', again: sameWrong(), checked: '' }));
   const hasTasks = goalIdx.length + pickIdx.length > 0;
   // 学生要做的都做到了（或者看了答案）：after 的东西这时才显示
   const revealed = () => hasTasks && goalIdx.every((i) => state.goalsHit.has(i)) && pickIdx.every((i) => state.picks.get(i).done);
@@ -412,7 +416,12 @@ export function createGraph(container, src, opts = {}) {
               // 等高线上挂它的值：挂在最长那条线的中段
               if (c.kind === 'contour' && lines.length) { const ln = longestLine(lines); const p = ln[indexAt(ln, 0.37)]; want(p[0], p[1], String(Number(lv.toPrecision(3))), col, 0, 0, true); }
             }
-            if (!any) { const why = whyThrows(fn2(c.F, v).bind(null, (xr[0] + xr[1]) / 2 + 0.123), (yr[0] + yr[1]) / 2 + 0.077); if (why) errs.push(why); }
+            if (!any) {
+              const why = whyThrows(fn2(c.F, v).bind(null, (xr[0] + xr[1]) / 2 + 0.123), (yr[0] + yr[1]) / 2 + 0.077);
+              // 不变号的式子（(x − y)² = 0）找不到线：一上来就这样才算写法问题（滑块拖出来的不算）
+              const note = !why && firstDraw && c.kind === 'implicit' ? implicitNote(F, box2) : '';
+              if (why || note) errs.push(why || note);
+            }
             if (c.kind === 'implicit' && c.mods.label && any) wantOn(longestLine(contourLines(F, 0, box2, { nx: 48, ny: 48 })), Number(c.mods.at) || 0.3, c.mods.label, col);
           } else if (c.kind === 'slope') {
             // 斜率无穷的地方（竖的）留给 slopeMarks 认，不压成没定义
@@ -443,7 +452,9 @@ export function createGraph(container, src, opts = {}) {
             const from = c.from(v), d = c.v(v);
             if (!Array.isArray(d) || d.length !== 2 || !Array.isArray(from) || from.length !== 2) throw new Error('vector 的写法：vector [u, v] from [x, y]');
             const vc = color(c, 'var(--yellow)');
-            arrow(from[0], from[1], from[0] + d[0], from[1] + d[1], vc, 'g-vec', vecG);
+            // 零向量画不出箭头：在起点画一个小圆点（以前只剩名字，看不出它在哪）
+            if (Math.hypot(X(from[0] + d[0]) - X(from[0]), Y(from[1] + d[1]) - Y(from[1])) < 1) el('circle', { cx: X(from[0]), cy: Y(from[1]), r: 4, class: 'g-dot g-vec-zero' }, vecG).style.fill = vc;
+            else arrow(from[0], from[1], from[0] + d[0], from[1] + d[1], vc, 'g-vec', vecG);
             if (c.mods.label) want(from[0] + d[0], from[1] + d[1], c.mods.label, vc, 14, -14);
           } else if (c.kind === 'region') {
             const rc = color(c, 'var(--yellow)');
@@ -454,7 +465,10 @@ export function createGraph(container, src, opts = {}) {
               const inD = wr ? inTyped(wr.shape, fnOf(wr.lo, v, wr.param), fnOf(wr.hi, v, wr.param), wr.a(v), wr.b(v)) : () => true;
               const runs = whereRuns((x, y) => inD(x, y) && C2(x, y) !== 0, box2, { nx: n, ny: Math.round(n * (H - MT - MB) / (W - ML - MR)) });
               if (runs.length) el('path', { d: runs.map((r) => `M${X(r.x0).toFixed(1)},${Y(r.y1).toFixed(1)}H${X(r.x1).toFixed(1)}V${Y(r.y0).toFixed(1)}H${X(r.x0).toFixed(1)}Z`).join(''), class: 'g-shade g-where' }, plotG).style.fill = rc;
-              else { const why = whyThrows(C2.bind(null, 0.123), 0.077); if (why) errs.push(why); }
+              const why = runs.length ? '' : whyThrows(C2.bind(null, 0.123), 0.077);
+              // 一处都不成立（x == 1）、很细的带子：一上来就这样说一句（滑块拖出来的不算）
+              const note = !why && firstDraw && !c.within ? whereNote(runs, box2) : '';
+              if (why || note) errs.push(why || note);
             } else {
               // 上下限、范围写了无穷（y from 0 to e^(-x) for x 0 inf）：画到窗口边（极坐标的角不能是无穷）
               const far = c.shape === 'x' ? [xr[0] - (xr[1] - xr[0]), xr[1] + (xr[1] - xr[0])] : c.shape === 'y' ? [yr[0] - (yr[1] - yr[0]), yr[1] + (yr[1] - yr[0])] : [0, 3 * Math.hypot(xr[1] - xr[0], yr[1] - yr[0])];
@@ -630,7 +644,7 @@ export function createGraph(container, src, opts = {}) {
       row.querySelector('.g-pick-count').textContent = st.done ? '' : st.pts.length ? `点了 ${st.pts.length} 个` : c.on === 'curve' ? '在曲线上点出来' : c.on === 'axis' ? '在 x 轴上点出来' : '在图上点出来';
       row.querySelector('.g-pick-check').disabled = st.done || i !== act || bad;
       row.querySelector('.g-pick-clear').hidden = st.done || !st.pts.length;
-      row.querySelector('.g-pick-show').hidden = st.done || st.tries < 3;
+      row.querySelector('.g-pick-show').hidden = st.done || !canReveal(st.tries);
       const m = row.querySelector('.g-pick-msg');
       m.textContent = bad ? `图形描述有误：${targetsOf(c).message}` : st.msg;
       m.className = `g-pick-msg${bad ? ' is-bad' : st.done && !st.giveup ? ' is-ok' : st.res && !st.res.ok ? ' is-bad' : ''}`;
@@ -652,13 +666,19 @@ export function createGraph(container, src, opts = {}) {
     row.innerHTML = `<div class="g-pick-q">${mdToHtml(c.q, { inline: true })}</div><div class="g-pick-row"><span class="g-pick-count"></span><button type="button" class="btn btn-sm g-pick-clear" hidden>清空</button><button type="button" class="btn btn-primary g-pick-check">检查</button><button type="button" class="btn btn-sm g-pick-show" hidden>看答案</button></div><div class="g-pick-msg" aria-live="polite"></div>`;
     row.querySelector('.g-pick-clear').addEventListener('click', () => { st.pts = []; st.res = null; st.msg = ''; draw(); syncPicks(); });
     row.querySelector('.g-pick-show').addEventListener('click', () => finishPick(i, true));
+    // 点了还没检查的点是草稿（课堂里跟着下一条告诉老师；以前没人知道学生点了哪几个）
+    markDraft(row, () => (!st.done && st.pts.length && pickSig(st) !== st.checked ? `点了 ${st.pts.map(fmt).join('、')}，还没检查` : ''));
     row.querySelector('.g-pick-check').addEventListener('click', () => {
       const ts = targetsOf(c);
       if (ts instanceof Error) return;
+      const sig = pickSig(st);
+      if (st.again.repeat(sig)) return; // 同一组点连着再检查：不算新的一次，上一次的提示还在
       st.tries++;
+      st.checked = sig;
       // 随便点的：按屏幕上的远近算——y 方向的距离换成「横向多少个单位那么长」（每单位的像素数两个方向不一样）
       const scale = c.on === 'free' ? [1, ((W - ML - MR) / (xr[1] - xr[0])) / ((H - MT - MB) / (yr[1] - yr[0]))] : [1, 1];
       st.res = judgePicks(st.pts, ts, tolOf(c), { scale });
+      st.again.after(sig, st.res.ok);
       st.msg = pickFeedback(st.res);
       if (st.res.ok) { finishPick(i, false); return; }
       ctl.emit('pick', i, { q: c.q, ok: false, done: false, attempts: st.tries, value: st.pts.map(fmt).join(', '), text: st.msg });

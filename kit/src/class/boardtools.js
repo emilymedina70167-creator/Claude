@@ -2,6 +2,7 @@
 // 指令从哪来、结果告诉谁由各自的控制器管（课堂：课堂 Claude 的 board 块；实时黑板：数据库的 ops 集合）；
 // 这里只管在板上执行：找目标、只动当前板和常驻栏、记下板上现有的标注（段改写、撤回时一起擦掉）。
 // 画法在 marks.js，写法在 markspec.js / protocol.js。
+import { tasksText } from '../graphpick.js';
 import { session } from '../session.js';
 import { compile as compileRad } from '../expr.js';
 import { markLayer } from '../marks.js';
@@ -186,10 +187,13 @@ export function createBoardTools({ bv, segs, anyBoard = () => false }) {
     return Object.keys(v).filter((k) => !(b.classList.contains('block-predict') && k === 'guess'));
   }
 
-  // 演示组件的一行概要（一共几步、每种问题在第几步）；别的图没有
+  // 演示组件的一行概要（一共几步、每种问题在第几步）；函数图、三维图的关卡（目标做到几个、点一点点了哪几个）
   function figureOutline(b) {
     const sc = b.dataset.scene && session.scenes.get(b.dataset.scene);
-    try { return sc?.api.outline?.() || undefined; } catch { return undefined; }
+    let o = '', t = '';
+    try { o = sc?.api.outline?.() || ''; } catch { o = ''; }
+    try { t = tasksText(sc?.api.tasks?.()); } catch { t = ''; }
+    return [o, t].filter(Boolean).join('；') || undefined;
   }
 
   return {

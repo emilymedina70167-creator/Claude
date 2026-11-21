@@ -26,12 +26,12 @@ test('同一个错答案连着再交不算新的一次；改了、对了、换�
 
 // 结构上守着：会出「看答案」的组件都照 tries.js 算，不再各写各的 2 / 3
 const SRC = new URL('../kit/src/', import.meta.url);
-const files = ['stepper.js', ...readdirSync(new URL('blocks/', SRC)).map((f) => `blocks/${f}`)].filter((f) => f.endsWith('.js'));
+const files = ['stepper.js', 'graph.js', 'space.js', ...readdirSync(new URL('blocks/', SRC)).map((f) => `blocks/${f}`)].filter((f) => f.endsWith('.js'));
 test('组件里不再写死「几次以后看答案」', () => {
   const bad = [];
   for (const f of files) {
     const s = readFileSync(new URL(f, SRC), 'utf8');
-    if (/(attempts|tries)\s*>=\s*[23]\b/.test(s)) bad.push(`${f}：写死了次数`);
+    if (/(attempts|tries)\s*(>=|<)\s*[23]\b/.test(s)) bad.push(`${f}：写死了次数`);
     if (/const\s+TRIES\s*=\s*\d/.test(s)) bad.push(`${f}：自己定了 TRIES`);
     if (/看答案|en-show|sv-reveal|sv-fill-reveal|fb-show|pl-show|ed-wshow/.test(s) && /(attempts|tries)\s*(\+\+|\+=)/.test(s) && !/from '\.\.?\/(\.\.\/)?tries\.js'/.test(s)) bad.push(`${f}：没用 tries.js`);
   }
