@@ -91,3 +91,21 @@ export function keptComponents(before = '', after = '') {
   const a = componentSources(before), b = componentSources(after);
   return [...b.keys()].filter((id) => a.get(id) === b.get(id));
 }
+
+/**
+ * 预案、「为什么」挂的组件不在黑板上时照实说缘故（2026-11-22：以前一律回「黑板上没有组件 X」，
+ * 组件其实写了、只是那一段有写法错误没画出来或藏着，读的人以为 id 写错了）。纯函数。
+ * segs：[{ id, md, failed, pending, hidden, error }]；md 是那一段写的原文（没画出来的段用它想写的那份）
+ */
+export function missingTarget(target, segs = []) {
+  const t = String(target ?? '');
+  for (const s of segs || []) {
+    if (!s || !(s.failed || s.pending || s.hidden) || !componentSources(s.md).has(t)) continue;
+    const why = s.error ? `（${s.error}）` : '';
+    if (s.failed) return `组件 ${t} 写在 ${s.id} 里，${s.id} 没画出来${why}，预案没挂上`;
+    if (s.pending) return `组件 ${t} 写在 ${s.id} 里，${s.id} 有写法错误还没画出来${why}，预案没挂上`;
+    return `组件 ${t} 写在 ${s.id} 里，${s.id} 现在藏着，预案没挂上`;
+  }
+  if ((segs || []).some((s) => String(s?.id) === t)) return `${t} 是段的 id：target 写组件的 id:`;
+  return `黑板上没有组件 ${t}`;
+}

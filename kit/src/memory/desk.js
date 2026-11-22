@@ -68,7 +68,7 @@ import { renderCheck } from './problemrender.js';
 import { CHARTER } from '../class/charter.js';
 import { PART_PRIORS } from '../forecast/priors.js';
 import { DEFAULT_TARGET, targetOf, examDateOf, goalOf, needsDefault, schoolLine } from '../exam/target.js';
-import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION } from './skills.js';
+import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION, sameForSkills } from './skills.js';
 
 // 正在看哪一科（这台设备记着；分科见 space.js）
 // 首页的版式：书页（一张张分组卡，默认）或者小组件（像 iPad 主屏，一格一格），这台设备记着
@@ -2048,6 +2048,12 @@ export async function harvestSession(db, sid, { doc, report = null, steps = null
 export async function writeReport(db, sid, { doc, turns = null, steps = null, update }) {
   assertWrite('page', 'sessions');
   const report = await makeReport(db, sid, { doc, turns, steps });
+  // 下了课的课按新版判法重算（REPORT_VERSION 升了）：每道题给归类看的都没变，就保留原来的报告时间，
+  // 归类（skills.js 的 needsSkills 按报告时间认）不白重做；挂着的课照旧用新时间（不然首页一直当它有新动静、反复重算）
+  if (doc.status === 'closed' && doc.report?.at) {
+    const old = await scopeDb(db, sid).doc('report/main').get().then((x) => (x.exists ? x.data() : null), () => null);
+    if (old && Number(old.at) === Number(doc.report.at) && sameForSkills(old, report)) report.at = old.at;
+  }
   await scopeDb(db, sid).doc('report/main').set(report);
   const patch = { report: { v: REPORT_VERSION, at: report.at, line: reportLine(report), items: report.totals.items, first: report.totals.first, activeMs: report.time.activeMs, ...(doc.status === 'open' ? { provisional: true } : {}) } };
   await update(patch);

@@ -46,6 +46,17 @@ export function needsSkills(s) {
   return !s.skills || (Number(s.skills.v) || 0) < SKILLS_VERSION || Number(s.skills.reportAt) !== Number(s.report.at);
 }
 
+/**
+ * 两份报告在归类眼里一样不一样：题的键和每道题写给归类的那一行（skillItemLines）都一样才算一样。
+ * 报告按新版判法重算时用（desk.js 的 writeReport）：一样的保留原来的报告时间，归类、首页的缓存都不用重来
+ */
+export function sameForSkills(a, b) {
+  const items = (r) => list(r?.items);
+  if (!a || !b || items(a).length !== items(b).length) return false;
+  const keys = (r) => items(r).map((it) => String(it.key ?? '')).join('\n');
+  return keys(a) === keys(b) && skillItemLines(a).join('\n') === skillItemLines(b).join('\n');
+}
+
 /** 报告里的每道题写成一行（题号. ［块］「题面」：每次的对错 结果）：归类和下课后的助手共用 */
 export function skillItemLines(report) {
   return list(report?.items).map((it, i) => {
