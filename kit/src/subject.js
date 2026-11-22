@@ -166,3 +166,47 @@ export function allNames(docs, subject) {
   const key = subjectKey(subject);
   return [...new Set(docSections(docs).filter((s) => forSubject(s, key)).flatMap((s) => s.names))];
 }
+
+/**
+ * 组件写错时报错里附的事实（去限制设计：不发组件写法的文档，写错一次就知道对的）：这个组件认的字段和一个能照抄的例子。
+ * 字段从这个组件小节里的例子（```名字 围栏开头一段的「字段:」行）和正文里写着的「`字段:`」收；例子取最短的那一个围栏。
+ * 说明里没有这个组件（或这门课没有）回 null
+ */
+export function fieldHint(docs, name, subject) {
+  const n = String(name ?? '').trim().toLowerCase();
+  if (!/^[a-z][\w-]*$/.test(n)) return null;
+  const doc = componentDoc(docs, n, subject);
+  if (!doc) return null;
+  const fields = new Set();
+  const examples = [];
+  let open = null;
+  let buf = [];
+  for (const line of doc.split('\n')) {
+    const f = fenceOf(line);
+    if (open) {
+      if (f && !f.info && f.ch === open.ch && f.len >= open.len) {
+        if (open.info === n) examples.push(`${open.mark}${n}\n${buf.join('\n')}\n${open.mark}`);
+        open = null;
+        continue;
+      }
+      buf.push(line);
+      if (open.info === n) {
+        const m = line.match(/^([A-Za-z][\w-]*)\s*:/);
+        if (m) fields.add(m[1]);
+        else if (/^let\s/.test(line)) fields.add('let');
+      }
+      continue;
+    }
+    if (f) { open = { ...f, mark: line.trim().match(/^[`~]+/)[0], info: String(f.info || '').trim().split(/\s+/)[0].toLowerCase() }; buf = []; continue; }
+    for (const m of line.matchAll(/`([a-z][\w-]*):/g)) fields.add(m[1]);
+  }
+  if (!fields.size && !examples.length) return null;
+  const example = examples.sort((a, b) => a.length - b.length)[0] || '';
+  return { name: n, fields: [...fields], example };
+}
+
+/** fieldHint 写成一段给主讲看的字（报错后面接着） */
+export function fieldHintText(hint) {
+  if (!hint) return '';
+  return [hint.fields.length ? `${hint.name} 认的字段：${hint.fields.join('、')}` : '', hint.example ? `例子：\n${hint.example}` : ''].filter(Boolean).join('\n');
+}

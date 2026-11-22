@@ -15,8 +15,8 @@ import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
-import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
-import { queueDue, applyEdits, keptComponents, componentSources } from './extboard.js';
+import { pendingIns, inProblems, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
+import { queueDue, applyEdits, keptComponents, componentSources, missingTarget } from './extboard.js';
 import { errorOfJudged } from '../solvespec.js';
 import { watchTiming } from '../timing.js';
 import { stageBoxState } from '../blocks/stagebox.js';
@@ -24,7 +24,7 @@ import { shouldFire, eventsOf, filterOps, handBack, helperPrompt, helperLines, r
 import { journalId } from '../project/journal.js';
 import { coachPrompt, coachSegment } from './coach.js';
 import { classMemoryReadDoc,
-  buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
+  buildSystem, actionText, useFullText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
   reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
   lintDocs, docLookup, latestPlan, rulesUse,
   closingFacts, boardStateText, PROTOCOL_DOC,
@@ -33,6 +33,7 @@ import { FEATURES } from '../features.js';
 import { specFor, specKey, specDiff, SPEC_DELAY } from './spec.js';
 import { draftsIn } from '../drafts.js';
 import { COMPONENT_DOCS } from './docs.js';
+import { fieldHint, fieldHintText } from '../subject.js';
 import { createDevTeacher } from './devteacher.js';
 import { createClassBar, MODEL_TAG } from './bar.js';
 import { createBoardView } from './boardview.js';
@@ -167,6 +168,8 @@ export async function renderClass(root, meta, desk = null) {
   const readOnly = !!desk?.readOnly;
   // 外部主 Claude 的课（第十五轮，ext.js）：它写 ext_in、页面画；学生作答写 ext_out。页面不去叫老师
   const EXT = !!desk?.ext && !readOnly;
+  // 外部的课：给主讲的作答原文不截（prompt.js 的 short）
+  useFullText(!!desk?.ext);
   // 截图入口（upload.js，需求 R11）：外部的课默认不放，外部写 board set upload=on 才放。翻看（只读）外部的课也一样
   if (desk?.ext) session.upload = desk.ext.upload === 'on';
   // 舞台组件（board stage）里外部预写的「没做到」「走偏」（.wrong / .miss）：外部的课整节课都收
@@ -179,6 +182,11 @@ export async function renderClass(root, meta, desk = null) {
   // 点词查义（wordtap.js）：英语课的板上点英文词出意思，页面自己查词典，不调用 Claude
   attachWordTap(root, { enabled: () => isEN(session.subject) });
   session.timing = timing;
+  // 自由段 html 的状态（lab.state）：存 html_state/{组件 id}（学习台里换到 sessions/{编号}/ 下面），再画时放回
+  session.htmlState = {
+    get: (id) => db.doc(`html_state/${id}`).get().then((x) => (x.exists ? x.data() : null), () => null),
+    put: (id, doc) => (readOnly ? null : db.doc(`html_state/${id}`).set(doc)),
+  };
   session.stageLogs = {
     get: (id) => db.doc(`stage_logs/${id}`).get().then((x) => (x.exists ? x.data() : null), () => null),
     put: (id, doc) => (readOnly ? null : db.doc(`stage_logs/${id}`).set(doc)),
@@ -640,7 +648,8 @@ export async function renderClass(root, meta, desk = null) {
     }
     for (const [bid] of byBlock) {
       const el = on(bid);
-      if (!el || el._replay || ['block-steps', 'block-scene', 'block-graph', 'block-space'].some((c) => el.classList.contains(c))) continue;
+      // 自由段 html 自己放回（lab.state），学生看到的样子归主讲的代码，不在下面另列
+      if (!el || el._replay || ['block-steps', 'block-scene', 'block-graph', 'block-space', 'block-htmlseg'].some((c) => el.classList.contains(c))) continue;
       prevList(bid, el);
     }
   }
@@ -970,6 +979,19 @@ export async function renderClass(root, meta, desk = null) {
     return { sec, errors, soft: probs.filter((p) => p.soft) };
   }
 
+  // 段照样画了、里面有写法错误：错的组件原地一行小字（组件自己已经画了报错框的不再加）；找不到是哪个组件的，写在段末
+  function markErrors(sec, errs) {
+    const body = sec.querySelector('.stage-body') || sec;
+    for (const p of errs) {
+      const host = p.bid ? body.querySelector(`[data-bid="${CSS.escape(p.bid)}"]`) : null;
+      if (host?.querySelector('.block-error')) continue;
+      const line = document.createElement('div');
+      line.className = 'block-error block-error-line';
+      line.textContent = `这里没画全：${String(p.msg ?? '').slice(0, 300)}`;
+      (host || body).appendChild(line);
+    }
+  }
+
   function dropScenesOf(sec) {
     for (const [k, sc] of session.scenes) if (sec.contains(sc.el)) session.scenes.delete(k);
   }
@@ -1025,6 +1047,10 @@ export async function renderClass(root, meta, desk = null) {
     } catch (err) { msg = `错题本没记成：${String(err?.message || err).slice(0, 120)}`; }
     if (EXT) { extState.coachLines.push(`[页面] 解答题 ${target}：${msg}`); extWrite({ text: '' }); }
     else addTurn({ role: 'system', kind: 'note', text: `[系统] 解答题 ${target}：${msg}` });
+  }
+  // 每一段的事实（missingTarget 用）：没画出来的段用它想写的那份原文
+  function segFacts() {
+    return [...segs.values()].filter((x) => !x.preview).map((x) => ({ id: x.id, md: x.pending || x.failed ? (x.tried || x.md) : x.md, failed: !!x.failed, pending: !!x.pending, hidden: !!x.hidden, error: x.error }));
   }
   function liveBlockIds(exceptSeg) {
     const out = new Map();
@@ -1252,24 +1278,29 @@ export async function renderClass(root, meta, desk = null) {
       // 渲染时 steps 会把联动（link:）重置到第 0 步：替换失败要把旧段的联动还原
       const links = new Map();
       if (seg.sec) seg.sec.querySelectorAll('.block-steps[data-bid]').forEach((b) => links.set(b.dataset.bid, link(b.dataset.bid).step));
+      // 画出来的段里有写法错误（组件写错、公式写不出、题号对不上）：照样画——能画的照画，错的那一处原地一行小字，
+      // 原因报给老师（去限制设计：一点小错整段没了，老师只好往保守里写）。拦着不画的只剩 id 撞号（会动到别的段的组件）
+      let drawnErrors = [];
       if (!errors.length) {
         const r = renderSeg(next);
         sec = r.sec;
         soft = r.soft;
-        errors.push(...r.errors);
+        drawnErrors = r.errors;
+        if (drawnErrors.length) markErrors(sec, drawnErrors);
       }
       if (errors.length) {
         if (sec) { dropScenesOf(sec); sec.remove(); }
         for (const [id, step] of links) if (link(id).step !== step) link(id).set(step);
         // 记住 id、板、顺序和标题，重写时放回原位（重写多半不再写 title=）
-        if (isNew || seg.pending) { seg.pending = true; seg.title = next.title; seg.held = held; segs.set(seg.id, seg); }
+        if (isNew || seg.pending) { seg.pending = true; seg.title = next.title; seg.held = held; seg.tried = next.md; segs.set(seg.id, seg); }
+        seg.error = errors.map((p) => `${p.kind}：${p.msg}`).join('；');
         failures.push({ key: op.id, id: op.id, title: next.title, errors, isNew: !seg.sec });
         return { op: op.op, id: op.id, ok: false, page: seg.page || undefined, error: errors.map((p) => `${p.kind}：${p.msg}`).join('；') };
       }
       if (seg.sec) { dropScenesOf(seg.sec); seg.sec.remove(); }
       tools.dropMarks(seg.id);
       sec.classList.remove('class-pending');
-      Object.assign(seg, next, { sec, hidden: false, held, failed: false, pending: false, softNotes: soft.length ? soft.map((p) => p.msg) : undefined });
+      Object.assign(seg, next, { sec, hidden: false, held, failed: false, pending: false, error: undefined, tried: undefined, softNotes: soft.length ? soft.map((p) => p.msg) : undefined });
       if (held) sec.hidden = true;
       // 版面：放在 at= 写的地方（replace 不写就留在原处；new / add 不写就找空处）
       if (CANVAS && seg.place !== 'pin') seg.col = colFor(seg, op);
@@ -1284,6 +1315,11 @@ export async function renderClass(root, meta, desk = null) {
       // 板的第一段改了标题：板头跟着改
       const pg = pages.get(seg.page);
       if (pg && pg.lead === seg.id && op.title !== undefined && pg.title !== seg.title) { pg.title = seg.title; bv.paint(pg); savePage(pg); }
+      if (drawnErrors.length) {
+        const why = drawnErrors.map((p) => `${p.kind}：${p.msg}`).join('；');
+        failures.push({ key: op.id, id: op.id, title: seg.title, errors: drawnErrors, drawn: true });
+        return { op: op.op, id: op.id, ok: true, title: seg.title, isNew, page: seg.page || undefined, warn: why };
+      }
       return { op: op.op, id: op.id, ok: true, title: seg.title, isNew, page: seg.page || undefined };
     }
     if (op.op === 'hide') {
@@ -1335,7 +1371,7 @@ export async function renderClass(root, meta, desk = null) {
     }
     // 预写的「为什么」：学生点着问「为什么」时页面当场显示（ask.js）
     if (op.op === 'why') {
-      if (!segs.has(op.target) && !liveBlockIds().has(op.target)) return { op: 'why', target: op.target, ok: false, error: `黑板上没有 ${op.target}（写段的 id 或组件的 id:）` };
+      if (!segs.has(op.target) && !liveBlockIds().has(op.target)) return { op: 'why', target: op.target, ok: false, error: missingTarget(op.target, segFacts()).replace('预案没挂上', '「为什么」没挂上') };
       if (op.errors?.length) notes.push(`why ${op.target} 里有 ${op.errors.length} 行没读懂：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
       const wseg = segs.has(op.target) ? op.target : liveBlockIds().get(op.target);
       setWhy(op.target, op.items, wseg, opTurn.seq);
@@ -1345,7 +1381,7 @@ export async function renderClass(root, meta, desk = null) {
     if (op.op === 'react') {
       const seg = liveBlockIds().get(op.target);
       const owner = seg ? null : queuedOwner(op.target);
-      if (!seg && !owner) return { op: 'react', target: op.target, ok: false, error: `黑板上没有组件 ${op.target}（target 写组件的 id:，不是段的 id）` };
+      if (!seg && !owner) return { op: 'react', target: op.target, ok: false, error: missingTarget(op.target, segFacts()) };
       if (owner) { pendingTargets.set(String(op.target), { queue: owner.id }); notes.push(`react ${op.target} 挂在预备板 ${owner.id} 的组件上：开板时挂上`); }
       if (op.errors?.length) notes.push(`react ${op.target} 里有 ${op.errors.length} 行没用：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
       const unknown = [...new Set(op.cases.flatMap((c) => c.show || []))].filter((id) => !segs.has(id));
@@ -1705,7 +1741,7 @@ export async function renderClass(root, meta, desk = null) {
   function enqueueStudent(text, images = [], urgent = true) {
     hideEcho();
     if (!teacher.available) return;
-    if (EXT && String(text || '').trim()) helperFire({ kind: 'say', text: `学生打的字：${String(text).trim().slice(0, 600)}` });
+    if (EXT && String(text || '').trim()) helperFire({ kind: 'say', text: `学生打的字：${String(text).trim()}` });
     if (text) queue.texts.push(text);
     for (const blob of images) queue.images.push({ blob, id: uploadImage(blob) });
     queue.triggered = true;
@@ -1939,8 +1975,18 @@ export async function renderClass(root, meta, desk = null) {
         // 外部抄进来的学生原话（dr-learning-trail T1：一个字符串，或者每一句一条 [{ text, at, images }]）：
         // 每一句记成学生说的话（证据 src: say, via: chat），以后的课、课后报告、守卫都看得到
         if (desk) for (const it of saidItems(d.said)) sink.put('evidence', { ...sayEvidence(it.text, evCtx(null), it.images), via: 'chat', ...(it.at ? { at: it.at } : {}) });
-        let error = '';
+        // 写法不对的地方（没有 text、没写 seq）：报错里写正确的写法；没有 text 的整条执行不了
+        const bad = inProblems(d, d.id);
+        let error = bad.error;
         let out = null;
+        if (error) {
+          addTurn({ role: 'system', kind: 'error', text: `[系统] ${error}` });
+          await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), error }, got, result: inResult({ error }) }).catch(() => {});
+          extNow();
+          writeSince();
+          continue;
+        }
+        for (const line of bad.notes) addTurn({ role: 'system', kind: 'note', text: `[系统] ${line}` });
         // board add … from=集合/文档（需求 R2）：后台活的结果换进块里再执行
         const from = /\bfrom\s*=/.test(String(d.text || '')) ? await resolveFrom(String(d.text || ''), (p) => db.doc(p).get().then((x) => (x.exists ? x.data() : null))) : { text: String(d.text || ''), missing: [] };
         for (const p of from.missing) addTurn({ role: 'system', kind: 'note', text: `[系统] from=${p} 读不到（没有这一条，或者里面没有 text），那一块照原样执行` });
@@ -1963,7 +2009,7 @@ export async function renderClass(root, meta, desk = null) {
         // T2：这一轮 memo 每一行写进去了没有（写成了哪一条、没写成为什么）
         const memo = [...(out?.memoRun ? memoLines(await out.memoRun.catch(() => null)) : []), ...(out?.memoBad || []).map((e) => ({ line: String(e).match(/「(.*?)」/)?.[1] || String(e), ok: false, error: String(e) }))];
         const shots = extState.snap ? await extShot() : [];
-        await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: out?.notes, error, shots, memo, shotNote: shots.length || extState.snapNote ? extState.snapNote : '' }) }).catch(() => {});
+        await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: [...bad.notes, ...(out?.notes || [])], error, shots, memo, shotNote: shots.length || extState.snapNote ? extState.snapNote : '' }) }).catch(() => {});
         extNow();
         extSightLater(d.id);
         writeSince(); // 这一条执行完：meta/since 从这里重新攒
@@ -2019,7 +2065,7 @@ export async function renderClass(root, meta, desk = null) {
       return true;
     });
     extState.coachLines.push(`[助教] 在 ${target} 下面写了：${line}`);
-    if (desk) sink.put('evidence', helperEvidence(line, evCtx(null), { role: 'coach', target, answer: actionText(a).slice(0, 600) }));
+    if (desk) sink.put('evidence', helperEvidence(line, evCtx(null), { role: 'coach', target, answer: actionText(a) }));
     await extWrite({ text: '' });
   }
   // —— 外部叫来的助手（需求 R1，delegate.js）——
@@ -2049,7 +2095,15 @@ export async function renderClass(root, meta, desk = null) {
       r = execOp({ op: 'new', id: q.id, title: q.title, body: q.md }, failures, notes);
       // 挂在这块预备板里的预案：接到刚画出来的段上（段被改写、撤回时照常作废）
       const live = liveBlockIds();
-      for (const [t, p] of [...pendingTargets]) if (p.queue === q.id) { const rule = reacts.get(t); if (rule && live.has(t)) rule.seg = live.get(t); pendingTargets.delete(t); }
+      // 开了板组件还不在（那一段没画出来）：预案照实说没挂上、撤掉，不悄悄留着一条永远不会接的
+      const lost = [];
+      for (const [t, p] of [...pendingTargets]) if (p.queue === q.id) {
+        const rule = reacts.get(t);
+        if (rule && live.has(t)) rule.seg = live.get(t);
+        else if (rule) { reacts.delete(t); lost.push(missingTarget(t, segFacts())); }
+        pendingTargets.delete(t);
+      }
+      if (lost.length) extState.coachLines.push(`[页面] 预备板 ${q.id} 里的预案没挂上：${lost.join('；')}`);
       addTurn({ role: 'system', kind: 'queue', queue: q.id, text: `[系统] 预备板 ${q.id} 开了（${why}）${r.ok ? '' : `，但没画出来：${r.error}`}` });
       layoutPage(bv.cur);
       refresh();
@@ -2098,7 +2152,7 @@ export async function renderClass(root, meta, desk = null) {
       if (r.on.includes('draft')) {
         const el = board.querySelector(`[data-bid="${CSS.escape(String(r.target))}"]`);
         const text = el ? draftsIn(el).map((d) => d.text).join('；') : '';
-        if (text && extState.draftsSeen.get(r.id) !== text) { extState.draftsSeen.set(r.id, text); helperFire({ kind: 'draft', target: r.target, text: `学生写着还没交：${text.slice(0, 600)}` }); }
+        if (text && extState.draftsSeen.get(r.id) !== text) { extState.draftsSeen.set(r.id, text); helperFire({ kind: 'draft', target: r.target, text: `学生写着还没交：${text}` }); }
       }
     }
   }
@@ -2624,12 +2678,23 @@ export async function renderClass(root, meta, desk = null) {
     const retry = [];
     const asks = [];
     const kinds = [];
+    // 写错的组件附上它认的字段和一个例子（去限制设计：不另发写法文档，报错自己说清楚）；同一轮同一种组件只附一次
+    const hinted = new Set();
+    const hintsOf = (errs) => [...new Set(errs.map((p) => String(p.kind || '').toLowerCase()))].filter((k) => !hinted.has(k)).map((k) => {
+      hinted.add(k);
+      return fieldHintText(fieldHint(COMPONENT_DOCS, k, session.subject));
+    }).filter(Boolean).map((t) => `\n${t}`).join('');
     for (const f of failures) {
+      // 照样画了的：只把错在哪报给老师，不要求重写
+      if (f.drawn) {
+        notes.push(`${f.id}${f.title ? `「${f.title}」` : ''} 画出来了，但有写法错误（学生看到错的那一处是一行小字，别的照常）：\n${f.errors.map((p, i) => `  ${i + 1}. ${p.kind}：${p.msg}`).join('\n')}${EXT ? hintsOf(f.errors) : ''}`);
+        continue;
+      }
       const n = (rewrites.get(f.key) || 0) + 1;
       rewrites.set(f.key, n);
       const head = `${f.id}${f.title ? `「${f.title}」` : ''}`;
       if (n <= MAX_REWRITES) {
-        retry.push(f.dup ? `${head}：${f.errors[0].msg}` : `${head}有写法错误，没有显示：\n${f.errors.map((p, i) => `  ${i + 1}. ${p.kind}：${p.msg}`).join('\n')}`);
+        retry.push(f.dup ? `${head}：${f.errors[0].msg}` : `${head}有写法错误，没有显示：\n${f.errors.map((p, i) => `  ${i + 1}. ${p.kind}：${p.msg}`).join('\n')}${EXT ? hintsOf(f.errors) : ''}`);
         asks.push(f.dup ? `用一个没用过的新 id 重新写这一段（黑板上的 ${f.id} 不动）` : `board replace id=${f.id}`);
         if (!f.dup) kinds.push(...f.errors.map((p) => p.kind).filter(Boolean));
         continue;

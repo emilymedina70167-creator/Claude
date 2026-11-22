@@ -15,8 +15,6 @@ export const LOCAL_KINDS = ['right', 'done'];
 export const EXT_KINDS = ['right', 'done', 'wrong', 'misread', 'giveup', 'stuck'];
 export const LIVE_NOTE = '答错、错法、想不出来怎么接，要看学生这一次的作答当场写（学生要实时的教学，不要预制好的引导），页面不替你接：这一行没用。预案只写答对（right）和看完（done）';
 const ALIAS = { 对: 'right', 答对: 'right', 错: 'wrong', 答错: 'wrong', 错法: 'misread', 想不出来: 'giveup', 放弃: 'giveup', 看完: 'done' };
-// 一条预案说的话最多多长：是一句接话，不是一段讲解（讲解写成藏着的段，用 show= 揭开）
-export const REACT_TEXT_MAX = 300;
 const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,64}$/;
 
 /**
@@ -60,7 +58,7 @@ function parseCaseLine(line, lenient = false) {
   const w = toks[0].value.toLowerCase();
   const kind = REACT_KINDS.includes(w) ? w : ALIAS[toks[0].value];
   if (!kind) return { error: `看不懂的情况「${toks[0].value}」：只认 right / wrong / misread / giveup / done` };
-  const out = { kind, show: [], text: text.slice(0, REACT_TEXT_MAX) };
+  const out = { kind, show: [], text };
   for (const t of toks.slice(1)) {
     if (t.key === 'show') out.show.push(...t.value.split(/[,，、]/).map((s) => s.trim()).filter(Boolean));
     else if (t.key === 'step') {

@@ -14,6 +14,23 @@ export function outText({ head = [], message = '', state = '' } = {}) {
   return [(head || []).filter(Boolean).join('\n'), String(message || '').trim(), String(state || '').trim()].filter(Boolean).join('\n\n');
 }
 
+/**
+ * 一条 ext_in 的写法对不对（去限制设计：不发说明书，报错里写正确的写法）。
+ * error：执行不了（没有 text）；notes：照样执行，但写法和约定的不一样
+ */
+export function inProblems(d = {}, id = '') {
+  const at = `ext_in/${id || d?.id || '?'}`;
+  const n = numOf({ ...d, id: d?.id ?? id }) || 1;
+  const notes = [];
+  if (typeof d?.text !== 'string') {
+    return { error: `${at} 没有 text${d?.text === undefined ? '' : `（写的是 ${Array.isArray(d.text) ? '数组' : typeof d.text}）`}：写成 { seq: ${n}, text: "对学生说的话，加 \`\`\`\`board …\`\`\`\` 块" }`, notes };
+  }
+  if (!Number.isFinite(Number(d?.seq)) || d?.seq === '' || d?.seq === null) {
+    notes.push(`${at} 没写 seq${d?.seq === undefined ? '' : `（写的是 ${JSON.stringify(d.seq)}）`}，按文档编号${/\d/.test(String(id || d?.id || '')) ? '' : '（编号里没有数，排在最前）'}排的先后：写成 { seq: ${n}, text }`);
+  }
+  return { error: '', notes };
+}
+
 /** 下一个 ext_out 的序号 */
 export const outSeq = (docs = []) => (docs || []).reduce((m, d) => Math.max(m, numOf(d)), 0) + 1;
 /** 文档编号：三位数，按编号排就是按先后 */
