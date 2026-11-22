@@ -704,6 +704,8 @@ function pagedStateText(board) {
         : `（这块板比一屏稍长：内容高约 ${fit.need}，一屏约 ${fit.avail}，学生上下滑一下就看完，不用改。）`);
     }
   }
+  // 黑板的视力（boardsight.js）：页面在学生屏幕上量出来的版面问题；干净的板没有这一节
+  if (typeof board.sight === 'string' && board.sight) lines.push(board.sight);
   const pins = list.filter((s) => s.place === 'pin');
   const shownPins = pins.filter((s) => !s.hidden);
   if (pins.length) {
@@ -1270,7 +1272,8 @@ function eventText(a, type) {
       const sure = get('sure'), ok = get('ok');
       return `[动作] ${where(a, '组件', { title: false })}${subText}：学生标了「${sure ? '有把握' : '没把握'}」${sure === false && ok === true ? '——这题答对了，但没把握：没把握按没会处理' : sure === true && ok === false ? '——答错了却有把握：多半是一个误解，先弄清学生是怎么想的' : ''}`;
     }
-    case 'gloss': return `[动作] 点开了生词「${short(get('word'), 40)}」看意思（${short(get('gloss'), 40)}）：这个词学生不认识`;
+    case 'gloss': if (get('dict')) return `[动作] 点了板上的「${short(get('word'), 40)}」查词典（${short(get('gloss'), 40)}）`;
+      return `[动作] 点开了生词「${short(get('word'), 40)}」看意思（${short(get('gloss'), 40)}）：这个词学生不认识`;
     case 'done': return `[动作] 点了 ${typeof a.step === 'string' ? a.step : '这一段'}${stepTitle ? `「${short(stepTitle, 30)}」` : ''}的「这段做完了」`;
     case 'ask': return `[动作] 问了：「${short(get('question'), 200)}」`;
     case 'open': return '[动作] 打开了课堂页面';

@@ -525,6 +525,7 @@ export function markLayer(host) {
     if (!it[key]) {
       it[key] = document.createElementNS(NS, 'g');
       it[key].setAttribute('class', `mk mk-${it.spec.style}`);
+      it[key].setAttribute('data-mk', it.id); // 黑板的视力（class/boardsight.js）按它认是哪一条标注
       it[key].style.setProperty('--mk', MARK_COLOR[it.spec.color] || MARK_COLOR.yellow);
       parent.appendChild(it[key]);
     }
@@ -585,6 +586,7 @@ export function markLayer(host) {
     if (spec.note) {
       it.note = document.createElement('div');
       it.note.className = 'mk-note';
+      it.note.setAttribute('data-mk', id);
       it.note.style.setProperty('--mk', MARK_COLOR[spec.color] || MARK_COLOR.yellow);
       try { it.note.innerHTML = mdToHtml(spec.note, { inline: true }); } catch { it.note.textContent = spec.note; }
       layer.appendChild(it.note);

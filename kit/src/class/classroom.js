@@ -15,6 +15,7 @@ import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
+import { createWaker } from './wake.js';
 import { pendingIns, inProblems, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
 import { queueDue, applyEdits, keptComponents, componentSources, missingTarget } from './extboard.js';
 import { errorOfJudged } from '../solvespec.js';
@@ -57,6 +58,9 @@ import { lessonSheet, sheetMd } from '../memory/sheet.js';
 import { blockSwitch, closingExtras, knowNotes } from '../memory/memo.js';
 import { saidNow, summaryOn } from '../memory/summary.js';
 import { settleBoard, snapLong } from './boardeye.js';
+import { measureBoard, boardSightIssues, boardSightText, sightSig } from './boardsight.js';
+import { isEN } from '../subject.js';
+import { attachWordTap } from '../wordtap.js';
 import { createBoardEye, eyeNote } from './boardeye.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass, readChunks, searchChunks, readHistory } from '../books/textbook.js';
@@ -169,6 +173,9 @@ export async function renderClass(root, meta, desk = null) {
   useFullText(!!desk?.ext);
   // 截图入口（upload.js，需求 R11）：外部的课默认不放，外部写 board set upload=on 才放。翻看（只读）外部的课也一样
   if (desk?.ext) session.upload = desk.ext.upload === 'on';
+  // 叫醒主讲（wake.js）：主讲在这节课上写了 wake: 'comments' 才开；门铃在学生的手势里按
+  let waker = null;
+  const ring = (why) => { if (EXT && waker) waker.ring(why); };
   // 舞台组件（board stage）里外部预写的「没做到」「走偏」（.wrong / .miss）：外部的课整节课都收
   session.extPrewrite = !!desk?.ext;
   // board stage 刷新前的样子（dr-trail-fix 3）：舞台的 log 存在 stage_logs/{段 id}（学习台里换到 sessions/{编号}/ 下面），再画时放回
@@ -176,6 +183,8 @@ export async function renderClass(root, meta, desk = null) {
   session.uploadImage = readOnly ? null : (blob) => uploadImage(blob);
   // 每道题在学生屏幕上的时间（timing.js，dr-batch4 第 3、4 条）：作答的 ms / msTotal、stuck= 按它算
   const timing = readOnly ? null : watchTiming(root).timer;
+  // 点词查义（wordtap.js）：英语课的板上点英文词出意思，页面自己查词典，不调用 Claude
+  attachWordTap(root, { enabled: () => isEN(session.subject) });
   session.timing = timing;
   // 自由段 html 的状态（lab.state）：存 html_state/{组件 id}（学习台里换到 sessions/{编号}/ 下面），再画时放回
   session.htmlState = {
@@ -293,7 +302,7 @@ export async function renderClass(root, meta, desk = null) {
     images: teacher.images,
     tag: mock ? `${MODEL_TAG} · 模拟老师` : MODEL_TAG,
     stuck: { on: stuckOn, onChange: (v) => { stuckOn = v; lastActive = Date.now(); try { localStorage.setItem(stuckKey, v ? 'on' : 'off'); } catch { /* 无痕模式 */ } } },
-    onSend: ({ text, images }) => { bv.go(bv.cur); enqueueStudent(text, images, true); },
+    onSend: ({ text, images }) => { bv.go(bv.cur); if (String(text || '').trim() || images?.length) ring(String(text || '').trim() ? '学生说了话' : '学生附了图'); enqueueStudent(text, images, true); },
     inkPending: () => hasFreshInk(),
     // 一问一答：活板上试过的（拨、拖、折）还没发：输入框空着也能发，发送键写「就这样 →」
     actionsPending: null,
@@ -1584,6 +1593,16 @@ export async function renderClass(root, meta, desk = null) {
     for (const r of extState.helpers.values()) out.push(`助手 ${r.id}：${r.when === 'now' ? '马上叫' : `on=${r.on.join('|')}${r.target ? ` target=${r.target}` : ''}`}，叫过 ${r.fired || 0}/${r.turns} 次${r.off ? '，收起了' : extState.helperOff ? '，学生停掉了助手' : ''}`);
     return out;
   }
+  // 黑板的视力（boardsight.js）：量学生现在屏幕上的当前板和常驻栏。学生翻回去看旧板时当前板不在屏幕上，量不到，沿用上一次的
+  let lastSight = [];
+  function sightNow() {
+    if (readOnly) return [];
+    const sec = pages.get(bv.cur)?.sec;
+    if (!sec || bv.view !== bv.cur) return lastSight;
+    const pins = root.querySelector('.class-pins');
+    try { lastSight = boardSightIssues(measureBoard([sec, pins && !pins.hidden ? pins : null])); } catch { /* 量不到就当没有，不影响上课 */ }
+    return lastSight;
+  }
   function boardState() {
     const list = [...segs.values()].sort((a, b) => a.seq - b.seq).map((seg) => {
       const blocks = seg.sec && !seg.failed ? [...seg.sec.querySelectorAll('.block[data-bid]')].map((b) => ({
@@ -1613,6 +1632,7 @@ export async function renderClass(root, meta, desk = null) {
       // 这节课要拿下的事和页面现算的状态（不提这回事的课没有这个键：说明里就没有那一节）
       ...(aims ? { aims: aimsNow() } : {}),
       canvas: canvasState(),
+      sight: boardSightText(sightNow()) || undefined,
       vars: lessonVars.length ? lessonVars : undefined,
       nextMark: tools.nextMark,
       pages: [...pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title, talk: p.talk, kind: p.kind })),
@@ -1712,6 +1732,7 @@ export async function renderClass(root, meta, desk = null) {
     // 外部叫来的助手（board claude）：学生在那一题上出了外部写的那件事
     if (EXT) helperOnAction(a);
     // 外部主讲的课：作答都写进 ext_out（1.5 秒合并），外部一读就是最新的；页面里的老师照旧「later 的跟着下一条说」
+    if (EXT && trig === 'now' && reportable(a)) ring('学生交了作答');
     if (trig === 'later' && !EXT) return; // 只是往下翻、拖一拖：跟着下一条一起说
     queue.triggered = true;
     schedule(trig === 'now' && !EXT);
@@ -1844,6 +1865,16 @@ export async function renderClass(root, meta, desk = null) {
     const lines = history.filter((t) => t && t.role === 'system' && !t.discarded && t.seq > extState.lastSys && /^(note|lint|error)$/.test(t.kind || 'note'))
       .map((t) => String(t.text || '').replace(/^\[系统\]\s*/, '').trim()).filter(Boolean);
     extState.lastSys = turnSeq;
+    // 版面量出来的问题（boardsight.js）：和上一份 ext_out 说过的不一样才写（现状一直在 meta/now）
+    const sight = sightNow();
+    const sig = sightSig(sight);
+    if (sig !== (extState.sightTold || '')) { extState.sightTold = sig; if (sight.length) lines.push(boardSightText(sight)); }
+    // 门铃（wake.js）：这节课开了 wake 却按不响（视图不支持、学生没同意、出错）：照实报一次，变了再报
+    if (waker) {
+      const w = waker.state();
+      const bad = w.error ? `出错：${w.error}` : w.cm && w.status !== 'available' ? `状态：${w.status}` : !w.cm && w.status !== '准备中' ? w.status : '';
+      if (bad !== (extState.wakeTold || '')) { extState.wakeTold = bad; if (bad) lines.push(`[页面] 学生作答时叫醒你的门铃（评论发给 Claude）按不响，${bad}；学生要在 Safari 里打开学习台才行`); }
+    }
     return lines;
   }
   // 页面正在做别的（写 ext_out、助教、上一条 ext_in）：等它空下来再做，不跳过——exclusive 碰上 busy 会直接不做
@@ -1991,6 +2022,7 @@ export async function renderClass(root, meta, desk = null) {
         const shots = extState.snap ? await extShot() : [];
         await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: [...bad.notes, ...(out?.notes || [])], error, shots, memo, shotNote: shots.length || extState.snapNote ? extState.snapNote : '' }) }).catch(() => {});
         extNow();
+        extSightLater(d.id);
         writeSince(); // 这一条执行完：meta/since 从这里重新攒
         if (extState.close) { extState.close = false; await extClose(); }
       }
@@ -1998,6 +2030,16 @@ export async function renderClass(root, meta, desk = null) {
     // 跑的时候又来了的、跑的时候学生又做了的：接着处理
     if (extState.again) { const next = extState.again; extState.again = null; extRun(next); }
     if (queue.triggered) schedule(false);
+  }
+  // 这一条执行完、板画好以后量一遍版面，写回这条 ext_in 的 sight（result 照旧当场写，不等它）；干净的板不写
+  async function extSightLater(id) {
+    const sec = pages.get(bv.cur)?.sec;
+    if (!sec || readOnly) return;
+    try { await settleBoard(sec, { max: 3000 }); } catch { /* 等不到就照现在的量 */ }
+    const sight = sightNow();
+    if (!sight.length) return;
+    await db.doc(`ext_in/${id}`).update({ sight: sight.map((x) => x.text) }).catch(() => {});
+    extNow({ now: true });
   }
   async function extClose() {
     checks?.close(); // 检验开着：照「先停下」存着、没定下来的题补写证据，下课照常
@@ -2247,6 +2289,7 @@ export async function renderClass(root, meta, desk = null) {
   paintExtTools();
   // 叫主讲（需求 R10）：马上写一份 ext_out，最前面「学生在等你」；手上排着的作答、草稿一起写掉
   async function callTeacherNow(btn) {
+    ring('学生点了「叫主讲」');
     if (btn) { btn.disabled = true; btn.textContent = '已经告诉主讲'; setTimeout(() => { btn.disabled = false; btn.textContent = '叫主讲'; }, 4000); }
     extState.calling = true;
     queue.triggered = true;
@@ -2255,6 +2298,7 @@ export async function renderClass(root, meta, desk = null) {
     if (extState.calling) await extWrite({ text: '' });
   }
   function extStart() {
+    if (desk?.ext?.wake === 'comments') waker = createWaker({ session: desk.sid || '', anchorEl: board, enabled: true });
     extState.lastSys = turnSeq; // 刷新以前的系统话已经报过了
     extState.ready = db.collection('ext_out').get().then((x) => { for (const d of x.docs) extState.outs.push({ seq: Number(d.data().seq) || 0, at: d.data().at }); }, () => {});
     db.collection('ext_in').onSnapshot((x) => extRun(x.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});

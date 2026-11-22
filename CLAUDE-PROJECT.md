@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-22b**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-22d**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -3237,6 +3237,8 @@ count: 3
 - `meta/state-{科}` = `{ text, rows: [{ block, title, taught: { first, last, sessions, legacy: { first, last, months, source } }, mastery: { state, ok, legacy, from, why, note }, recent（最近 3 条作答，含错题本里的旧错题、检验记录）, lastSlip（最近一次失手；检验记录写「不计」的不算）, nextReview }], conflicts: [{ kind, block, text }] }`：页面写，每块一行，讲过写「讲过（9 月，旧记录）」「讲过（9 月旧记录；学习台里 2026-11-18，1 节）」。`conflicts` 是记录之间对不上的，只报不改：`slipped`（掌握写着过了，之后同块做错了，或错题本里之后又记了错题）、`maybeKnown`（写着未学 / 讲过，隔天的新题一次做对了）、`weakness`（弱点 L1 以上以后又有挂它的错题）、`review`（复现组判过，依据里没有一次做对的作答）、`untaught`（没讲过却写了掌握）、`unverified`（掌握的依据核不上）。
 
 **页面里的 Claude 说的话**也记成证据 `src: "helper"`（`role`：`helper` 外部叫来的助手、`coach` 板边助教、`teacher` 练习教练和复现课里页面里的老师；`text` 说的话，`did` 执行了哪些，`target` 哪一题），进 `since-analysis`。
+
+**叫醒主讲**：`sessions/{编号}` 写 `"wake": "comments"`（开课时写，或之后 update）。学生在输入框发了话、附了图、交了作答、点了「叫主讲」，页面在那一刻用学生的身份在学习台上发一条「发给 Claude」的评论（同一节课回同一个评论串；8 秒内连着的只发一次），文字是课号、原因和「读 sessions/{编号}/meta/since」；作答本身照旧写进 `ext_out`。正在 watch 学习台这个 artifact 的 Claude 会话被叫醒（watch 只对登记过的会话有效）。只在浏览器里打开的完整页面发得出去（2026-11-22 实测 iPad Safari 能发，Claude App 里嵌着的视图回 `claude_unavailable`）；发不了、学生没同意、出错时，下一份 `ext_out` 最前面写一行原因。学习台的发布要带 `comments` 能力。
 
 **整节课的设置**：`board set upload=on|off`——组件下面的「截图」入口（`answer` 的截图作答、写理由的框里的「截图」）。外部的课默认 `off`；一个组件单独写 `upload: on` / `upload: off` 盖过整节课的。之后画的段照新的设置，刷新以后照旧。
 

@@ -14,7 +14,7 @@ export function interfaceDoc({ version = '' } = {}) {
       path: 'sessions/{编号}',
       id: S.id.eg,
       doc: { kind: 'ext', status: 'open', date: 'YYYY-MM-DD', title: '这节课的名字', space: spaces },
-      optional: { block: '课程地图的块编号（curriculum 里的 id）', upload: 'on | off（学生交截图的入口，默认 off）' },
+      optional: { block: '课程地图的块编号（curriculum 里的 id）', upload: 'on | off（学生交截图的入口，默认 off）', wake: "comments（学生打字、交作答、点叫主讲时，页面在学习台上发一条「发给 Claude」的评论，叫醒正 watch 学习台的 Claude 会话；评论只写课号和一行指路；要学生在浏览器里打开学习台，Claude App 里嵌着的视图发不了，发不了时下一份 ext_out 最前面写原因）" },
     },
     {
       what: '一轮写在哪',
