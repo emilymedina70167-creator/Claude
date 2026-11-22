@@ -25,6 +25,8 @@ const cut = (s, n) => {
   const t = typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : s === undefined || s === null ? '' : String(s);
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
 };
+// 存进报告的学生原文、题面、说的话：空白压一下、不截（去限制设计：主讲读报告分析错因）。整份太大时 fitReport 再收
+const whole = (s) => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : s === undefined || s === null ? '' : String(s));
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 const byAt = (a, b) => (num(a.at) ?? 0) - (num(b.at) ?? 0) || String(a.id ?? '').localeCompare(String(b.id ?? ''));
 const uniq = (xs) => [...new Set(xs.filter((x) => x !== undefined && x !== null && x !== ''))];
@@ -111,10 +113,10 @@ function itemOf(key, list, segs) {
     ...(num(recs.find((r) => r.options)?.options) ? { options: num(recs.find((r) => r.options).options) } : {}),
     ...(recs.some((r) => r.multi) ? { multi: true } : {}),
     kind: String(recs[0]?.kind || head?.kind || ''),
-    q: cut(recs.find((r) => r.q)?.q || recs[0]?.title || '', 120),
+    q: whole(recs.find((r) => r.q)?.q || recs[0]?.title || ''),
     seg: step,
     page: seg?.page ?? null,
-    segTitle: seg?.title ? cut(seg.title, 60) : '',
+    segTitle: seg?.title ? whole(seg.title) : '',
     tags: uniq(list.flatMap((e) => (Array.isArray(e.tags) ? e.tags : []))),
     tries: tries.length,
     attempts,
@@ -129,10 +131,10 @@ function itemOf(key, list, segs) {
     sure: sureOf(evs),
     ms,
     ...(msTotal ? { msTotal } : {}),
-    last: cut(final?.last ?? recs.at(-1)?.value ?? answerText(recs.at(-1)), 200),
+    last: whole(final?.last ?? recs.at(-1)?.value ?? answerText(recs.at(-1))),
     // 写错的那几次写了什么（选择题记在 wrong 里）：这节课的一页（sheet.js）里「当时是怎么错的」
-    wrongs: uniq([...recs.filter((r) => r.ok === false).map((r) => cut(r.value ?? answerText(r), 80)), ...recs.flatMap((r) => (Array.isArray(r.wrong) ? r.wrong.map((w) => cut(w, 80)) : []))].filter(Boolean)).slice(0, 3),
-    expected: final?.expected !== undefined ? cut(final.expected, 120) : undefined,
+    wrongs: uniq([...recs.filter((r) => r.ok === false).map((r) => whole(r.value ?? answerText(r))), ...recs.flatMap((r) => (Array.isArray(r.wrong) ? r.wrong.map((w) => whole(w)) : []))].filter(Boolean)).slice(0, 3),
+    expected: final?.expected !== undefined ? whole(final.expected) : undefined,
     images: uniq(recs.flatMap((r) => (Array.isArray(r.images) ? r.images : []))),
     turn: Math.min(...list.map((e) => num(e.turn) ?? Infinity)),
     first: at.length ? Math.min(...at) : null,
@@ -220,14 +222,14 @@ export function buildReport({ session = {}, evidence = [], manual = [], observat
   const items = itemsOf(evs, segs);
 
   const drafts = evs.filter((e) => e.kind === 'draft').sort(byAt).map((e) => ({
-    id: e.id, comp: e.comp ?? null, compKind: e.compKind || '', seg: e.step ?? null, label: e.label || '', text: cut(e.text, 300), at: e.at,
+    id: e.id, comp: e.comp ?? null, compKind: e.compKind || '', seg: e.step ?? null, label: e.label || '', text: whole(e.text), at: e.at,
   }));
   const says = evs.filter((e) => e.src === 'say').sort(byAt).map((e) => ({
-    id: e.id, at: e.at, ...(num(e.turn) !== null ? { turn: num(e.turn) } : {}), kind: e.kind, text: cut(e.text, 500),
+    id: e.id, at: e.at, ...(num(e.turn) !== null ? { turn: num(e.turn) } : {}), kind: e.kind, text: whole(e.text),
     images: Array.isArray(e.images) ? e.images : [], ...(e.ink ? { ink: e.ink } : {}),
   }));
   const manualRows = (manual || []).filter((e) => e && e.src === 'manual').sort(byAt).map((e) => ({
-    id: e.id, at: e.at, text: cut(e.text, 300), verdict: e.verdict || '', block: e.block ?? null, images: Array.isArray(e.images) ? e.images : [],
+    id: e.id, at: e.at, text: whole(e.text), verdict: e.verdict || '', block: e.block ?? null, images: Array.isArray(e.images) ? e.images : [],
   }));
   const unfinished = items.filter((it) => !it.final && it.outcome === 'wrong').map((it) => it.key);
 
@@ -240,7 +242,7 @@ export function buildReport({ session = {}, evidence = [], manual = [], observat
     v: REPORT_VERSION,
     session: sid || null,
     block: session.block ?? null,
-    title: cut(session.title || '', 120),
+    title: whole(session.title || ''),
     date: session.date || null,
     status: session.status || null,
     startedAt: num(session.startedAt),
@@ -257,14 +259,14 @@ export function buildReport({ session = {}, evidence = [], manual = [], observat
     drafts,
     says,
     manual: manualRows,
-    notes: obs.map((o) => ({ id: o.id, kind: o.kind, text: cut(o.text, 160), ...(num(o.turn) !== null ? { turn: num(o.turn) } : {}) })),
+    notes: obs.map((o) => ({ id: o.id, kind: o.kind, text: whole(o.text), ...(num(o.turn) !== null ? { turn: num(o.turn) } : {}) })),
     summary: session.summary || obs.find((o) => o.kind === 'summary')?.id || null,
-    slips: sl.map((s) => ({ id: s.id, text: cut(s.text, 160) })),
+    slips: sl.map((s) => ({ id: s.id, text: whole(s.text) })),
     usage: usageOf(turns),
     verify: session.verify || null,
     // 点开看过意思的生词（gloss）：学生不认识的词
     words: evs.filter((e) => e.src === 'event' && e.kind === 'gloss').map((e) => (e.detail && typeof e.detail === 'object' ? e.detail : e)).filter((d) => d.word)
-      .filter((d, i, all) => all.findIndex((x) => String(x.word).toLowerCase() === String(d.word).toLowerCase()) === i).slice(0, 60).map((d) => ({ word: cut(d.word, 60), gloss: cut(d.gloss, 80) })),
+      .filter((d, i, all) => all.findIndex((x) => String(x.word).toLowerCase() === String(d.word).toLowerCase()) === i).slice(0, 60).map((d) => ({ word: whole(d.word), gloss: whole(d.gloss) })),
     // 这节课的一页：记号、重点框、做错又改对的、还没拿下的（页面自己拼，不调用 Claude）
     sheet: lessonSheet({ steps, items }),
     // 这节课要拿下的事，每件到了没有（页面按上面的题算，class/aims.js）。真课一大半是挂着被当成下了课的、没有小结，
@@ -273,7 +275,7 @@ export function buildReport({ session = {}, evidence = [], manual = [], observat
     // 课上被老师换掉的那几件（讲到下一节把整份换了）：照样算状态。没有换过的课不写这个键
     ...(Array.isArray(session.aimsPast) && session.aimsPast.length ? { aimsPast: aimsSummary(session.aimsPast, items) } : {}),
     // 检验（check/，dr-plan2）：这节课做的检验每道题一行（第一次的作答、每一项、补讲、retry、信心、用时）；没做检验的课不写这个键
-    ...(evs.some((e) => e.src === 'check' && !e.rejudged) ? { checks: evs.filter((e) => e.src === 'check' && !e.rejudged).sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, 60).map((e) => cut(checkLine(e), 400)) } : {}),
+    ...(evs.some((e) => e.src === 'check' && !e.rejudged) ? { checks: evs.filter((e) => e.src === 'check' && !e.rejudged).sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, 60).map((e) => whole(checkLine(e))) } : {}),
     // 舞台课分了几幕（老师写的 scene，主线第六轮 3.6）：一幕一个标题、它的重点卡。只有一幕（旧课、没写 scene）不写
     at: now,
   };

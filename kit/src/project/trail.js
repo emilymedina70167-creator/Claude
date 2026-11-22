@@ -19,7 +19,8 @@ export function spaceOfEvidence(ev, sessionsById = new Map()) {
   return 'math';
 }
 
-const clip = (t, n) => { const s = String(t ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
+// 一条证据写成一行：空白压成一个空格；不截（去限制设计：主讲分析靠原文，放不下的整条留到下一页，见 sinceAnalysis 的 max）
+const clip = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
 const okText = (ok) => (ok === true ? '对' : ok === false ? '错' : '没判');
 const hhmm = (at) => { const d = new Date(Number(at) || 0); return `${toDate(Number(at) || 0)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 

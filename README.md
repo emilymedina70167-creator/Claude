@@ -52,13 +52,13 @@
 ## 设置
 
 1. 打开 Claude 里的项目，进入 **Project instructions（项目指令）**。
-2. 以前贴进去的那一大段学习台说明删掉，换成下面这一段（你自己写的其他指令留着）：
+2. 以前贴进去的那段「先读学习台里的 CLAUDE-PROJECT.md」删掉，换成学习台的地址（你自己写的其他指令留着）：
 
    ```
-   【学习台】做和学习有关的任何事之前（写实时黑板、备课、读课堂记录、改记忆），先用 Artifact 工具读学习台里的最新说明：action: "read"，url: https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo ，path: "CLAUDE-PROJECT.md"。完全照它做；它和你记忆里的旧做法冲突时，以它为准。读不到就告诉我，不要凭记忆做。同一个对话里读一次就够；我说「说明更新了」，或者黑板现状、自检结果里写的版本比你读到的说明版本新，就重读。一切都在学习台这一个 artifact 里，不要发布新的 artifact。
+   【学习台】https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
    ```
 
-   说明的全文（[`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md)）跟着学习台一起发布，每次更新它也一起更新，所以项目指令里只放这一段，以后不用再改。
+   说明书不再发布（2026-11-22 去限制设计）。学习台数据库里的 `meta/interface` 是一张接口卡（开一节、一轮写在哪、自由段、lab 桥、作答从哪读回来、下课，6 条事实），页面按代码自己写；写错了，执行结果里写着正确的写法和组件认的字段。用下来的经验 Claude 记进它自己的记忆。
 3. 发资料给 Claude，或者说「备下一节」「开一块黑板讲单元 2」。问它「学习台说明是哪个版本」，答的版本号应该和学习台底部写的一样。
 
 ## 外部主讲在自己的沙盒里预检（给 claude.ai 项目对话里的 Claude）
@@ -154,4 +154,4 @@ npm test          # 单元测试
 npm run build     # 重新生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 ```
 
-然后重新发布学习台（同一个地址，页面是 `kit/desk.html`，附带文件 `la-kit.js`、瘦身说明书 `CLAUDE-PROJECT.md` 和 `components/*.md` 来自 `kit/dist/`，见 CLAUDE.md「发布」）。数据库不受影响，刷新学习台就是新版。
+然后重新发布学习台（同一个地址，页面是 `kit/desk.html`，附带文件 `la-kit.js`、`pdf/*` 来自 `kit/dist/`，见 CLAUDE.md「发布」）。数据库不受影响，刷新学习台就是新版。

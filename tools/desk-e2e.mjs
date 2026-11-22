@@ -1657,6 +1657,96 @@ const SUITES = {
     return t;
   },
 
+  // 去限制设计第 2 步（2026-11-22）：自由段 html（主讲自己写的网页跑在隔离框里，经 lab 桥记作答、借计算、页面替它判、存状态、留锚点）；
+  // 一段里组件写错也照样画（错的那一处一行小字，原因进 result 的 notes），不要求重写
+  async freeseg(browser) {
+    const t = await seeded(browser);
+    const F4 = '````', F3 = '```';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-6`;
+    const db = async () => t.db();
+    const html = [
+      'id: h1',
+      '<div id="out">等着</div><div id="stv"></div><div style="width:1400px">很宽的一行</div>',
+      '<button id="rec">记一条</button> <button id="calc">算</button> <input id="v"> <button id="chk">交</button> <button id="st">存</button> <button id="long">长的</button>',
+      '<script>',
+      "const $ = (x) => document.getElementById(x);",
+      "$('stv').textContent = 'n=' + (lab.state.get('n') || 0);",
+      "$('rec').onclick = () => lab.record({ q: '拖完了吗', value: [1, 2], ok: true, text: '自由段' });",
+      "$('calc').onclick = async () => { $('out').textContent = 'calc=' + await lab.calc('1/3+1/6'); };",
+      "$('chk').onclick = async () => { $('out').textContent = 'check=' + await lab.check($('v').value, '1/2', 'value', { q: '1/3+1/6' }); };",
+      "$('st').onclick = () => lab.state.set('n', (lab.state.get('n') || 0) + 1);",
+      "$('long').onclick = () => lab.record({ q: '写一大段', text: '长'.repeat(4990) + '\\n结尾标记' });",
+      "lab.anchor('out', $('out'));",
+      "setTimeout(() => { throw new Error('故意的错'); }, 10);",
+      '</script>',
+    ].join('\n');
+    const turn1 = [
+      '自由段。',
+      `${F4}board new id=b1 title="自由段"\n${F3}html\n${html}\n${F3}\n${F4}`,
+      `${F4}board add id=b2 title="有一处写错"\n这段字照样在。\n\n${F3}answer\nid: a9\nq: 没写答案\n${F3}\n\n后面这句也在。\n${F4}`,
+    ].join('\n\n');
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'L2.1.4', title: '自由段（外部）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: turn1, at: Date.now() },
+    });
+    await t.open(sid);
+    const r1 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/001`]?.result, { timeout: 20000, what: 'ext_in/001 写 result' });
+    check(r1.ops.every((o) => o.ok), `写错一处的段被拦了：${JSON.stringify(r1).slice(0, 500)}`);
+    check((r1.notes || []).some((n) => /b2/.test(n) && /画出来了/.test(n)), `result 里没说 b2 哪里写错：${JSON.stringify(r1.notes)}`);
+    // 去限制第 5 步：写错的组件附它认的字段和一个例子；接口卡 meta/interface 页面自己写
+    check((r1.notes || []).some((n) => /answer 认的字段：[^\n]*answer/.test(n) && /例子：\n```answer/.test(n)), `写错的组件没附字段和例子：${JSON.stringify(r1.notes).slice(0, 600)}`);
+    const iface = (await db())['meta/interface'];
+    check(iface && /lab\.record/.test(iface.text) && /board close/.test(iface.text) && iface.facts?.length === 6, `接口卡没写：${JSON.stringify(iface).slice(0, 300)}`);
+    const b2 = await t.page.evaluate(() => document.querySelector('[data-step="b2"]')?.innerText || '');
+    check(/这段字照样在/.test(b2) && /后面这句也在/.test(b2), `写错一处的段没照样画：${b2.slice(0, 200)}`);
+    check(await t.page.$('[data-step="b2"] .block-error'), '写错的组件原地没有一行小字');
+    const fr = t.page.frameLocator('[data-bid="h1"] iframe');
+    await fr.locator('#rec').waitFor({ timeout: 10000 });
+    const h = await t.page.evaluate(() => document.querySelector('[data-bid="h1"] iframe')?.getBoundingClientRect().height || 0);
+    check(h > 40, `框的高度没跟着内容：${h}`);
+    await fr.locator('#calc').click();
+    await t.waitFor(async () => (await fr.locator('#out').textContent()) === 'calc=1/2', { timeout: 8000, what: 'lab.calc 拿回 1/2' });
+    await fr.locator('#rec').click();
+    await fr.locator('#v').fill('0.5');
+    await fr.locator('#chk').click();
+    await t.waitFor(async () => (await fr.locator('#out').textContent()) === 'check=true', { timeout: 8000, what: 'lab.check 页面判对' });
+    await fr.locator('#st').click();
+    await fr.locator('#long').click();
+    const outs = async () => Object.entries(await db()).filter(([k]) => k.startsWith(`sessions/${sid}/ext_out/`)).map(([, v]) => v.text).join('\n');
+    await t.waitFor(async () => /「拖完了吗」[^\n]*对（你的代码判的）/.test(await outs()) && /「1\/3\+1\/6」[^\n]*对（页面判的）/.test(await outs()), { timeout: 15000, what: '自由段的两条作答写进 ext_out' });
+    await t.waitFor(async () => /代码出错了：[^\n]*故意的错/.test(await outs()), { timeout: 10000, what: '框里的报错写进 ext_out' });
+    // 给主讲的作答原文不截：5000 字原样到 ext_out 和证据
+    await t.waitFor(async () => { const o = await outs(); return o.includes('长'.repeat(4990)) && /\n {2}结尾标记/.test(o); }, { timeout: 10000, what: '5000 字的作答原样写进 ext_out' });
+    const ev = (await t.docs('evidence')).filter((e) => e.session === sid && e.kind === 'html');
+    check(ev.some((e) => e.judgedBy === 'author' && e.ok === true) && ev.some((e) => e.judgedBy === 'page' && e.ok === true), `证据里 judgedBy 不对：${JSON.stringify(ev.map((e) => [e.q, e.ok, e.judgedBy]))}`);
+    check(ev.some((e) => String(e.text || '').endsWith('结尾标记') && e.text.length > 4990), '证据里的长作答被截了');
+    await t.waitFor(async () => (await db())[`sessions/${sid}/html_state/h1`]?.state?.n === 1, { timeout: 8000, what: 'lab.state 存进 html_state' });
+    // 指着自由段里的一处标注
+    await t.waitFor(async () => /内容比框宽/.test(await outs()), { timeout: 10000, what: '内容比框宽报给主讲' });
+    // 框自己拍成图（板的截图里换进去）
+    const shotLen = await t.page.evaluate(async () => (await document.querySelector('[data-bid="h1"] iframe')._shot())?.length || 0);
+    check(shotLen > 3000, `框没拍出图：${shotLen}`);
+    await plantLive(t, { [`sessions/${sid}/ext_in/002`]: { seq: 2, text: `${F4}board mark target=h1-out\n${F4}\n\n${F4}board snap\n${F4}`, after: 1, at: Date.now() } });
+    const r2 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/002`]?.result, { timeout: 20000, what: 'ext_in/002 执行' });
+    check(r2.ok, `mark 指不到自由段的锚点：${JSON.stringify(r2).slice(0, 300)}`);
+    check(Array.isArray(r2.shots) && r2.shots.length >= 1, `board snap 没拍成：${JSON.stringify(r2).slice(0, 300)}`);
+    // ext_in 写错：报错里写正确的写法
+    await plantLive(t, { [`sessions/${sid}/ext_in/003`]: { seq: 3, after: 2, at: Date.now() } });
+    const r3 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/003`]?.result, { timeout: 20000, what: 'ext_in/003 写 result' });
+    check(/没有 text：写成 \{ seq: 3, text: /.test(r3.error || ''), `没有 text 的 ext_in 报错没写正确写法：${JSON.stringify(r3).slice(0, 300)}`);
+    // 开着板书时框不接笔（Pencil 写在上面，导成板书）
+    const pe = await t.page.evaluate(() => { document.body.classList.add('ink-on'); const v = getComputedStyle(document.querySelector('[data-bid="h1"] iframe')).pointerEvents; document.body.classList.remove('ink-on'); return v; });
+    check(pe === 'none', `开着板书时框还接笔：${pe}`);
+    // 刷新以后状态还在
+    await t.page.reload();
+    const fr2 = t.page.frameLocator('[data-bid="h1"] iframe');
+    await t.waitFor(async () => (await fr2.locator('#stv').textContent({ timeout: 2000 }).catch(() => '')) === 'n=1', { timeout: 20000, what: '刷新以后 lab.state 放回' });
+    // 这两个是故意的：框里的代码抛的错、写错的 answer
+    t.errors.splice(0, t.errors.length, ...t.errors.filter((e) => !/故意的错|answer 需要 answer:/.test(e)));
+    return t;
+  },
+
   // 每一步都有记录、每一条都被分析（dev_requests/dr-learning-trail、dr-memcheck）：对话里的话进证据（T1）、memo 记成没有（T2）、
   // 讲过（coverage，T4）、助手的话进证据（T6）；首页写 since-analysis、state、简报最前面两行（T3、T5、memcheck 3）
   async trail(browser) {
