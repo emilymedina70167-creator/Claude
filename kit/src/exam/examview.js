@@ -1,4 +1,4 @@
-// 「管理 → 考试」那一张卡（docs/exam-plan.md 4.6）：填、改考试档案（目标院校、专业、科目、考试日期、目标分、留作模考的年份）。
+// 「管理 → 考试」那一张卡：填、改考试档案（目标院校、专业、科目、考试日期、目标分、留作模考的年份）。
 // 我点「存」才写，只写改了的字段（targetPatch），按 applyChange 记 log（by: me）。下面一行写库里有几套卷、几道题、几个考点
 // （读 meta/exam 的计数：收件箱每并一条照回执加，首页不为了计数去读整类）。
 import { targetOf, targetPatch, goalOf, examDateOf, reserveText, targetWarn } from './target.js';

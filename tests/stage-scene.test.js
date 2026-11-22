@@ -249,7 +249,7 @@ test('排版的根：量出来多出去的（o.ext）算进占的地方；后造
   assert.equal(d1.y, d0.y + 200);
 });
 
-// —— 裁判接进场景（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 2 节）——
+// —— 裁判接进场景——
 const one = (src) => parseScript(src)[0];
 const stu = (s, src, open) => s.apply(one(src), { by: 'student', open });
 
@@ -910,7 +910,7 @@ test('link 一格和它自己那样东西（link a.1 a）：照连一道弧，�
   assert.equal(old.links.size, 1, '跳过 a–a 那一对，a–b 照连');
 });
 
-// —— 扫一遍拨数（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.3）——
+// —— 扫一遍拨数——
 
 test('扫一遍拨数：跟着拨数算的矩阵，每个能拨到的值算一遍解的样子写进现状；真的舞台不动', () => {
   const s = run(new Scene(), 'dial l = 0 range=-3..3\nmatrix M = 1 {l} | 1 / {l} 1 | 1');
@@ -968,7 +968,7 @@ test('clauseMarks 照给的挑战判：做到了也照判（✓）；判不了�
   assert.deepEqual(m.clauseMarks(['g3']).map((x) => [x.goal, x.clause, x.ok]), [['g3', 'k > 1', false], ['g3', 'A = I', true]]);
 });
 
-// —— 一次点几样（ask pick）；expect 写整样东西或一段（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 2.5、第 9 节）——
+// —— 一次点几样（ask pick）；expect 写整样东西或一段——
 const AVL = 'tree t = 30 20 40 10 25 _ 45';
 const pickOf = (s, v) => s.objects.get('t').nodes.find((n) => n.value === String(v)).pick;
 
@@ -1114,7 +1114,7 @@ test('expect 写整样东西或一段：点到里面哪一个都算；哪种东�
   assert.equal(dryRun(s, 'ask tap AB "…" expect=AB').length, 0);
 });
 
-// —— 存档点 keep / back（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 7 节）——
+// —— 存档点 keep / back——
 const T47 = 'tree t = 30 20 40 10 25 _ 45 tray="47"';
 const ser = (s, id = 't') => serialize(s.objects.get(id));
 
@@ -1354,7 +1354,7 @@ test('back 以后挑战照实写：做到过的现在不成立写「做到过；
   assert.match(s.stateText(), /^挑战 g1「把 47 插进去」when="t height=4"：做到了$/m);
 });
 
-// —— 预写和挑战（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.1）——
+// —— 预写和挑战——
 const K312 = 'array k = 3 1 2\nopen k\ngoal g1 "排好" when="k sorted"';
 // 舞台演预写的行：照老师的行（带 lenient，prewrite：不算学生的一下）
 const playPre = (s, fx) => { for (const r of fx.reactions || []) for (const c of parseScript(r.src)) s.apply({ ...c, lenient: true, prewrite: true, ...(r.preRight ? { preRight: r.preRight, preRightKey: r.preRightKey } : {}) }, { by: 'teacher' }); };
@@ -1659,7 +1659,7 @@ test('撞名两头都报：先直接写 goal g2 再预写 goal g2；先预写 go
   assert.doesNotThrow(() => r2.apply({ ...one('goal g2 "老师的 g2" when="k.1 = 2"'), lenient: true, replay: true }));
 });
 
-// —— 同一处的三种按法（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.1 节）——
+// —— 同一处的三种按法——
 test('三种按法能一起开：同一句上 mark（滑）、fold（点）、move（按住再拖）都开得了；现状里这样东西合成自己一行写怎么按', async () => {
   const { ARMED_GRIPS, ARMED_PRESS } = await import('../kit/src/stage/gestures.js');
   const s = run(new Scene(), 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."');

@@ -1,4 +1,4 @@
-// 舞台（kit/src/stage/，docs/stage-plan.md）不碰 DOM 的部分：动作、排版和镜头、镜头指令的读法
+// 舞台（kit/src/stage/）不碰 DOM 的部分：动作、排版和镜头、镜头指令的读法
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { arcPoints, arcPath, moveDuration, stagger, revealDelays, readHold, labelHold } from '../kit/src/stage/motion.js';

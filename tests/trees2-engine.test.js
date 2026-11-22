@@ -165,7 +165,7 @@ test('forest：A(B, C, D) E(F, G) ↔ 二叉树；王道 树 A(B(E, F), C, D(G))
 });
 
 // 示例页和说明草稿里的每个例子：照抄就能用（解析、走完、ask 都问得到、字段都用上、每一步都画得出来、填表的表对得上）。
-// 草稿并进 CLAUDE-PROJECT.md 以后会删掉，那时只查示例页
+// 草稿并进 kit/components.md 以后会删掉，那时只查示例页
 test('示例页 ds-trees2-demo.html、说明草稿的例子：第 0 步不问；ask 都问得到；字段都用上；每一步画得出来', () => {
   const src = readFileSync(new URL('../kit/examples/ds-trees2-demo.html', import.meta.url), 'utf8');
   const draft = new URL('../docs/drafts/trees2.md', import.meta.url);

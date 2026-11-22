@@ -1,4 +1,4 @@
-// 学习台首页的「补记」（docs/desk-plan.md 3.2）：在学习台外面做的（纸上、Notability、外部对话里），
+// 学习台首页的「补记」：在学习台外面做的（纸上、Notability、外部对话里），
 // 贴截图或者写一句话，可选挂到某一块、标「对 / 错 / 不会」，记成一条证据（src: manual，memory/session.js 的 manualEvidence）。
 // 贴图和课堂输入条一样要绕 iPad 的坑：Notability 圈选「拷贝」后 paste 事件里什么都没有，Safari 只往可编辑的框里插 <img src="blob:…">，
 // 所以粘贴框是 contenteditable，空的 paste 不拦，图从插进来的 <img> 里取（class/bar.js 的 toPng、srcToPng 转成白底 PNG）。

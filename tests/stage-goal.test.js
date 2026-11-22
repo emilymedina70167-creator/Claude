@@ -1,4 +1,4 @@
-// 活的舞台（docs/stage-plan.md E 段）：开放给学生直接动、乘积跟着重算、挑战当场判、做到了马上交出预写的行
+// 活的舞台：开放给学生直接动、乘积跟着重算、挑战当场判、做到了马上交出预写的行
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';

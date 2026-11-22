@@ -1,4 +1,4 @@
-// 学习台的记忆库（docs/learner-memory-spec.md 第 1 批）：分类、谁能写、复现到期、log、自检。不碰 DOM 的部分。
+// 学习台的记忆库：分类、谁能写、复现到期、log、自检。不碰 DOM 的部分。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -16,12 +16,12 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 
 test('需求第 2 节的十二类都在（加上 desk-plan 4.1 的改动单），每类的写入方照表', () => {
   assert.deepEqual(MEMORY_COLLECTIONS.sort(), ['curriculum', 'drills', 'errors', 'evidence', 'mastery', 'observations', 'pending', 'position', 'profile', 'reviews', 'rules', 'sessions', 'slips', 'weaknesses', 'lessons', 'recall', 'exam', 'exam_bar', 'asks', 'summary', 'notebook', 'dev_requests', 'absorb', 'probes'].sort());
-  // 学习台自己管自己（docs/autonomy-plan.md）：错题、弱点、复现组、位置课堂里的 Claude 直接写；规则它写的要我确认（me 的身份写）
-  // 掌握：页面按证据算的提议我点了确认才写（docs/learning-plan.md 2.2），课堂里的 Claude 照旧不能写
+  // 学习台自己管自己：错题、弱点、复现组、位置课堂里的 Claude 直接写；规则它写的要我确认（me 的身份写）
+  // 掌握：页面按证据算的提议我点了确认才写，课堂里的 Claude 照旧不能写
   // 2026-11-03：不要一条条确认——规则课堂直接写，掌握页面算了直接写（课堂里的 Claude 照旧不能写掌握）
   assert.deepEqual(COLLECTIONS.rules.writers, ['chat', 'class', 'me']);
   assert.deepEqual(COLLECTIONS.mastery.writers, ['chat', 'page', 'me']);
-  // 课程地图：学习台上「挂课程地图」我确认了的，页面替我写（docs/textbook-plan.md）
+  // 课程地图：学习台上「挂课程地图」我确认了的，页面替我写
   assert.deepEqual(COLLECTIONS.curriculum.writers, ['chat', 'me']);
   for (const c of ['errors', 'weaknesses', 'position']) assert.deepEqual(COLLECTIONS[c].writers, ['chat', 'class', 'me'], c);
   assert.deepEqual(COLLECTIONS.reviews.writers, ['chat', 'class', 'page', 'me']); // 练一练的结果页面直接写
@@ -228,22 +228,4 @@ test('memcheckRecord：硬的错在前，最多 80 行，复现组的到期一�
   assert.equal(rec.problems[0], 'b/0：错');
   assert.equal(rec.more, 11);
   assert.deepEqual(rec.due, [{ id: 'R1', title: 't', due: TODAY, days: 0 }]);
-});
-
-// —— 说明书（CLAUDE-PROJECT.md 第七节）和代码一致 ——
-
-test('说明书第七节：每一类、编号的写法、只能取的值都写到了；例子照抄能过自检', () => {
-  const doc = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
-  const sec = doc.slice(doc.indexOf('## 七、学习台'));
-  assert.ok(sec.length > 2000, '有第七节');
-  for (const c of MEMORY_COLLECTIONS) assert.ok(sec.includes(`\`${c}\``), `第七节提到 ${c}`);
-  for (const spec of Object.values(COLLECTIONS)) for (const vals of Object.values(spec.enums || {})) for (const v of vals) assert.ok(sec.includes(v), `第七节写到了 ${v}`);
-  for (const t of REVIEW_TIERS) assert.ok(sec.includes(String(t)));
-  // 第七节里的 JSON 例子（```json 块）：拼起来跑一遍自检，一处硬错都没有
-  const blocks = [...sec.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => JSON.parse(m[1]));
-  assert.ok(blocks.length >= 5, '有 JSON 例子');
-  const data = {};
-  for (const b of blocks) for (const [c, d] of Object.entries(b)) (data[c] ||= []).push(d);
-  const hard = checkMemory(data, { today: TODAY }).problems.filter((p) => !p.soft);
-  assert.deepEqual(hard, []);
 });

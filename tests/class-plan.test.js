@@ -1,4 +1,4 @@
-// 课堂老师的教学计划 board plan（docs/learning-plan.md 第 5 节）：学生看不到，最新一份放进说明，历史里去掉
+// 课堂老师的教学计划 board plan：学生看不到，最新一份放进说明，历史里去掉
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

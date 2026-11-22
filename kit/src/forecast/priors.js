@@ -1,4 +1,4 @@
-// 测量的先验和常数（docs/superpowers/specs/2026-11-14-round10-measure-design.md 第六节、第十四节）。
+// 测量的先验和常数。
 // 先验 = 还没有我的作答时，每个数从哪起步；每个都写依据。我的作答一多，K 的后验就由证据接管，这里的数只管起步。
 // 改这里的数先跑模拟学生的尺子（tools/forecast-sim.mjs），改了在 rulings 里记原因。纯数据，不碰 DOM。
 

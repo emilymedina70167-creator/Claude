@@ -1,4 +1,4 @@
-// 页面自己跑的练习和混练（docs/learning-plan.md 第 3 节）里不碰 DOM 的部分，有测试（tests/memory-drills.test.js）。
+// 页面自己跑的练习和混练里不碰 DOM 的部分，有测试（tests/memory-drills.test.js）。
 //
 // 为什么：学得牢靠的是隔一段时间自己再做出来。原来复现靠「开一节复现课」，每节都是几十轮 Opus，额度一紧就做得很少。
 // 练习不调用 Claude：题从以前的课里抄（零成本）、页面判分、作答照常进证据，掌握照常算（mastery.js）；只在我要开课时才调用。

@@ -17,7 +17,7 @@ export const DEFAULT_SPACE = 'math';
 // 门课：前缀 → 名字（subject.js 认得的科目名，课堂按它带组件说明和教法）、所在的空间
 export const COURSES = {
   LA: { name: '线代', space: 'math' },
-  // 高数、概率（docs/exam-plan.md 第二节「课程地图补门课」）：考情要按真题给它们补章，410 分才不缺块
+  // 高数、概率：考情要按真题给它们补章，410 分才不缺块
   HM: { name: '高数', space: 'math' },
   PS: { name: '概率', space: 'math' },
   DS: { name: '数据结构', space: 'cs' },

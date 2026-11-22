@@ -7,7 +7,7 @@ import { componentDocs } from '../kit/build-docs.js';
 import { buildSystem, defaultRules, DEFAULT_RULES, bytes, lintDocs, docLookup, packComponents, DETAIL_BUDGET } from '../kit/src/class/prompt.js';
 import { CHARTER, SUBJECT_FACTS } from '../kit/src/class/charter.js';
 
-const PROJECT = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+const PROJECT = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
 const DOCS = componentDocs(PROJECT);
 const KiB = 1024;
 

@@ -1,4 +1,4 @@
-// derive 的学生版（mode: do，docs/learning-plan.md 第 6 节）：老师给出发的式子，学生一行一行往下写，
+// derive 的学生版（mode: do）：老师给出发的式子，学生一行一行往下写，
 // 页面查每一行和上一行是不是相等。纯函数，有测试（tests/derivedo.test.js）；画面在 blocks/derivedo.js。
 //
 //   id: dd-1

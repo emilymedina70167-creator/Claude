@@ -1,5 +1,5 @@
 // 舞台上的平面（线代的几何：向量、线性组合、张成、线性变换、特征向量）：数据和指令，不碰 DOM（画法在 plane.view.js）。
-// 纯函数，有测试（tests/stage-plane.test.js）。照 array.js 的样子写（docs/stage-types.md）。
+// 纯函数，有测试（tests/stage-plane.test.js）。照 array.js 的样子写。
 //
 // 坐标是数学里的 (x, y)（y 朝上），都是精确分数（存成字符串，副本不丢东西）；画面里一格画成 UNIT 像素。
 // 线性变换：网格记着「现在是哪个矩阵变过去的」（M）；每个向量、点记着现在的坐标和变换前的坐标（home），退回原样时回到 home。

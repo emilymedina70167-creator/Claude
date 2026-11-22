@@ -1,4 +1,4 @@
-// 课后报告（docs/desk-plan.md 3.1）：下课时由页面代码把这节课整理成一份 sessions/{编号}/report/main，不调用 Claude。
+// 课后报告：下课时由页面代码把这节课整理成一份 sessions/{编号}/report/main，不调用 Claude。
 // 结果只由输入决定（同样的证据出同样的报告），纯函数，有测试（tests/memory-report.test.js）。
 // 用处：课后整理、「以前的课」页面、外部的 Claude 课后只读这一份就够（不用把整节课的证据和课堂记录读一遍）。
 //

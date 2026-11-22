@@ -22,7 +22,7 @@ const STYLE_COLOR = { tick: 'green', cross: 'red' };
 const COLOR_ALIAS = { gold: 'yellow', lav: 'purple', violet: 'purple', coral: 'red', 黄: 'yellow', 粉: 'pink', 蓝: 'blue', 绿: 'green', 橙: 'orange', 紫: 'purple', 红: 'red', 白: 'white' };
 const SIDES = { right: 'right', left: 'left', above: 'above', below: 'below', top: 'above', bottom: 'below', 右: 'right', 左: 'left', 上: 'above', 下: 'below' };
 // 要跟数字的选择：row 2、entry 2,3
-// word、blank：英语句子里的第几个词、cloze 的第几个空（docs/english-plan.md 第 1 批）
+// word、blank：英语句子里的第几个词、cloze 的第几个空
 const NUM_SEL = { row: 'row', col: 'col', column: 'col', entry: 'entry', cell: 'entry', block: 'block', step: 'step', item: 'item', word: 'word', blank: 'blank' };
 const DIAG = new Set(['diag', 'diagonal', '对角线', '主对角线']);
 const NAME_RE = /^[A-Za-z0-9_-]{1,40}$/;

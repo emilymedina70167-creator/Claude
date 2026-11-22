@@ -1,4 +1,4 @@
-// 舞台上的课：发给老师（Opus 5.5）的说明和每一轮的内容（docs/stage-plan.md B 段）。纯函数，有测试（tests/stage-doc.test.js）。
+// 舞台上的课：发给老师（Opus 5.5）的说明和每一轮的内容。纯函数，有测试（tests/stage-doc.test.js）。
 // 说明分两块：怎么教（STAGE_TEACH：像一个会停下来等学生的科普视频——画面是主力，先做后说）和镜头指令（STAGE_DOC）。
 // 提到学生不用「他」「她」（tests 守着）
 import { followOf, followNames } from './follow.js';
@@ -183,7 +183,7 @@ const SPACE_SUBJECT = { math: '线代', en: '英语' };
 /**
  * 这节舞台课是哪门课（说明只带这门课用得上的几种东西，stageDoc(科目)）：照顺序推——这节课的块 → 资料包写的科目或块编号 →
  * 这节课 / 单元记着的科目 → 空间（数学只有线代、英语只有英语）。408 有四门课，前面都没有就推不出来：给 ''，发全带的那份
- * （docs/superpowers/specs/2026-11-08-stage-base-2-rulings.md「推不出科目」那一条）。pack 是 { main, problems }，session 是 sessions/{编号}
+ * 。pack 是 { main, problems }，session 是 sessions/{编号}
  */
 export function stageSubject({ block = '', pack = null, session = null, space = '' } = {}) {
   if (block) return subjectOf(block);

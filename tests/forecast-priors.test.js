@@ -1,4 +1,4 @@
-// 测量的先验和固定种子（docs/superpowers/specs/2026-11-14-round10-measure-design.md 第六节）
+// 测量的先验和固定种子
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PART_PRIORS, TAUGHT_MIN, GUESS, PARTIAL, TAU, DELTA, BLOCK_S_X, DRAWS, RECENT_X, MEASURED_N } from '../kit/src/forecast/priors.js';

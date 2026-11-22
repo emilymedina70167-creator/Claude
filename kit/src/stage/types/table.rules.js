@@ -1,4 +1,4 @@
-// 表的规则（接口见 rules.js、docs/stage-types.md；主线第三轮 A）。纯函数，有测试（tests/stage-table.test.js）。
+// 表的规则（接口见 rules.js；主线第三轮 A）。纯函数，有测试（tests/stage-table.test.js）。
 //
 // 学生点一格写（open T edit：数字键盘、输入框或一排选项）。页面不判对错（right 永远是 null，不当场给学生标）：
 // 老师给了答案（key=）的，每写一格在话里说「和答案一样 / 不一样（答案是几）」，写满时说一共几格不一样——只告诉老师。

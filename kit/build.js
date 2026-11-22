@@ -27,9 +27,9 @@ const katexCssPlugin = {
   },
 };
 
-// 课堂模式的组件手册：从 CLAUDE-PROJECT.md 第三节截出来（见 build-docs.js），以文本打包。
+// 组件手册：从 kit/components.md 截出来（见 build-docs.js），以文本打包。
 // 用单独的 namespace：上面 katex 插件的 onLoad 会接管 'virtual' namespace 里的所有路径
-const projectDoc = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'CLAUDE-PROJECT.md');
+const projectDoc = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'components.md');
 const componentDocsPlugin = {
   name: 'component-docs',
   setup(b) {
@@ -60,15 +60,7 @@ await build({
   logLevel: 'info',
 });
 
-// 说明书不再发布（2026-11-22 去限制设计第 5 步）：主讲读学习台数据库里的接口卡 meta/interface（project/iface.js，页面写），
-// 写错了报错里自己说清楚（组件认的字段和例子：subject.js 的 fieldHint）。以前拆出来发布的 kit/dist/docs/ 不再生成。
-// 仓库里的 CLAUDE-PROJECT.md 照旧是页面里的 Claude 用的组件手册的来源（virtual:component-docs），build-split.js 的拆法留给测试核手册
-{
-  const { rmSync } = await import('node:fs');
-  rmSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'dist', 'docs'), { recursive: true, force: true });
-}
-
-// 读 PDF 用的 pdf.js（教材入库，docs/textbook-plan.md）：不打进 la-kit.js（一百多万字节，平时上课用不着），
+// 读 PDF 用的 pdf.js（教材入库）：不打进 la-kit.js（一百多万字节，平时上课用不着），
 // 作为学习台的附带文件发布在 pdf/ 下，导入 PDF 时页面才去取（同一个 artifact 里的文件，不是外部脚本）。
 // 扫描版的书常用 JBIG2 / CCITT / JPEG2000 压图，解码器（wasm，和不支持 wasm 时的 js 版）也要带上；中文字体的 cmap 只带 GB 的
 {

@@ -9,8 +9,8 @@ import { parseSim } from '../kit/src/prob/simspec.js';
 import { docsForSubject, componentDoc } from '../kit/src/subject.js';
 
 const PARSE = { venn: parseVenn, ptree: parsePtree, joint: parseJointBlock, sim: parseSim };
-const manual = readFileSync('CLAUDE-PROJECT.md', 'utf8');
-const third = manual.slice(manual.indexOf('## 三、组件参考'), manual.indexOf('\n## 四、'));
+const manual = readFileSync('kit/components.md', 'utf8');
+const third = manual.slice(manual.indexOf('## 组件参考'));
 const blocksIn = (text) => [...text.matchAll(/```(venn|ptree|joint|sim)\n([\s\S]*?)```/g)].map((m) => ({ kind: m[1], src: m[2] }));
 const demo = blocksIn(readFileSync('kit/examples/prob-demo.html', 'utf8'));
 const inManual = blocksIn(third);

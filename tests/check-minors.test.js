@@ -1,4 +1,4 @@
-// 计划 2 整体审查留下的小毛病（docs/root-handoff.md 第 7 批，2026-11-19 补做；一处一条，先红后绿）
+// 计划 2 整体审查留下的小毛病
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCheck, parseProbe, selfCheck } from '../kit/src/check/spec.js';

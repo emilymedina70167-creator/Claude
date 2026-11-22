@@ -1,4 +1,4 @@
-// 信心标定、页面按证据算掌握（docs/learning-plan.md 第 2 节）
+// 信心标定、页面按证据算掌握
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

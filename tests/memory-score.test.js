@@ -1,4 +1,4 @@
-// 410 分的进度（docs/score-plan.md）：页面按掌握记录数「已经攒下的分」，不调用 Claude
+// 410 分的进度：页面按掌握记录数「已经攒下的分」，不调用 Claude
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

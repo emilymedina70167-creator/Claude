@@ -1,4 +1,4 @@
-// 点着问（kit/src/class/ask.js，docs/board-plan.md 第 5 节）：预写的「为什么」、指着问发给 Claude 的那一行
+// 点着问（kit/src/class/ask.js）：预写的「为什么」、指着问发给 Claude 的那一行
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseWhy, matchWhy, spotText, markHint, askMessage, whyShownText } from '../kit/src/class/ask.js';

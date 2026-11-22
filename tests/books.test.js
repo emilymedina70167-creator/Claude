@@ -1,4 +1,4 @@
-// 教材板块（docs/textbook-plan.md）：读 zip、取 docx / pptx 的字、看图转写的结果拼成条目、目录、搜索、按编号取。纯函数。
+// 教材板块：读 zip、取 docx / pptx 的字、看图转写的结果拼成条目、目录、搜索、按编号取。纯函数。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deflateRawSync } from 'node:zlib';

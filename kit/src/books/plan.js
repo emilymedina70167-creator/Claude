@@ -1,4 +1,4 @@
-// 挂课程地图（docs/textbook-plan.md 第 3 批）：把一本资料的条目挂到课程地图的块上（已有的块挂上教材、文稿；没有的块按教材的章节提新块），
+// 挂课程地图：把一本资料的条目挂到课程地图的块上（已有的块挂上教材、文稿；没有的块按教材的章节提新块），
 // Claude 提、我确认。mapPrompt / parseMap。资料包里教案的结构化字段写成文字（lessonPlanText，课堂读以前备好的、项目 Claude 写的资料包用）。
 // 首页「让 Claude 备课」（prepPrompt / parsePrep / checkPrep / openTodos）第十四轮搬进了 archive/kit/src/books/plan.js：备课学生跟项目 Claude 说。
 // 纯函数，有测试；画面和调用在 planview.js。

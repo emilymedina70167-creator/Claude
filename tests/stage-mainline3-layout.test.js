@@ -1,4 +1,4 @@
-// 舞台主线第三轮 D：排版留下的几条（docs/superpowers/specs/2026-11-11-stage-mainline-3-design.md）
+// 舞台主线第三轮 D：排版留下的几条
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene } from '../kit/src/stage/scene.js';

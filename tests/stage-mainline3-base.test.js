@@ -1,4 +1,4 @@
-// 舞台主线第三轮 C：底座第二轮留下的条目（docs/stage-gaps.md「留到下一步的」），一条一个测试
+// 舞台主线第三轮 C：底座第二轮留下的条目，一条一个测试
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';

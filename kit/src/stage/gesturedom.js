@@ -1,4 +1,4 @@
-// 通用手势的画面那一半（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）：手势层在底座里写一次——
+// 通用手势的画面那一半：手势层在底座里写一次——
 // 接住手指（pointer.js）、跟着手动、放下以后变成一行学生指令（gestures.js 照规则文件里的手势表翻）、交给舞台过裁判、演、记进 log。
 // 每种东西的画法只交「手能抓哪儿」：view.grips 按手势表里的名字（树的 node / parent / tray / tree / slot，矩阵的 row / label / cell / whole，
 // 句子的 word / bracket / hook / gap / pill / sentence / xmark / xrefer）给一组把手：grips[名字](stage, o, e, { role })，role 是 'from'

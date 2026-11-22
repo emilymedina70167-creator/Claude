@@ -1,4 +1,4 @@
-// 页面自己跑的练习和混练（docs/learning-plan.md 第 3 节）
+// 页面自己跑的练习和混练
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

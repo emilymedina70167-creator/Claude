@@ -563,7 +563,7 @@ test('复审 N7：solve=on 配 wrong=，错答不是一次式（k^2 / 1 / k）�
   assert.throws(() => checkSpec({ ...L, answer: 'k^2 / 1 / k', wrongs: null }, null, { strict: true }), /solve=on 只用在一列/);
 });
 
-// —— 舞台主线第一轮（docs/superpowers/specs/2026-11-11-stage-mainline-1-design.md 第 3 节）——
+// —— 舞台主线第一轮——
 test('L3-3：type=set 老师写 answer="1,4"，学生填一模一样的是对的（老师这边也读成几个值）', () => {
   const spec = { type: 'set', answer: '1,4' };
   assert.equal(judgeAnswer('1,4', spec).ok, true);

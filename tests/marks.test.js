@@ -167,7 +167,7 @@ test('splitAlts：公式里的 | 不算选项分隔', () => {
   assert.deepEqual(splitAlts('a|b| c '), ['a', 'b', 'c']);
 });
 
-test('英语句子里的词：word= / words= / phrase= / blank=（docs/english-plan.md 第 1 批）', async () => {
+test('英语句子里的词：word= / words= / phrase= / blank=', async () => {
   const { parseMarkSpec, markWhere } = await import('../kit/src/markspec.js');
   const { wordSpan, wordsIn } = await import('../kit/src/entext.js');
   const p = (l) => parseMarkSpec(l);
@@ -291,12 +291,11 @@ test('画法的几何：四周空多少、留白不压到别的字、圈包住�
   assert.ok(!sameLine(a, { x: 0, y: 200, w: 40, h: 20 }));
 });
 
-test('课堂 Claude 拿「mark」「标注」「tag」查组件写法：给黑板指令那一节，不再说「没有这个组件」；外部说明书的组件一览也指过去', async () => {
+test('课堂 Claude 拿「mark」「标注」「tag」查组件写法：给黑板指令那一节，不再说「没有这个组件」', async () => {
   const { readFileSync } = await import('node:fs');
   const { componentDocs } = await import('../kit/build-docs.js');
   const { docLookup } = await import('../kit/src/class/prompt.js');
-  const { splitProject } = await import('../kit/build-split.js');
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   const D = componentDocs(md);
   for (const n of ['mark', 'board mark', '标注', '画圈', 'tag', 'highlight', '荧光笔']) {
     for (const sub of ['线代', '英语', '数据结构']) assert.match(docLookup(D, sub, n), /不是组件，是黑板指令[\s\S]*### mark \/ unmark/, `${sub} ${n}`);
@@ -304,7 +303,4 @@ test('课堂 Claude 拿「mark」「标注」「tag」查组件写法：给黑�
   assert.match(docLookup(D, '英语', 'parse'), /^### parse/, '真有的组件照旧');
   assert.match(docLookup(D, '线代', 'figure'), /### figure/);
   assert.throws(() => docLookup(D, '线代', 'zzz'), /标注不是组件，是黑板指令 board mark/);
-  const { main, files } = splitProject(md);
-  assert.match(files['components/mark.md'], /^# 板书标注：mark \/ unmark[\s\S]*text="板上的字"[\s\S]*unmark id=m3/);
-  assert.match(main, /板书标注\*\*（圈、框、大括号[\s\S]*→ `components\/mark\.md`/);
 });

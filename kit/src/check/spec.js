@@ -1,4 +1,4 @@
-// 检验（二类组件：学完以后的吸收检验，dev_requests/dr-plan2，设计 docs/superpowers/specs/2026-11-18-check-design.md）：
+// 检验（二类组件：学完以后的吸收检验，dev_requests/dr-plan2）：
 // board check 和六种探题的写法、自检。不碰 DOM，tests/check-spec.test.js。
 //
 //   ````board check id=k1 title="…" limit=15m pause=30s
@@ -43,7 +43,7 @@ import { spaceOfId } from '../memory/space.js';
 import { parseBrackets, parseRoles, ROLES, findWrong, parseDecoys, parseAnswer, normText } from '../entext.js';
 import { bigO, cleanInput, sameResult } from './values.js'; // values.js 也 import 这里：互相只在函数里用，不在模块顶层调用
 
-// 408、英语一的题型（计划 4，docs/superpowers/plans/2026-11-19-check-408-en.md）：trace predict code parse translate rewrite errfind 是新的，
+// 408、英语一的题型（计划 4）：trace predict code parse translate rewrite errfind 是新的，
 // tradeoff 是 recall 的别名、calc 是 solve 的别名（读法、判法照原来的，type 存自己的名字，BASE_OF / baseType）
 export const PROBE_TYPES = ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve',
   'trace', 'predict', 'tradeoff', 'code', 'calc', 'parse', 'translate', 'rewrite', 'errfind'];

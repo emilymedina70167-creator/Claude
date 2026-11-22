@@ -1,5 +1,5 @@
 // 一份守规矩的示例记忆：本地试用学习台（?dev 的「填入示例记忆」）和测试用（自检应该一处错都没有）。
-// 内容是虚构的，写法和 CLAUDE-PROJECT.md 第七节一致。today：YYYY-MM-DD，复现组的日期跟着它排，好看出到期
+// 内容是虚构的，写法照 schema.js。today：YYYY-MM-DD，复现组的日期跟着它排，好看出到期
 import { addDays } from './schema.js';
 
 export function sampleMemory(today) {

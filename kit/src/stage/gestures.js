@@ -1,4 +1,4 @@
-// 通用手势（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）不碰 DOM 的那一半：手指的事都在 gesturedom.js，
+// 通用手势不碰 DOM 的那一半：手指的事都在 gesturedom.js，
 // 这里只管「按下的部件、松手处的部件或空位、写的值 → 一行学生指令」和「撤一步」。纯函数，有测试（tests/stage-gestures.test.js）。
 //
 // 六种手势所有东西共用：tap 点一个部件、drop-on 拖到另一个部件上、drop-at 拖到空处（托盘里的拖进来）、span 从一个部件拉到另一个、
@@ -51,7 +51,7 @@ export function idleOf(scene, e) {
   try { return g.idle(o, e, scene) || null; } catch { return null; }
 }
 
-// —— 同一处的三种按法（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.1 节）——
+// —— 同一处的三种按法——
 // 点一下就松（tap、write）、按下就滑（span、line：拉括号、拉线）、按住 0.35 秒托起来再拖（drop-on、drop-at：拖到上面、拖到空处）。
 // 同一样东西的同一处按法不一样的能一起开（句子上又拉括号又折又挪），按法一样的抢同一下手指，第二项当场报（scene.js 的 open）
 export const PRESS_OF = { tap: 'tap', write: 'tap', span: 'slide', line: 'slide', 'drop-on': 'hold', 'drop-at': 'hold' };

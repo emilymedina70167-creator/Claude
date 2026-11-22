@@ -45,7 +45,7 @@ test('ext_in 写错：报错里写正确的写法', () => {
   assert.deepEqual(inProblems({ seq: 1, text: '' }, '001'), { error: '', notes: [] });
 });
 
-const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8').split('\n');
+const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8').split('\n');
 const s3 = md.findIndex((l) => /^##\s*三/.test(l));
 const DOCS = md.slice(s3 + 1, md.findIndex((l, i) => i > s3 && /^##\s*四/.test(l))).join('\n');
 

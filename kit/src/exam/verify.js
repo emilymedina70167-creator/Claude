@@ -1,4 +1,4 @@
-// 验算真题的答案（docs/exam-plan.md 第二节第 3 步）：答案从解析册取；能算的再算一遍，对不上的不进库、列出来给我看。
+// 验算真题的答案：答案从解析册取；能算的再算一遍，对不上的不进库、列出来给我看。
 // 题上写 check: { expr, vars }（转写的时候照题面写：引用串、权值、模式串……），用 exact.js 的精确计算算，
 // 能用黑板引擎注册的函数（algofuncs.js：faults victims next nextval wpl）——用了引擎函数的记 engine，没用的记 exact。
 // 单选题算出来的和正确选项的文字比，别的题和答案比。纯函数，有测试（tests/exam-verify.test.js）。

@@ -1,5 +1,5 @@
 // 科目：课件开头的 subject: 写哪门课。课堂说明每一轮有 160 KiB 的上限，四门计算机课的组件说明全塞进去会超，
-// 所以 CLAUDE-PROJECT.md 第三节的小节标题下面写着它是哪门课的（<!-- 科目：数据结构 操作系统 -->），
+// 所以 kit/components.md 的小节标题下面写着它是哪门课的（<!-- 科目：数据结构 操作系统 -->），
 // 课堂里只带「通用 + 这门课」的那几节。纯函数，不碰 DOM，有测试（tests/subject.test.js）。
 
 // 规范的名字 → 认得的写法
@@ -48,7 +48,6 @@ function fenceOf(line) {
 
 // 小节里的「<!-- 完整写法 -->」：这一行以前是精简版（课堂说明里一直带着），以后是不常用的字段和更多例子。
 // 课堂说明有长度上限，完整写法让课堂 Claude 按名字取（component_doc 工具），写错了页面也会附上；
-// 对话里写课件的 Claude 读的是整份 CLAUDE-PROJECT.md，两部分都看得到。
 const DETAIL_RE = /^\s*<!--\s*完整写法\s*-->\s*$/;
 
 // 小节标题里的组件名：「### sched / paging / banker / disk：操作系统的过程」→ sched paging banker disk。
@@ -140,7 +139,7 @@ export function detailNames(docs, subject) {
   return docSections(docs).filter((s) => s.detail && forSubject(s, key)).flatMap((s) => s.names);
 }
 
-// 小节的组件名只看标题冒号前面那段（和发布拆分 kit/build-split.js 一样）：「### tradeoff、calc：408 的检验题（块里的 trace、predict…也在这一节）」
+// 小节的组件名只看标题冒号前面那段：「### tradeoff、calc：408 的检验题（块里的 trace、predict…也在这一节）」
 // 后面提到的 trace 不算，component_doc trace 只给一类组件那一节；冒号前面没有英文词的（「公式里的三个工具：`\calc`…」）才看整行
 const headNames = (line) => { const before = sectionNames(String(line).split(/[：:]/)[0]); return before.length ? before : sectionNames(line); };
 

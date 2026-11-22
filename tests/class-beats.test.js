@@ -1,4 +1,4 @@
-// 拍子（kit/src/class/beats.js，docs/board-plan.md 第 2 节）：一轮输出怎么分拍
+// 拍子（kit/src/class/beats.js）：一轮输出怎么分拍
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { beatPlan, shouldPlay, beatLabel } from '../kit/src/class/beats.js';

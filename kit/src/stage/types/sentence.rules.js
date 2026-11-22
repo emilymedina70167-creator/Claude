@@ -1,4 +1,4 @@
-// 句子（拆成分）的规则（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1 节）：照老师造句子时给的正确拆法
+// 句子（拆成分）的规则：照老师造句子时给的正确拆法
 // （key="[S The man [RC who lives next door]] [V is] [P a doctor]."，sentence.js 的 parseKey 读成 o.key）逐词比学生拉的括号、
 // 认四种错法；下一步、写给老师的事实、挑战用的判断式、手势表。纯函数，有测试（tests/stage-sentence-rules.test.js）；在 types/index.js 里登记。
 //
@@ -184,7 +184,7 @@ function nonFiniteText(o, ks, p, q, peer = () => true) {
   return lo === nf.from && hi === nf.to ? `「${whole}」是非谓语，不是谓语` : `${textOf(o, lo, hi)} 在非谓语「${whole}」里，不是谓语`;
 }
 
-// 不是 key 里的那一段：像哪种错（docs/superpowers/plans/2026-11-06-stage-base.md 第 7 个任务的表；认不出来的给 null）。
+// 不是 key 里的那一段：像哪种错。
 // rel 是 key 里学生最像在拉的那一段（「现在正确的」先说它）；shown 是学生写的成分（认得出写中文名）
 function misreadOf(o, ks, a, b, name, shown) {
   const overlaps = (k) => k.from <= b && a <= k.to;
@@ -219,7 +219,7 @@ function misreadOf(o, ks, a, b, name, shown) {
 }
 
 /**
- * 两种错一起出（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 5 节）：成分对不上 key 的那一段、范围又和它差一两个词（多的、少的加起来）。
+ * 两种错一起出：成分对不上 key 的那一段、范围又和它差一两个词（多的、少的加起来）。
  * 同一层（peer）里挑重叠最多的那一段，先说它是什么、再说范围差在哪：「成分标错了，范围也差一点：这一段是表语（…），学生拉的少了 better」。
  * 不说假话：key 只说了那一段是什么，没说它里面、外面一层是什么。学生拉的跨过了那一段的边（本来就和 key 冲突）才照说；
  * 整个落在那一段里、或者整个包住它的，要两样都成立才说：
@@ -477,7 +477,7 @@ function facts(before, after, act) {
   return [...out, ...changed];
 }
 
-// —— 手势表（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）——
+// —— 手势表——
 
 // 成分名里有空格、等号（"to do"）就加引号，mark 照样读得懂
 const labelSrc = (label) => (/[\s="]/.test(label) ? (label.includes('"') ? `「${label}」` : `"${label}"`) : label);
@@ -623,7 +623,7 @@ function moveAct(o, { from, to } = {}) {
   return made(o, { type: 'move', from: p, to: q, after: k });
 }
 
-// —— 学生做的自己收掉（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.4 节）：学生拉的括号、连的线头上的 ✕ ——
+// —— 学生做的自己收掉：学生拉的括号、连的线头上的 ✕ ——
 // 老师画的不带 ✕，收不了；开着 mark 才收得了括号、开着 refer 才收得了线（gestures.js 的 closeAct 照 open 的那一项找 close）
 
 // 点括号上的 ✕（{ mark: 括号的 id }）：unmark 这道括号的词（拆散了的照样写得出：unmark s.2 s.8-9）

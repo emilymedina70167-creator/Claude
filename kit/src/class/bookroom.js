@@ -1,6 +1,6 @@
 // 整份说明还剩多少地方给教材原文（books/textbook.js 的 textbookForClass 的 room）。纯函数，有测试（tests/books-preload.test.js）。
 // 先按原来的放法拼一份说明，量出离 SYSTEM_MAX、离资料包预算还差多少，再把这一块所在的整章往里补到差不多满：
-// 每调一次 textbook_read 平台多跑一整轮（多等 10 秒以上），说明长到 160 KiB 出第一个字的时间却看不出变化（docs/talk-plan.md 的测速）。
+// 每调一次 textbook_read 平台多跑一整轮（多等 10 秒以上），说明长到 160 KiB 出第一个字的时间却看不出变化。
 // 补的是资料包里「教材原文」那一节，别的部分（组件说明、记忆、黑板现状）一个字不少；资料包整份仍在预算里，packText 不会截。
 import { buildSystem, packText, PACK_BUDGET, SYSTEM_MAX } from './prompt.js';
 

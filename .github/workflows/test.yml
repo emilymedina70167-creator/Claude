@@ -1,5 +1,5 @@
 # 每次推送、每个合并请求：跑单元测试，再确认提交的 kit/dist/la-kit.js 和源码一致
-#（改了 kit/src/ 或 CLAUDE-PROJECT.md 第三节却忘了重新 build，这里会红）
+#（改了 kit/src/ 或 kit/components.md 却忘了重新 build，这里会红）
 name: 测试
 
 on:

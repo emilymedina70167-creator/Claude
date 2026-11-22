@@ -1,0 +1,3146 @@
+# 学习台的组件参考
+
+> 版本：2026-11-22e
+
+黑板上能放的每一种组件的写法。构建时整份打包进 `la-kit.js`（`kit/build-docs.js` 截取、`kit/src/subject.js` 按科目和组件名取用），页面里的 Claude 按需取，组件写错时页面附上它认的写法。小节标题下的 `<!-- 科目：… -->` 标出这一节给哪门课，`<!-- 完整写法 -->` 以后是不常用的写法。版本号每次发布学习台前改新（同一天加 b、c），构建时打进 `LAKit.version`。
+
+## 组件参考
+
+组件就是带特定语言名的代码块。块里每行写一个 `字段: 值`，下一行没有字段名就算续行。公式用 `$...$` 和 `$$...$$`。
+
+**关卡**：`answer`、`predict`、`conjecture`、`practice`、`quiz`、`steps`、`recognize`、`findbug`、带 `goal` 的 `scene`，完成后才能继续（guided 课件）。其余组件不拦人。实时黑板里没有关卡。
+
+**科目**：课件开头的 front matter 写 `subject:`（`线代`、`数据结构`、`操作系统`、`组成原理`、`计网`、`英语`，不写就是线代）。下面有的小节标题底下写着 `<!-- 科目：… -->`，说明这一节只给那几门课用；没写的是通用的。课堂模式里，课堂 Claude 只拿到「通用 + 这门课」的那几节（每一轮的说明有长度上限），所以计算机课的课堂一定要写 `subject:`。
+
+### 表达式（所有组件通用）
+
+**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（弧度；scene、space 里角度）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。矩阵：`tr`（迹）`rank`（秩）`rref`（行最简形）`diag(1, 2, 3)`（对角矩阵）、`I(3)` 也可以写成 `E(3)`（教材的记号；只写 `I`、`E` 是 2 阶）。`dec(x, 2)` 把数四舍五入写成小数（`\calc{dec(61/4)}` 写出 15.25，默认 2 位，末尾的 0 不写），只能直接写出来、不能再算。
+
+**向量都是列向量**，转置的规则处处一样：`a'` 是 1×n 的行，`a'*b` 是一个数（内积，也可以写 `dot(a, b)`），`a*b'` 是 n×n 矩阵（外积），`A*a` 是矩阵乘列向量。两个向量直接写 `a*b` 会报错，免得分不清是内积还是外积。
+
+计算机课还有进制、取模、位运算（见下一节）。
+
+### 表达式（概率统计：分布的函数）
+
+<!-- 科目：高数 概率 -->
+
+分布函数、分位数、别的分布（图、读数、`\calc`、答案里都能写，算出来是小数）：`norminv(p, μ, σ)` `binomcdf(k, n, p)` `poissoncdf(k, λ)` `geompmf(k, p)`（第 k 次才首次成功）`hyperpmf(k, N, M, n)`（N 件里 M 件次品，取 n 件，恰 k 件次品）`expcdf(x, λ)` `unifcdf(x, a, b)`；三大抽样分布 `chi2pdf(x, n)` `chi2cdf` `chi2inv(p, n)`、`tpdf(x, n)` `tcdf` `tinv(p, n)`、`fpdf(x, m, n)` `fcdf` `finv(p, m, n)`；`gamma(x)` `beta(a, b)`。`…inv` 是下侧分位数：上 α 分位点写 `chi2inv(1 - α, n)`、`norminv(1 - α)`。
+
+### 表达式（计算机课：进制、取模、位运算）
+
+<!-- 科目：数据结构 操作系统 组成原理 计网 -->
+
+`0x1F`、`0b1010_0011`（二进制、十六进制，可以用 `_` 分组）；`mod(a, b)`（结果和 b 同号）、`div(a, b)`（向下取整的整除）、`log2(x)`、`gcd` `lcm`；位运算 `and(a, b)` `or` `xor` `not(a, 位数)` `shl(a, k)` `shr(a, k)`（逻辑移位）`bit(a, i)`（第 i 位，从 0 数）；`signed(x, 8)`（把 8 位的位串当补码读，`signed(0xFF, 8)` 是 −1）、`unsigned(-1, 8)`（写成 8 位无符号数，255）。位运算只对非负整数，负数先用 `unsigned`。`bin(x, 8)`、`hex(x, 4)` 把数写成 8 位二进制、4 位十六进制（负数写成补码，四位一组用等宽字体），只能直接写出来（`\calc{bin(x, 8)}`），不能再拿去算。精确计算用的是大整数，64 位地址也不会丢精度。
+
+### scene：可交互的图（描述式，不写代码）
+
+<!-- 科目：线代 高数 概率 -->
+
+```scene
+title: 让 Ax 命中目标
+q: 拖动 $\mathbf x$，让 $A\mathbf x$ 落到目标点 $(3, 5)$。
+let A = [[2, -1], [1, 3]]
+let x = [1, 0] drag
+grid A faint
+point [3, 5] color=green label=目标
+vector col(A, 1) color=blue label=a1 thin
+vector x color=gray label=x
+vector A*x color=green label=Ax
+show $\mathbf x = {x}$，$A\mathbf x = {A*x}$
+goal A*x = [3, 5] msg="命中！"
+```
+
+字段：`title`、`q`（图上方的说明）、`note`（侧栏备注）、`range`（坐标范围，默认自动）。
+
+命令（每行一条，按顺序画）：
+
+| 命令 | 作用 |
+|---|---|
+| `let 名字 = 表达式` | 定义变量。加 `drag` 表示可以拖动（必须是二维向量的初始值），可选 `snap=0.5` |
+| `slider 名字 最小 最大 = 初值` | 滑块。可选 `step=0.5`、`label="x₁"`、`play`（加播放按钮，从最小值动到最大值） |
+| `vector 表达式` | 从原点出发的箭头。`from 表达式` 指定起点（首尾相接）。可选 `color=`、`label=`、`dashed`、`thin`、`width=` |
+| `point 表达式, …` | 点。可选 `color=`、`label=` |
+| `segment P, Q` | 线段（`dashed` 为虚线） |
+| `line P dir d` | 过点 P、方向 d 的直线（`dashed` 为虚线） |
+| `span u, v` | 张成空间：一条线，或者整个平面（自动判断） |
+| `grid M` | 被 2×2 矩阵 M 变换后的网格（`faint` 更淡）。动画：配合 `slider t 0 1 = 0 play` 写 `grid lerp(I, A, t)` |
+| `area u, v` | u、v 张成的平行四边形（行列式面积，负的显示为红色） |
+| `decomp v, b1, b2` | 把 v 沿基 b1、b2 分解：两段首尾相接（c₁b₁ 再接 c₂b₂），平行四边形虚线；坐标用 `coords(v, b1, b2)` 写进 `show`、`goal` |
+| `show 文本` | 侧栏读数，`{表达式}` 会换成当前值，可以写在公式里 |
+| `goal 表达式 = 目标` | 达成后显示 `msg="…"` 并完成关卡（容差 `tol=0.05`） |
+
+修饰词 `after` / `before`：只在 `predict` 揭晓之后 / 之前显示。`from=k` / `until=k`：图绑定了 `steps`（写 `link:`）时，揭开到第 k 步起 / 为止才显示，见下文 `steps`。标签末尾的数字自动变下标（`a1` → a₁）。
+
+还有 `polygon`、`text`、`curve`（参数曲线、单位圆的像）、`eigen`（特征方向）、`conic A = 3`（二次曲线 $\mathbf x^{\mathsf T}A\mathbf x=3$）。
+
+<!-- 完整写法 -->
+
+颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
+
+| 命令 | 作用 |
+|---|---|
+| `polygon P, Q, R, …` | 多边形 |
+| `text "文字" at 点` | 文字 |
+| `curve 表达式 for s 0 360` | 参数曲线：s 从 0 走到 360，画出点的轨迹。单位圆的像：`curve A*[cos(s), sin(s)]`（省略 `for` 时默认 `s 0 360`） |
+| `eigen A` | 画出 2×2 矩阵 A 的特征向量方向（虚线）并标上 λ；没有实特征值时注明「会转」 |
+| `conic A = c` | 二次曲线 $\mathbf x^{\mathsf T}A\mathbf x=c$（A 对称；不写 `= c` 是 1）：页面按特征值认出是椭圆、双曲线、平行 / 相交直线，标上名字；`axes` 把主轴（特征向量方向）画成虚线 |
+
+### predict：先猜，再揭晓
+
+<!-- 科目：线代 高数 概率 -->
+
+```predict
+title: 先猜：A 把 (1, 1) 送到哪里？
+q: 不要计算，拖动紫色圆点到你认为 $A\mathbf x$ 所在的位置。
+let A = [[2, -1], [1, 3]]
+grid lerp(I, A, t) after
+vector col(A, 1) color=blue label=a1
+vector [1, 1] color=gray dashed label=x before
+vector A*[1, 1] color=green label=Ax after
+answer: A*[1, 1]
+explain: $(1,1) = \hat\imath + \hat\jmath$，所以 $A\mathbf x = \mathbf a_1 + \mathbf a_2$。
+```
+
+与 `scene` 写法相同，另加 `answer:`（正确位置的表达式）、`explain:`、`tol:`（算「猜得准」的距离，默认 0.3）。揭晓时变量 `t` 从 0 动到 1，可以用来做动画。
+
+### answer：自己算、自己填，自动判分
+
+```answer
+title: 算一算
+q: 计算 $A\begin{bmatrix}1\\2\end{bmatrix}$，其中 $A = \begin{bmatrix}2&-1\\1&3\end{bmatrix}$。
+let A = [[2, -1], [1, 3]]
+answer: A*[1, 2]
+before: A\begin{bmatrix}1\\2\end{bmatrix} =
+hint: 第一个分量是第一行和 $(1,2)$ 的点积。
+explain: 第一行 $2\cdot1 + (-1)\cdot2 = 0$，第二行 $1\cdot1 + 3\cdot2 = 7$。
+```
+
+- `answer` 可以是数、向量、矩阵或表达式（可以引用块里 `let` 定义的变量）。输入框的形状按答案自动生成。我可以填整数、小数或分数。
+- **`type: seq`：答案是一个序列**（遍历序列、调度顺序、出栈序列、缺页的页号……）。`answer:` 直接写序列原文：`answer: A B D E C`，几种都对时用 `|` 隔开（`answer: 1 2 3 4 | 1 3 2 4`）。我用空格、逗号或箭头隔开写，元素都是单个字符时也可以连着写（`ABDEC`）；大小写不管。判错时告诉我前几个对、哪几个位置不对，不说应该是什么。
+- **`type: num`：答案是一个数，除不尽的可以写小数**（平均周转时间、ASL、有效访问时间）：`answer: 61/4`；我写 `61/4`、`15.25` 都对，写到两位以上的小数四舍五入对得上也算对（`2.67` 对 `8/3`），只写一位不算。
+- `before:` / `after:`：输入框左边、右边的 TeX。
+- 检查三次没对出「看答案」；同一个错答案连着再点检查不算新的一次（所有判对错的组件都是这样）。
+- 可以「截图作答」：我手写后粘贴截图，Claude 读出答案填进格子（所以 `q` 要把题目写完整）。
+
+<!-- 完整写法 -->
+
+- 「截图作答」：我在 Notability 里手写，圈选「拷贝」（或者用系统截图「拷贝并删除」），回到作答框下面的粘贴框长按粘贴；Claude 读出最终答案填进格子，我核对后自己点「检查」。它认出的解答过程会进学习记录（「过程（手写转写）」），请据此找我错在哪一步。所以 `answer` 的 `q` 要把题目写完整，Claude 读手写时只看得到 `q`。页面上的「✎ 手写作答」暂时关掉了。
+
+### answer 的计算机写法：二进制、十六进制
+
+<!-- 科目：数据结构 操作系统 组成原理 计网 -->
+
+- **`type: bin` / `type: hex`：答案是一串二进制 / 十六进制位**（补码、移码、IEEE 754、地址、掩码……）。`answer:` 是表达式，页面精确地算（`answer: unsigned(-5, 8)`、`answer: 0x8000_0000 + 4*k`，也可以直接写 `bin(…)`、`hex(…)`）。`width: 8` 要求写满 8 位（前导 0、补码的位数都算），不写就只比数值。我写的时候可以带 `0x` / `H`、`0b` / `B`，可以空格分组；判错时标出是从左数第几位不对。
+
+<!-- 完整写法 -->
+
+- `formula:`（答案是式子）计算机课也能用：`answer: n*(n-1)/2`、`formula: n`（比较次数、结点数、时间复杂度的式子），变量也可以叫 `t`、`k`（`formula: t` 行）；写法见线代那一节。
+
+### answer 的线代写法：基、特征向量、含 n 的式子
+
+<!-- 科目：线代 -->
+
+- `type: basis`：答案是一组基，写成 `[[向量1], [向量2]]`。只要我给的向量个数对、线性无关、张成同一个空间就算对。
+- `type: eigvec`：答案是一个方向，差一个非零倍数也算对。
+- **`formula: n`：答案是含 $n$ 的式子。**`answer:` 写标准答案的表达式（比如 `3^(n-1)*A`，里面的量用 `let` 定义），我在框里写式子（`3^(n-1)A`、`3ⁿ⁻¹A` 这类省略乘号、上标的写法都认，框下面实时写成公式；小键盘上有 $n$、$A$、括号、乘方）。页面代 $n=1,\dots,6$ 进去和标准答案比，等价的写法都算对；不对时告诉我在哪个 $n$ 上对不上、我的式子得多少、应该是多少。直接写 $A^n$ 这种没化简的不算。也可以 `formula: λ`（特征多项式）。
+- **`check:`：答案不唯一时按条件判**（特解、基础解系的某种取法、把 $A$ 对角化的 $P$、正交矩阵 $Q$、可逆变换 $C$……）。`answer:` 仍然写一个对的答案（决定输入框的形状，「看答案」时显示它；页面先拿它验一遍条件，不满足会报）；`check:` 写条件，`ans` 是我填的，一行一个或用 `;` 隔开，`=> 提示` 是这一条不满足时告诉我的话。例：`check: A*ans == b => 代回去不等于 b`、`check: ans'*ans == E(3)`（正交矩阵）。
+- 格子里可以写根号：`1/√2`、`√3/2`、`-2/√6`（小键盘上有 √），正交矩阵、单位向量的题直接写。
+- **含参数的计算**：`let` 块里写 `a = param`（`lambda = param` 也行），之后 `\calc` 按 $a$ 精确地算：`\calc{det(A)}`、`\calc{factor(det(A))}`（写成 $-(a+2)(a-1)^2$）、`\calc{factor(det(lambda*E(3) - A))}`（特征多项式）、`A*A`、`tr`；不能除以含参数的式子、不能求逆。演示组件照样用：`elim` 写 `matrix: \calc{A}` 配 `param: a`。
+- 还有 `formula: n` 按格写的矩阵答案、`form:`（要求写成 kA / 因式分解）、`ans(编号)`（引用前面那道题的答案）：见完整写法。
+- **`type: interval`：一个数集**（含参讨论）：`answer: a != 1 且 a != -2`。我写区间 `(-∞, 1) ∪ (2, +∞)`、不等式 `a < 1 或 a > 2`、`a ≠ 1，a ≠ -2`、几个值 `{1, -2}`、`R`、`∅` 都认，集合一样就对；不对时只说在哪个数上不一样。**`type: equation`**：线性方程（组），`answer: x + y + z = 1`（几个用 `;`），同一个解集就对（同乘一个数、移项都算）。
+
+<!-- 完整写法 -->
+
+- `formula: n` 的答案按格写成矩阵（`answer: [[2^n, n*2^(n-1)], [0, 2^n]]`）时，作答框每格一个式子框，逐格判、指出哪一格不对。
+- **`form:` 要求写成什么样**（值对了以后再看写法）：`form: kA`（一个数 × 矩阵名：`answer: 3^9*A`、`formula: -`（没有变量），写乘开的矩阵或 `A^10` 都不算）、`form: factored`（因式分解：`answer: det(A)`、`formula: a`，展开的多项式不算）。
+- **引用前面的答案 `ans(编号)`**：`check:`、`answer:` 里写 `ans(q-P)`，用我在 `id: q-P` 那道题写的答案（还没做就用它的标准答案）：`answer: inv(ans(q-P))*A*ans(q-P)`，我前面选的 $P$ 不一样，这题照样按我的判。
+
+`check:` 的完整例子：
+
+```answer
+q: 求 $A\mathbf x=\mathbf b$ 的一个解。
+let A = [[1, 1, 1], [2, 2, 2]]
+let b = [1, 2]
+answer: [1, 0, 0]
+check: A*ans == b => 代回去，$A\mathbf x$ 不等于 $\mathbf b$
+```
+
+正交矩阵：`check: ans'*ans == E(3) => 列不是两两正交的单位向量`；对角化：`check: det(ans) != 0; inv(ans)*A*ans == [[2,0],[0,-1]]`。条件里比的是数值（误差 $10^{-6}$）。
+
+`formula:` 的范围可以改：`formula: n=0..5`；几个变量：`formula: n, k`；别的变量也行：特征多项式写 `formula: λ`、`answer: (λ-1)(λ-2)^2`（展开、因式分解的写法都认）。
+
+### answer 的高数写法：函数式、导数、积分、极限、泰勒
+
+<!-- 科目：高数 概率 -->
+
+```answer
+id: q-int
+q: 求 $\int x e^x\,dx$。
+answer: x*e^x - e^x
+calc: antideriv of=x*e^x
+```
+
+- 三角函数一律**弧度**（`answer`、`\calc`、`let`、`graph`、`derive`、`practice`、检验题都是；`scene`、`space` 的图形命令里是角度，`rot(角度)` 是角度）。
+- 我能写的函数：`sin cos tan cot sec csc arcsin arccos arctan ln lg exp sqrt abs`，`log_2 x`（底数）、`e^x`、`e^{2x}`、`π`、`|x|`、`n!`、`C(n, k)`、`Φ(x)`（标准正态分布函数）、`φ(x)`（标准正态密度）。不带括号的函数吃后面的「系数 + 一个名字（带它的指数）」：`sin 2x` 是 $\sin(2x)$，`sin x^2` 是 $\sin(x^2)$，`sinx/x` 是 $\sin(x)/x$，`sin^2 x`、`sin^2x` 是 $(\sin x)^2$，`cos^3 2x` 是 $(\cos 2x)^3$；后面紧跟 `√` 或另一个函数的，参数就是那一个（`sin√x`、`ln ln x`）；`x^2e^x` 是 $x^2e^x$（指数到数字为止）；框下面的预览里函数的参数一律带括号。读不准的不读、照实说：`e^2x`（「写 e^(2x) 或 e^2·x」）、`sin xy`、没写底数的 `log x`、`sin^-1 x`、嵌套的 `||x|-1|`、双阶乘 `!!`。题里自己定义了 `e`、`C`、`φ` 的，照题里的。
+- 外部写的 `answer:`、`of=`、`let` 照表达式的写法（乘号写 `*`）；函数也多了上面这些。
+- **函数式作答**：`formula: x`（变量叫 `x`、`y` 时按实数取点），或者写范围 `formula: x in (0, 1)`、`domain: x in (0, inf)`；别的名字（`n`、`λ`、`t`）照旧整数 1…6；题里用到矩阵、答案里有 `fact` `choose` `mod` 这类整数的函数、或者在 $(-3,3)$ 上取不到点时，`x` 也照旧整数。页面在范围里随机取点比值：没写范围取 $(-3, 3)$；$(a, +\infty)$ 取 $a + 10^{u}$、$u\in(-2, 1.5)$；同一道题每次取的点一样；答案在那一点没定义、不是有限数、绝对值超过 $10^8$ 的点跳过，接着取到 16 个有效点（最多试 200 个），不到 6 个是「页面判不了」；误差 $10^{-7}$（相对）；答案有定义、我的式子没定义的点算错（$(-3,3)$ 上 `ln x` 不是 `ln|x|`，写 `domain: x in (0, 3)` 就对）。
+- **`calc:` 一行就够**（不用再配 `formula:`），页面自己核你写的 `answer:`，对不上报写法错误，页面核不了的只在预检里提醒：
+
+| `calc:` | 我写 | 页面怎么判 |
+|---|---|---|
+| `deriv of=f`（`order=2`、`wrt=y`、`wrt=x,y`） | 导数的式子（不能写 `'`：要算出来） | 和 `answer:` 实数取点比；加 `at=2` 是这一点的导数，我写一个数 |
+| `deriv of=f order=n`（可加 `at=0`） | 含 n、x 的通式 | n = 1…5 各求一次导数比 |
+| `antideriv of=f`（`C=need` 默认 / `any` / `no`） | 原函数，`+C`、`+c`、`+C_1` 都认 | 和 `answer:` 差一个常数就对；`need` 时少了 +C 判错，说「少写了 +C」 |
+| `integral of=f from=0 to=inf` | 一个数，或 `发散` | 和 `answer:` 比 |
+| `limit of=f at=0`（单侧 `at=0+` / `0-`，或 `side=+`；`at=inf` / `+inf` / `-inf`） | 一个数，或 `∞` `+∞` `-∞` `不存在` | 和 `answer:` 比 |
+| `equiv of=f at=0` | g（x→0 时和 f 等价） | f/g 的极限是 1 就对 |
+| `order of=f at=0` | 一个数（可以是 `3/2`） | 和 `answer:` 比 |
+| `taylor of=f at=0 order=3` | 多项式（`+o(x^3)` 认了扔掉） | 一项项比系数，说哪一项错 |
+| `integral2 of=f x=0..1 y=0..x`（内层上下限能含 x） | 一个数 | 和 `answer:` 比（页面算的二重积分只用来核你的答案） |
+| `sum of=x^n/n n=1..inf`（配 `formula: x in (-0.8, 0.8)`） | 和函数；没有 x 时写一个数 | 和 `answer:` 比（页面在取的点上直接加到项 $<10^{-14}$ 或 5000 项，核你的答案） |
+| `ode eq=y''-3y'+2y=0`（`order=` 不写就数 y 后面几撇） | 通解，常数写 `C_1`、`C_2`（一个常数时 `C`） | 随机取几组常数代进方程，残差 ≈ 0；常数要够阶数个、而且独立。常数换写法（$C e^{x+1}$）也对。特解照 `formula: x` 判 |
+
+- 极限：`at=inf` 是 $|x|\to\infty$（两侧都算），`+inf`、`-inf` 是单侧。`answer:` 写 `inf`（无符号 ∞）、`+inf`、`-inf`、`不存在`。答案是 +∞ 时我写 ∞ 也对（提一句「写 +∞ 更准确」）；答案是 ∞ 时我写不存在也对（提一句「更准确是 ∞」）。`of=` 里只有 `n` 是数列极限，按 $n\to+\infty$ 核；有 `!`、`(-1)^n` 的页面核不了。
+- 答案是 $e^2$、$\pi/4$ 这种数：`formula: -`（没有变量的式子作答），我写 `e^2`、`π/4`。
+- 页面判不了的一律写「？页面判不了，待外部核」，记录里 `ok: null`，不算对也不算错。
+- 变限积分：`answer:`、`of=` 里写 `int(sin(t^2), t, 0, x)`（被积函数、积分变量、下限、上限），我写 `∫_0^x sin(t^2) dt`；求值用数值积分，求导用变上限求导公式（被积函数里有 x 的求不了导）。
+- 检验题（`board check`）的 construct 式子、discriminate 的 `result`、locate 的 `fix` 能写函数式：x、y 在 $(-3, 3)$ 上取点比。
+
+<!-- 完整写法 -->
+
+怎么核的：导数用符号求导（链式法则，每个初等函数一条），泰勒系数是 $f^{(k)}(a)/k!$ 再找回分数（系数不是有理数的展开页面判不了：自检报错）。极限：每一侧取两组步长 $h = 0.2\cdot 2^{-k}$（$k=0\dots14$）和 $0.2\cdot 3^{-k}$（$k=0\dots8$），各外推到 $h=0$，两组都收敛（估计误差 $\le 10^{-6}$）而且对得上才算这个数；一直变大、超过开头一千倍的是 ±∞；两侧一侧 +∞ 一侧 −∞ 是 ∞，两侧不同的数、一侧无穷一侧有限是不存在。振荡的（$\sin\frac1x$）、不是 $h$ 的幂级数的（$x\ln x$、$x^x$ 在 $0^+$、$x^{1/x}$ 在 $+\infty$）页面判不了。阶：解析的看第一个不为 0 的泰勒系数，不然看 $\log|f(h)|/\log h$ 的斜率（差 0.05 以内）。积分：自适应 Gauss–Kronrod（15 点），误差 $10^{-10}$，最多 2000 段，不收敛的判不了；无穷限换 $x = a + t/(1-t)$。页面上一道题的自检最多 50 ms，超了不核；外部预检 `node tools/ext-check.mjs --next 一轮.txt --lint` 完整地核（上限 2 s）。
+
+泰勒、极限的例子：
+
+```answer
+id: q-lim
+q: 求 $\lim\limits_{x\to0}\dfrac{\tan x-\sin x}{x^3}$。
+answer: 1/2
+calc: limit of=(tan(x)-sin(x))/x^3 at=0
+```
+
+```answer
+id: q-taylor
+q: 把 $\ln(1+x)$ 展开到 $x^3$。
+answer: x - x^2/2 + x^3/3
+calc: taylor of=ln(1+x) at=0 order=3
+```
+
+概率：`answer:` 里能用 `normpdf(x, μ, σ)`、`normcdf`、`binompmf(k, n, p)`、`poissonpmf(k, λ)`、`exppdf(x, λ)`、`unifpdf(x, a, b)`、`Phi`、`phi`；我写 `Φ(1.96)`、`C(5,2)0.3^2 0.7^3` 这类。
+
+### conjecture：说出你的发现（由页面里的 Claude 批改；`grade: off` 只记录不批改）
+
+```conjecture
+title: 你发现了什么？
+q: 把你算出的两个结果和矩阵 $A$ 对比，你注意到什么？为什么？
+rubric: 要点 (1) $A\hat\imath$ 是第一列、$A\hat\jmath$ 是第二列；(2) 原因：另一列的元素都乘了 0。只说出 (1) 算部分正确。
+answer: $A\hat\imath$ 就是第一列……（参考答案，批改后或没有 Claude 时给我看）
+placeholder: 我发现……
+```
+
+页面里的 Claude 会按 `rubric` 给出「正确 / 部分正确 / 不正确」、具体反馈和一个追问，我可以修改后再交。
+
+我也可以粘贴手写截图，Claude 转写进文本框。没有调用权限时，改为显示参考答案，由我自评。
+
+<!-- 完整写法 -->
+
+我也可以在 Notability 里手写，圈选「拷贝」后粘贴进下面的粘贴框：Claude 把手写内容转写进文本框，我核对后再提交。学习记录里会注明「手写截图转写」。没有调用权限时，改为显示参考答案，由我自评。
+
+### practice：程序出题、程序判分
+
+```practice
+type: matvec, columns
+count: 4
+level: 1
+```
+
+`count` 是需要答对的题数，答够才能继续，之后也可以一直练下去。`level: 2` 出更大的数。内置题型见下面两小节（每门课各有几种）；更常用的是自定义题型。
+
+**自定义题型 `type: custom`：你写出题模板，页面一直随机出新题、精确判分。**练熟一个方法时用它，不用自己一道道出题：
+
+```practice
+id: pr-rank1
+title: 秩一矩阵的幂
+type: custom
+count: 3
+pick a = int(-3, 3) nonzero
+pick c = int(1, 3)
+let A = [[c, 1], [a*c, a]]
+where tr(A) != 0
+where abs(tr(A)) <= 4
+q: 设 $A=\calc{A}$，求 $A^{3}$。
+answer: A^3
+before: A^3 =
+hint: 两行成比例，$A$ 的秩是 1：$A^3=(\operatorname{tr}A)^2A$。
+explain: $\operatorname{tr}A=\calc{tr(A)}$，所以 $A^3=\calc{A^3}$。
+```
+
+- `pick 名字 = int(最小, 最大)`：随机取整数，后面加 `nonzero` 不取 0；还有 `choice` `vec` `mat`（见完整写法）。
+- `let 名字 = 表达式`：由取到的数算出来的量。`where 条件`：一行一个，不满足就重取（比如 `where det(A) != 0`、`where abs(tr(A)) <= 4`），用来保证数字干净、题目有意义。
+- `q:`、`hint:`、`explain:`、`before:` 里用 `\calc{…}` 写出这一题的数；`answer:` 是答案的表达式，可以是数、向量、矩阵，也可以配 `formula: n` 让我写式子。`check: basis` / `check: eigvec` / `check: bin` / `check: hex`（配 `width:`）同 `answer` 的 `type`。
+
+<!-- 完整写法 -->
+
+- 发布时页面先取十几组数试一遍：算不出来、条件取不到都会报出来。
+
+需要新的内置题型时告诉我，我会去 GitHub 上让人加。
+- 取数的其他写法：`choice(2, 1/2, -3)`（从几个值里挑）、`vec(3, -2, 2)`（3 维随机整数向量，分量在 −2 到 2）、`mat(2, 2, -3, 3)`（2×2 随机整数矩阵，元素在 −3 到 3）。
+- `int()` 的上下界可以用前面取过的数：`pick b = int(a + 1, 9)`。`n`、`E`、`I` 都是普通的名字，可以 `pick n = int(3, 6)`、`let E = …`（阶码；单独写 `E` 就是它，`E(3)` 照样是单位矩阵）；只有配了 `formula: n`（答案是含 n 的式子）时不能再取一个叫 n 的数。
+
+### practice 的 use：演示组件当练习题
+
+<!-- 科目：数据结构 操作系统 组成原理 计网 -->
+
+**演示组件当练习题 `use: 组件名`**：页面每一题换一组数，判分、错法诊断用那个演示组件。只写 `use: hamming`（还有 `crc` `mul` `div` `fadd` `frag` `kmp` `huffman` `sort` `paging` `sched` `subnet` `bsearch`）用内置的出题，`level: 2` 更难；同名字段照你写的（`use: paging` 配 `algo: lru`）。别的组件、别的出法：照自定义题型写 `pick`，下面接组件的字段，用 `\calc{…}` 写取到的数：
+
+```practice
+use: avl
+pick v = seq(6, 1, 30) distinct
+avl: \calc{list(v)}
+ask: rotate
+```
+
+<!-- 完整写法 -->
+
+- `use:` 的细节：没写 `mode:` 也没写 `ask:` 就是 `mode: quiz`；`mode: fill`、`ask:` 照组件的写法（`mode: do` 不行）。这一组数正好问不到（插了几个数都没失衡，就没有 `rotate`）时页面自己换一组。作答记录照那个组件的写，题目后面带着这一题取的数（`（v=7 3 12 …）`）。`frames` 没有可以换的数，用 `type: custom`。
+- 计算机课的取数：`bits(4)`（一串 0/1，`nonzero` 不全是 0，写出来就是 `1011`）、`seq(8, 0, 5)`（8 个数，`distinct` 不重复）、`word(fifo, lru, opt)`（挑一个词：算法名、方向）、`str(7, ab)`（用 a、b 拼 7 个字母：KMP 的模式串）。写进字段：向量用 `\calc{list(v)}`（写成 `7 0 1 2`），带正负号的二进制真值用 `\calc{sbin(x, 4)}`（`sbin(-13/16, 4)` 是 `-0.1101`，`sbin(-3, 3)` 是 `-011`），`bin(g)` 是不带符号的。向量的小工具：`el(v, 2)`（第 2 个，从 1 数）、`sort(v)`、`sum(v)`、`cumsum(v)`（前缀和：到达时间）。
+- **算法函数**（用演示组件的引擎算，和画面一样）：`next(p)`、`nextval(p)`（模式串）、`faults(v, 3, lru)`、`victims(v, 3, fifo)`（页面引用串、块数、算法）、`wpl(w)`（哈夫曼）；`same(a, b)` 一样是 1。最有用的是 `where`：只出**能分开对错两种想法**的题，比如 `where same(victims(v, 3, lru), victims(v, 3, fifo)) == 0`（LRU 和 FIFO 换出的不一样，按 FIFO 做一定对不上）、`where same(next(p), nextval(p)) == 0`（照抄 next 一定错）。内置的 `paging`、`kmp`（level 2）已经这样取数。`\calc{list(nextval(p))}` 也能写在题面、解析里。
+
+### practice 的内置题型（线代）
+
+<!-- 科目：线代 -->
+
+两组，组内可以混着出（`type: det3, inverse, eigen`），两组不能写在同一个 `practice` 里：
+
+- `matvec` `columns` `combo` `det2` `matmul` `nullspace`
+- `det3` `inverse` `rank` `eigen` `eigvec` `quadform`（考研口径的「好算的数」，`level: 2` 更难）
+
+<!-- 完整写法 -->
+
+- `matvec`（计算 $A\mathbf x$）、`columns`（已知基向量的去向，写出矩阵）、`combo`（已知 $A\mathbf x$ 是列的某个组合，求 $\mathbf x$）、`det2`（2×2 行列式）、`matmul`（矩阵乘法）、`nullspace`（3×3 矩阵零空间的一组基）。
+- `det3`（三阶行列式，`level: 2` 四阶）、`inverse`（二阶逆矩阵，`level: 2` 三阶、逆是整数）、`rank`（秩，`level: 2` 是 4×5）、`eigen`（特征值，都是整数，从小到大写）、`eigvec`（给出特征值求特征向量，差倍数也对）、`quadform`（写出二次型的矩阵，交叉项要除以 2；`level: 2` 四元）。
+
+### practice 的内置题型（数据结构）
+
+<!-- 科目：数据结构 -->
+
+`shellpass`（给增量 $d$，写出一趟希尔排序后的序列，`level: 2` 更长）、`shellgroup`（给表长、增量和一个位置，写出它所在子表的全部位置）。
+
+### quiz：选择题 / 填空题
+
+```quiz
+q: 若 $\det A = 0$，下列哪项一定成立？
+- [ ] $A$ 可逆
+- [x] $A\mathbf x = \mathbf 0$ 有非零解
+explain: $\det A = 0 \iff A$ 不可逆 $\iff$ 零空间非平凡。
+```
+
+多个 `[x]` 就是多选题。填空题写 `answer: 2`，数字按数值比较，多个可接受的答案用 `|` 分隔。
+
+### solve：解答题，按步骤判
+
+```solve
+id: p1
+q: 设 $A=\begin{bmatrix}1&1\\0&1\end{bmatrix}$，求 $A^n$。
+steps:
+s1 setup: 写成 A = E + B，B = [[0,1],[0,0]]
+s2 rule: B² = O，E 和 B 可交换，用二项式定理
+s3 calc: A^n = E + nB
+s4 conclude: A^n = [[1,n],[0,1]]
+```
+
+- 我在纸上写过程，打字或交照片交整道题（照片照截图入口的规矩：外部的课默认关，`board set upload=on` 或组件写 `upload: on` 才有）。参考步骤判完才给我看。
+- `steps:` 一行一步 `编号 kind: 内容`，kind 是 `setup`（设、列式）`rule`（用规则）`calc`（计算）`conclude`（结论）；也可以写一行 JSON `steps: [{"id":"s1","kind":"setup","text":"…"}]`。
+- 谁来判 `judge:`：`ext`（外部的课默认：外部看 `ext_out` 里的字和照片编号，写 `board judge`）、`claude`（别的课默认：页面里的老师判；外部的课里要配 `board claude … can: judge`）、`none`（只收不判）。判法见第四节 `judge`。
+
+<!-- 完整写法 -->
+
+- 交上来的那一下记成作答 `type: solve`（`value` 是打的字，`photos` 是照片的 asset 编号）；判了以后另一条 `judged: true, steps: [{ id, ok: true | false | "missing" | null, unsure, why, tag }]`（`ok: null` 加 `unsure: true` 是判的人拿不准、待核；只有 `ok: null` 是没判），`ok` 是整道题对不对。刷新以后打的字和判定都放回来。
+- `solve`、`board judge`、证据里的 `steps` 这几样的写法和字段名是定下来的，以后的探题也照它们用。
+
+### recall、construct、claim、discriminate、locate：检验题（二类，学完以后的吸收检验）
+
+<!-- 科目：线代 高数 概率 -->
+
+五种探题和 `solve` 只在 `board check`里能作答，单独写在板上只画预览；字段在完整写法里。
+
+<!-- 完整写法 -->
+
+合书、第一次作答算数、没有提示和「看答案」，错了显示你写的补讲再出一道同构题。每道题都要写 `target`（打的哪个典型错法）、`level`，必做题至少 2 道 `retry`、至少 1 条 `teach`。
+
+共用的字段：
+
+| 字段 | 意思 |
+|---|---|
+| `id` | 这一次检验里唯一 |
+| `q` | 题面（Markdown，可以有 `$公式$`）；claim 的命题写 `claim:` |
+| `target` | 打的是哪个典型错法：错题、误解的编号或一句话 |
+| `level` | `基础` / `方法` / `核心` |
+| `facet` | 测吸收的哪一面：`重建` / `能用` / `边界` / `能辨`。不写按题型：recall 重建、construct 能用、claim 边界、solve 能用、discriminate 能辨、locate 能辨 |
+| `teach 键: 话` | 判出这一项没过时显示的一两句。键是没过的那一项：`if2`、`m1`、`s3`、`tag=规则用错`、`truth`、`can`、`line`、`fix`、`result`、`giveup`（想不出来）、`default`（兜底）。先按编号找，再按 tag，最后 default；都没有时页面里的 Claude 写 |
+| `retry` | 同构小题的 id（写在同一个 `board check` 块里、同一种题型），按先后用；带 `pick` 的模板能写两次、能写这道题自己（见下面「换数的模板」） |
+| `family` | 同类的键，复测按它挑没见过的题；不写是 `块/target` |
+| `let 名字 = 式子` | 题里用的量（写法同 `answer`） |
+
+各题型：
+
+- **recall**：`must m1: 要点`（每题最多 3 条）、`may m4: 可选要点`（不影响过没过）、`wrong w1: 常见错说法`、`answer: 参考答案`（判完给我看）。编号不写页面自动编（m1、m2…，w1…）。我打字或手写；页面里的 Claude 照要点判。过 = `must` 全写到、没写 `wrong` 里的错说法。
+- **construct**：`slots: A=mat(2) B=mat(2)`（`mat(r,c)` `vec(n)` `num`）；`if: 条件 => 不满足时说的话`，一行一条，编号 if1、if2…（条件写法同 `answer` 的 `check:`，名字是 slots 里的；`O`、`E` 没定义时是第一个方阵那么大的零矩阵、单位矩阵）；`expr 标签: 标准式子`（要我再写一个用 slots 名字的式子，按非交换多项式严格判相等，编号 e1…）；`example:`（必填：一组满足全部条件的，页面先验一遍）。页面逐条核，每条不满足的显示那一条自己的话、全部列出来；格子没填完交不了。
+- **claim**：`claim: 命题`、`truth: 真 | 假`。我先点「真」或「假」：判假要给反例（字段同 construct：`slots` `if` `example`）；判真要写证明要点（`must` `may` `wrong`），或 `proof: derive` 配 `start:` `goal:` `vars:`（逐行核，同 `derive mode: do`）。过 = 真假对、依据也过。
+- **solve**：照上面 `solve` 的写法（`q` `steps`），加共用的字段。在检验里一律由页面里的 Claude 逐步判（结论是 `steps`），我打字或手写，不交照片。
+- **discriminate**：`can: 能 | 不能`、`must m1: 理由要点`（「为什么」「能用怎么用 / 不能用用什么」都写成要点）、`result: 式子`（可选，最后结果，精确判）。过 = 能不能对、理由过、result 对；能不能对、理由没过 = 没过。
+- **locate**：`line:` 几行、`bug: 第几行`、`must m1: 为什么错的要点`、`fix: 式子`（可选，改成什么）。过 = 哪一行对、理由过、fix 对。
+
+```construct
+id: p4
+q: 造一组 2 阶 $A$、$B$，使 $(A+B)(A-B) \ne A^2-B^2$，并写出两边差的那一项
+target: L2-56
+level: 核心
+slots: A=mat(2) B=mat(2)
+if: (A+B)*(A-B) != A^2-B^2 => 这一组两边相等了：A、B 可交换
+expr 两边差: (A+B)*(A-B) - (A^2-B^2)
+example: A=[[0,1],[0,0]] B=[[1,0],[0,0]]
+teach if1: 可交换的两个矩阵两边一定相等，换一组不可交换的。
+retry: p4a, p4b
+```
+
+**换数的模板**：题里写 `pick` / `where`（写法同 `practice` 的 `type: custom`：`pick k = int(2, 5)`，还有 `choice` `vec` `mat`；`where 条件` 不满足就重取；`let` 能用取到的数，按精确值算），这道题就是模板，每用一次另取一组数。题面、要点、`teach`、`if` 的话里写 `\calc{k}`（`$…$` 里的写成 TeX，公式外面的写成数）；`example` 用取到的数写（`A=[[k,0],[0,0]]`）。执行时页面先取几组数验一遍，开检验时每一处都取好数存进进度（刷新、改判照它，不再变）。`retry` 能写同一个模板两次，也能写这道题自己（`retry: p5, p5`，也写成 `retry: self × 2`，N 最多 6：数字不同、结构一样的同构题）；用到的局部 id 是 `p5`、`p5~2`、`p5~3`（`board judge target=p5~2` 照它）。证据里多 `picked`（取到的数，「k=3」）和 `template`（模板的 id）。题库里一个模板是一道题：见过一次就算见过，复测不再挑它（换数不算新题）；复测出的题，它的 retry 是模板的照样另取数。
+
+```construct
+id: p5
+pick k = int(2, 5)
+q: 造一个 2 阶 $A$，使 $A^2 = \calc{k}A$，而且 $A \ne \calc{k}E$、$A \ne O$
+target: L2-14
+level: 基础
+slots: A=mat(2)
+if: A*A == k*A => $A^2$ 不等于 \calc{k}$A$
+if: A != k*E => 写成了 $\calc{k}E$
+if: A != O => 零矩阵不算
+example: A=[[k,0],[0,0]]
+teach if1: $A^2 = \calc{k}A$ 对 $A$ 的每一列说了什么。
+retry: p5, p5
+```
+
+我写字的地方有「手写 / 打字」两个页签（这台设备用过 Pencil 默认手写）。手写板记每一笔的时间；改错用「划掉」（留痕），「撤一下」只撤 5 秒内的一笔、3 秒内的划掉；「下一步」记一个分步的时刻；「加一页」往下加。交的时候页面从笔画算：整页图（划掉的灰色带线、左边行号 L1、L2…）、关键时刻的快照（停顿超过 `pause`、每次划掉之前、每次下一步，最多 6 张）、一段时间线文字，图传进 assets。
+
+### tradeoff、calc：408 的检验题（块里的 trace、predict、construct、code 也在这一节）
+
+<!-- 科目：数据结构 操作系统 组成原理 计网 -->
+
+只在 `board check`里能作答；字段、引擎交的量、计数口径在完整写法里。
+
+<!-- 完整写法 -->
+
+外壳和数学的检验题（`recall` 那一节）一样：合书、第一次作答算数、没有提示和「看答案」，错了显示你写的 teach 再出一道 retry。
+
+共用的字段：`id`、`q`、`target`（打的哪个典型错法）、`level`（`基础` / `方法` / `核心`）、`facet`（`重建` / `能用` / `边界` / `能辨`；408 的块（`DS-` `OS-` `CO-` `CN-`）里不写时：trace、predict、code、calc 能用，construct 边界，tradeoff 重建）、`teach 键: 话`、`retry`（同一种题型的同构小题；必做题至少 2 道，至少 1 条 teach）、`family`、`let`、模板的 `pick` / `where`。teach 先按这一项自己的查找顺序找（下面各题型写着），再按编号、`tag=`，最后 `default`；都没有时页面里的 Claude 写补讲。
+
+各题型：
+
+- **trace**（手推）：`use: 演示组件名`，下面原样写那个组件自己的字段（`algo: shell`、`array: …`、`gaps: …`，写法见那个组件）；我填的就是它 `mode: fill` 的那张表。可选 `rows: 2`（只填前 2 行）或 `rows: 2-3`（第 1 行给出、填第 2～3 行）、`given:` `cols:`（同 `mode: fill`）、`against: 错法短名`；快排（`use: sort`、`algo: quick`）能写 `by: round`：一趟（真题说的趟，一层划分做完）一行，行名「第 k 趟」，不写是一次划分一行。组件的字段名和检验的字段撞了（sched 的 `q`、tree / thread 的 `level`、net / kmp 的 `use`、csma / mem 的 `retry`、memexp / util 的 `target`）写 `use.名字:`（`use.q: 2`）。elim、det、eig、schmidt、quad 不收（那是结果表，不是过程）。
+  - 判：整张表交一次一起判，一行一项（`r1`、`r2`…，表下面的格是 `x1`…）。第一处错的那一行没过，对上了引擎的错法 `tag` 是错法短名、话后面接错法的说法；`tagFit` 是 `exact`（那一行和照错法填的一模一样）或 `partial`（只是大半像，话里写「可能像是……」：我可能做的是另一件事）。几种错法填出来一样、对得一样好：都记进 `tags`（没有 `tag`），话是「这几种错法在这组数上答案一样：……」，补讲走那一行 → `default`。直接插入、希尔、冒泡、简单选择：错的那一行后面每一行，页面拿「对的这一趟作用在我写的上一行上」再核（证据里那几项带 `carried: true`，`ok` 是对我自己的上一行而言；这道题照样没过）；后面全对、没对上错法、错的那一行和对的最多差 2 格，那一项 `tag: slip`，话是「后面按你自己的上一行推都对，第 k 趟这一处写错了」。别的引擎错行后面的不列。
+  - teach 键：对上错法的先找 `tag=错法短名`，笔误先找 `slip`，再找那一行（`r2`），最后 `default`。格子没填完交不了（该空着的格写 `-`）。
+- **predict**（不推，直接写结果）：`run r: 引擎 字段=值 …`（一行一个，名字只用字母和数字；值有空格加引号：`refs="1 2 3"`）；`expect [x1] 标签: 式子`（一个要我写的结果一行，编号不写自动编 x1、x2…；式子能用 `r.faults`、`r.pass1`、`let` 和模板的量，`"2 5 8"` 是字）；`wrong [w1]: 式子 => 说明`（带 `=>` 的是错答案，挂在它上面最近的那个 `expect`）；不带 `=>` 的 `wrong` 是理由里的常见错说法；`against: 错法短名, …`；可选 `must` / `may`（理由要点，页面里的 Claude 判）、`answer:`。至少一个 expect；用到 `r.` 的量、写 `against:` 才要 run，只问字面答案的（`expect 时间复杂度: O(n log n)`、`wrong w1: O(n^2) => 那是最坏`）不写 run（这时不写 `against:`）。
+  - 判：每个 expect 一项，页面比值（见「值怎么比」）。值不对时：等于某个错法算出来的（写了 `against:` 只看那几个，没写看这个引擎全部）→ `tag` 是错法短名，话是错法的说法；等于 `wrong … =>` 的式子 → 话是那条说明；对上了的带 `tagFit: exact`；都没对上 →「标签不对」。几种（错法、`wrong … =>`）在这组数上算出来一样、我写的正好是它：都记进 `tags`（没有 `tag`、`hit`），话是「这几种错法在这组数上答案一样：……」，补讲走 `x1` → `default`，不挑一种；固定的题执行前的检查报「x1 上 w1 和 opt 的答案一样」（换一组数，或 `against:` 只留一种），模板取到这种数重取。值都对了才把理由交页面里的 Claude。某组数上错法和对的算出来一样，那个错法这组数不比。
+  - teach 键：`tag=错法短名` → `w1` → `x1` → `default`（几种撞在一起时 `x1` → `default`）。
+- **construct**（408 的格子和量）：在数学的写法（`slots` `if` `expr` `example`，见 `recall` 那一节）上多三种格子：`seq(8)`（8 个数；不写个数最多 24 个）、`text`（一行字）、`procs(3)` / `procs(3, prio)`（3 个进程，一行一个「名字 到达时间 运行时间[ 优先级]」）；多 `run` 行（同 predict，值写格子名就换成我写的：`array=A`）；条件里用量：`r.unstable >= 1`、`P in r.flipped`（我写的这一对是 `r.flipped` 里的一对，先后不论）、`r.order == "P2 P1 P3"`。比大小 `>=` `<=` `>` `<`；比字 `==` `!=` `in`，不管空格、逗号、大小写的写法（撇号照「相同的数」：有一边没写撇号只比数）。一串（序列、字）只和格子、量、`"字"` 比，不和一个数比（`r.flipped != 0` 报写法错误，写 `r.unstable >= 1`）。不写 `against:`。teach 键 `if1`、`e1`、`run`（引擎不收我造的输入）、`default`。
+- **tradeoff**（讲取舍）：写法、判法同 `recall`（`must` 每题最多 3 条、`may`、`wrong`、`answer`），页面里的 Claude 照要点判。
+- **calc**（过程 + 最后的值）：写法同 `solve`（`q`、`steps:` 一行一步 `编号 setup|rule|calc|conclude: 内容`），多可选的 `run` 行和 `result: 式子`（最后的值，页面判，能用 `r.xxx`）。我写整道题的过程（打字或手写）和一行「最后的值」。步骤一律页面里的 Claude 逐步判，最后的值错了步骤照样判。teach 键 `result`、`s2`、`default`。照考试样子写的算法设计题（思想、代码、复杂度，手写）用 calc：`s1 setup: 思想…`、`s2 calc: 代码…`、`s3 conclude: 时间、空间复杂度`。
+- **code**（补一两行、改错）：字段同第三节 `code`（`fn` `tests` `ref` `starter` `call` `scale` `check` `check_call`）；页面真跑测试，不调页面里的 Claude。iPad 上是软键盘，这一种用来补一两行、改一处：`starter:` 写好大半、留要补 / 要改的地方，框里还是 `starter` 原样时交不了。写了 `ref:` 页面先拿它跑一遍自己的测试；没写 `ref:` 每个测试都要写 `-> 期望`。一个测试一项（`t1`…：想要什么、得到什么，或运行出错、死循环和行号），编译不过一项 `compile`。`check:` 或 `ref` 在我的输出上自己出错 → 那一项待核。不写 `must` / `may` / `wrong`，不做模板。teach 键 `t2`、`compile`、`default`。
+
+**引擎交的量**（`run` 的条件、`expect`、`result` 里写 `r.名字`；trace 的错法也照这张表的引擎）：
+
+| 引擎 | 量 | 错法短名（`against:`） |
+|---|---|---|
+| `sort` | `passes` 几趟（快排是几次划分）、`pass1` `pass2`…（第 k 趟以后的序列；快排是第 k 次划分以后）、快排另有 `rounds` 几趟、`round1` `round2`…（真题说的「第 k 趟」：一层划分做完以后的序列）、`final`、`cmp` 比较次数、`move` 移动次数（快排、归并不交）、`swap` 交换次数（只有冒泡、简单选择）、`unstable`（排完换了先后的相同数有几对）、`flipped`（那几对，「49 49′」） | 直接插入 `insertCount`；希尔 `shellBlock`；冒泡 `bubbleFront` `bubbleMin`；简单选择 `selectMax` `selectShift`；快排 `quickSwap` `quickLast`；基数 `radixMSD` `radixLIFO`；归并没有 |
+| `tree`（`bst:`） | `height`（根在第 1 层）、`leaves`、`aslSucc` | `mirror`；带 `ops: delete …` 还有 `replace` |
+| `tree`（`heap:`） | `cmp`（全部操作的比较）、`cmp1` `cmp2`…（第 k 个操作的）、`swaps`、`final`、`pass1`…（`ops` 里有 `sort` 时：堆排序第 k 趟以后） | `minHeap` / `maxHeap`、`insertBuild` |
+| `tree`（`nodes:` + `walk:`） | 不交量 | `preorder` `postorder` `levelorder` `inorder`（写的不是的那几种） |
+| `avl` | `rot`（调整几次，LR、RL 算 1 次）、`turns`（单旋几次：LL、RR 1 次，LR、RL 2 次）、`LL` `RR` `LR` `RL`、`root` | `lr2ll` `bfsign` `topmost` |
+| `paging` | `faults`、`hits`、`rate`（缺页率）、`victims`（依次换出的页） | `fifo` `lru` `opt` `clock`（写的不是的那几种）、`noInitial`；`eclock` 还有 `clearFirst` |
+| `sched` | `avgTurn`、`avgWait`、`avgWeighted`、`order`（CPU 上依次运行的进程） | `fcfs` `sjf` `srtf` `hrrn` `prio` `pprio`（写的不是的那几种）、RR 的 `rrOld` |
+| `disk` | `dist`（移动的磁道总数）、`avg`、`order`（依次访问的磁道） | `fcfs` `sstf` `scan` `cscan` `look` `clook`（写的不是的那几种）、`reverse`、C-SCAN / C-LOOK 的 `jump`（写了 `jump: count` 时是 `noJump`） |
+| `hash` | `aslSucc`、`aslFail`、`clashes`（碰到过冲突的关键字有几个） | 开放定址 `modSize` `linear` / `quadratic` `failNoEmpty` `failBySize` `failByN`；拉链 `nullCounted` `failByN` |
+
+错法短名照这组数列：某组数上和对的算出来一样的那个错法不列。写错的名字页面报，后面列着这组数有的。别的引擎（rbt、btree、huffman、kmp、bsearch、banker、组成原理、计网）不交量，trace 照样能用（只要那个组件有 `mode: fill` 的表）。
+
+**计数的口径**（照王道的代码数，和教材的公式对得上）：
+
+- 直接插入、希尔：`if (A[i] < A[i-dk])` 和循环第一次 `A[0] < A[j]` 是同一对关键字，算一次；哨兵 `A[0]` 让循环停下的那次照算；`j > 0`、`low < high` 这种下标的比较不算。移动是元素的每一次赋值（进出 `A[0]`、`pivot` 都算；一次交换算 3 次）。直接插入最坏（倒序）比较 (n+2)(n−1)/2、移动 (n+4)(n−1)/2，最好（顺序）比较 n−1、移动 0。
+- 冒泡：倒序比较 n(n−1)/2、交换 n(n−1)/2、移动 3n(n−1)/2；顺序比较 n−1、1 趟。简单选择：比较总是 n(n−1)/2。
+- 快排：一次划分 m 个元素比 m−1 次（每个不是枢轴的元素和枢轴比一次）；顺序时比较 n(n−1)/2、划分 n−1 次。
+- 快排的「趟」有两种：`pass#` = 第几次划分以后；`round#` / `rounds` = 真题说的「第几趟」（2019 年第 10 题的定义：对尚未确定最终位置的所有元素进行一遍处理称为一趟，也就是这一层的子表全部划分完；只剩一个、空的子表不划分）。题里说「第二趟」用 `round2`。例：`49 38 65 97 76 13 27 49′` 的 `round1` 是 `27 38 13 49 76 97 65 49′`，`round2` 是 `13 27 38 49 49′ 65 76 97`（`pass2` 是 `13 27 38 49 76 97 65 49′`：第 2 次划分只划分了左边的子表）。trace 照真题的趟填写 `by: round`。
+- C-SCAN / C-LOOK 跳回去的那一段：各书不一样，有的算进移动距离、有的不算。`jump: count` 算，`jump: skip` 不算（演示组件不写时不算）。检验题（predict、construct、calc、trace）用到 `cscan` / `clook` 的 `dist` `avg`（trace 的表里有移动距离）又没写 `jump:`，执行前的检查报「写明 jump: count 或 jump: skip，题面也写清楚跳回去算不算」；run 行写 `jump=count` / `jump=skip`。
+- 归并：`Merge` 里每执行一次 `B[i] <= B[j]` 算一次（下标的比较不算）；趟是段长 1、2、4……自底向上，落单的一段不比。
+- 堆：向下调整时有两个孩子的一层比 2 次（两个孩子比一次、大的（小根堆是小的）和双亲比一次），只有一个孩子的一层比 1 次；向上调整（插入）一层比 1 次。建堆、删堆顶（`ops: delete`）、插入都数。
+- SJF 运行时间一样的按到达先后，不算并列。
+
+**并列**：靠「两个一样好」定下来的量——OPT 换页时有两页以上以后都不再用（`victims`）、SSTF 两个请求离磁头一样远（`order`；走法不同总距离也不同时还有 `dist` `avg`）——页面判不了。固定的题里 `expect`、条件、`result` 用到带并列的量，或者 trace 要填的行有并列，执行前的检查报写法错误（trace 的话里写着用 `rows:` 只填到哪一行）；模板取到并列就重取；我自己造的输入有并列、条件又用到那个量，那一项待核。trace 里从第一处并列起往后的行都不硬判（写了另一种对的走法是待核，不是错；空着的格照样算没填）。例子：OPT、3 个物理块、引用串 `1 2 3 4 1 2 5 1 2 3 4 5`，第 10、11 次访问换页时有并列；王道那串 `7 0 1 2 0 3 0 4 2 3 0 3 2 1 2 0 1 7 0 1` 没有并列。
+
+**相同的数**：我写的序列里有一样的数（`49 38 49`），排序跑之前页面把后出现的记成 `49′`，作答下面写一行「页面把第二个 49 记成 49′」；`'` `’` `′` 都认，`49 49`、`49 49'`、`49 49′` 是一个意思。王道那组 `49 38 65 97 76 13 27 49` 做希尔（增量 4、2、1）是稳定的；不稳定的例子：`4 7 4 1 2 5 7 8`（增量 4、2、1，`flipped` 是「4 4′」）。`final`、`pass#`、`round#` 带撇号（简单选择排 `5 8 5′ 2 9` 的 `final` 是 `2 5′ 5 8 9`）：我一个撇号都没写只比数，写了撇号连撇号的位置一起比（写 `2 5 5′ 8 9` 不对）。trace 的表撇号写不写、写在哪都不管。所以 `expect: r.final` 考不了稳定性（不写撇号也算对，预检提示一句）：考稳定性另写 `expect: r.unstable` 或 construct 的 `P in r.flipped`。所以 `final`、`pass#`、`round#` 只整串拿来比（`expect: r.final`、`B == r.final`），不放进算式（`sum(r.final)`、`el(r.pass1, 2) + 1`），写了执行前的检查报写法错误。
+
+**值怎么比**：
+
+- 不是整数的量（`avgTurn` `avgWait` `avgWeighted` `avg` `rate` `aslSucc` `aslFail`）：分数、小数、百分数都认。和对的值一模一样的（`3/4`、`0.75`、`75%`）不管写几位都对；不是一模一样的小数，要至少 2 位小数、至少 3 位有效数字，按写出来的位数四舍五入比（16/3 写 `5.33` 对、`5.3` 不对；百分数换成小数再数位数，`83.33%` 是 4 位；0.0533 写 `5%` 不对）。
+- 复杂度：`O(nlogn)` `O(n log₂n)` `O(nlgn)` `O(n log n)` 一样，`O(n^2)` `O(n²)` `O(n*n)` 一样，系数不算（`O(2n)` 就是 `O(n)`）；写化简以后的样子（`O(n^2+n)` 不认）；`expect`、`wrong`、`expr` 里写了页面读不懂的 `O(…)`（`O(n/2)` 这样），自检就报。
+- 数还认十六进制（`0x3A3C` `3A3CH` `3a3ch`）、二进制（`0b1011` `1011B`）和式子（`π/4` `e^2` `ln 2` `√2/2` `2^10`，照 answer 的高数读法、弧度），式子和十六进制只认一模一样（相对 1e-9）；`∞`、`1/0` 这种算出来不是有限数的不对。带后缀的按进制读对不上、同样的数字当十进制读对得上（对的值 100 写 `100B`、10 写 `10h`；按进制读对得上的照常对：4 写 `100B`、5 写 `5h`），分不清是进制还是单位，那一项待核。
+- 换算题（「0x3A3C 换成十进制」）在 `expect` 或 `result:` 的末尾写 `as=dec`（`result: 0x3A3C as=dec`）：只收十进制的数、分数、百分数，十六进制、二进制、式子交之前挡（「写十进制的数」），判的时候还读不懂那一项待核；对的值要是一个数。
+- 序列、字：按先后逐个比，不管空格、逗号、大小写的写法；`→` `->` `⇒` `>` 也是分隔（`P1→P3→P2`、`150→160→184`），字的序列（进程名）还认 `-` `—`（`P1-P3-P2`）；数的序列里 `-` 是负号，`150-160` 交之前挡。撇号照上面「相同的数」。
+
+**交之前和判不了的**：
+
+- 数、序列、复杂度读之前先全角转半角、去掉末尾的 `。` `.` `，` `,` `；` `;`（`０.６`、`3／5`、`0.6。`、`12,`、`2 5 8。` 照常读；construct 的格子也先全角转半角）。
+- 格式不对交不了、不算第一次作答，页面说哪里不对（「A：要 8 个数，写了 7 个」「P2 少一格」「「x」不是数」）；predict 的 `expect`、calc / solve 的「最后的值」照对的值的样子查：「「缺页次数」只写数（分数、小数、百分数），不写单位」（`12次`）、「「时间复杂度」写成 O(n^2) 这样」（`O(n2)`）、「「换出的页」写一串数，用空格或逗号隔开」，不说要写几个。
+- 格式对了引擎不收（AVL 里有重复的数、增量比元素个数还大）判没过，那一项（`run`）写引擎的原话。交之前没挡住、判的时候还读不懂的（predict、calc、solve）那一项待核，不算我错。
+- 你那边出的问题（固定的字段引擎跑不了、`expect` 算不出来、`let` 出错、`check:` 出错）那一项待核，不算我错，也不算过。
+
+**模板**（写法同 `recall` 那一节的「换数的模板」：`pick` / `where`、`\calc{…}`，`$…$` 里的写成 TeX，公式外面的写成数）：
+
+- 408 的字段里也能写 `\calc{…}`：`run` 行、trace 的组件字段（`array: \calc{list(v)}`）、`expect`、`wrong` 的式子、`result`、`example`。`seq(8, 10, 99) distinct` 取 8 个 10～99 里不重复的数，`list(v)` 写成一排。
+- `retry: self × 2`（`×` `x` `*` 都认，N 最多 6）= 写 2 次这道题自己，每次另取一组数；能和别的一起写（`retry: self × 2, p1c`）；没有 `pick` 的题不能写 `self`。
+- 取到的数分不开 `against:` 的错法、用到的量有并列，和 `where` 不满足一样重取；执行前的检查取几组数验一遍，连着取 20 组都这样才报。
+- 复测：见过的模板换一组数不算新题。同一个 `family` 没有没见过的题时，复测退回见过的模板换一组数，证据和 `absorb.retests` 那一次记 `renumbered: true`，`meta/state` 那一块写「复测用的是换了数的同一道题」，掌握参考把它当原题，照样记一条「缺新题（只剩换数的模板）」。
+
+下面是一个能照抄的 `board check`：p1、p2 是必做题，带 `retry: self × 2`；别的写成可选题只为例子短。
+
+`````
+````board check id=k408 title="希尔排序、LRU" limit=20m
+block DS-L8.2.3 must=p1 optional=p3,p4,p6,p7
+block OS-L3.2.2 must=p2 optional=p5
+```trace
+id: p1
+pick v = seq(8, 10, 99) distinct
+q: 对 \calc{list(v)} 做希尔排序（增量 4、2、1），写出每一趟以后的序列
+target: 希尔排序分组
+level: 方法
+use: sort
+algo: shell
+array: \calc{list(v)}
+gaps: 4 2 1
+against: shellBlock
+teach tag=shellBlock: 相隔 d 的元素才是一组：第 1、1+d、1+2d……个，不是连着的一段。
+teach slip: 后面几趟照你写的上一行推都对，是这一处写错了：再对一遍这一趟。
+teach default: 一组一组地做直接插入：d = 4 时第 1、5 个一组，第 2、6 个一组……
+retry: self × 2
+```
+```predict
+id: p2
+pick v = seq(12, 1, 5)
+q: 3 个物理块，引用串 \calc{list(v)}，LRU 置换。不画表，写缺页几次、依次换出哪几页，再写一句理由
+target: LRU 当成了 FIFO
+level: 方法
+run r: paging algo=lru frames=3 refs="\calc{list(v)}"
+expect x1 缺页次数: r.faults
+wrong w1: r.faults - 3 => 一开始调入的 3 次没算缺页
+expect x2 换出的页: r.victims
+against: fifo
+must m1: 换出的是往前看最久没被访问的那一页，不是最早调入的
+teach tag=fifo: LRU 往前看谁最久没被访问，不看谁先进来。
+teach w1: 一开始物理块是空的，调入的那几次也是缺页。
+teach default: 每次缺页往前数：块里最久没访问的那一页换出。
+retry: self × 2
+```
+```construct
+id: p3
+q: 造一个 8 个数的序列，使希尔排序（增量 4、2、1）不稳定；再写出换了先后的那两个相同的数（比如 49 49）
+target: 希尔排序不稳定
+level: 核心
+slots: A=seq(8) P=seq(2)
+run r: sort algo=shell gaps="4 2 1" array=A
+if: r.unstable >= 1 => 这一组排完，相同的数先后没变（还是稳定的）
+if: P in r.flipped => 写的这一对没有换先后
+example: A=4 7 4 1 2 5 7 8 P=4 4'
+teach if1: 让两个相同的数分在不同的组里，后面那个所在的组把它往前挪过前面那个。
+teach if2: 排完看相同的两个数谁在前：先后反过来的那一对才是。
+```
+```tradeoff
+id: p4
+q: 为什么希尔排序先做几趟大间隔的，会比直接插入快？为什么链表上不适合做希尔排序？
+target: 希尔排序的取舍
+level: 核心
+must m1: 大间隔的几趟让元素一次跨好几位，序列先基本有序；最后 d = 1 的直接插入每个元素只挪很少几步
+must m2: 要按下标隔 d 取元素（随机访问），链表只能从头顺着走
+wrong w1: 希尔排序是稳定的
+```
+```calc
+id: p5
+q: 4 个物理块，引用串 1 2 3 4 1 2 5 1 2 3 4 5，FIFO 置换。写出过程，最后写缺页率
+target: 缺页率的分母
+level: 方法
+run r: paging algo=fifo frames=4 refs="1 2 3 4 1 2 5 1 2 3 4 5"
+result: r.rate
+steps:
+s1 setup: 画出每次访问以后 4 个物理块里的页，缺页打勾
+s2 calc: 数出缺页 10 次，访问 12 次
+s3 conclude: 缺页率 10/12 = 5/6 ≈ 83.33%
+```
+```calc
+id: p6
+q: 设计算法，判断带头结点的单链表 L 是否递增有序。（1）思想（2）用 C 写出算法（3）时间、空间复杂度
+target: 相邻比较漏了尾结点
+level: 核心
+steps:
+s1 setup: 思想：p 从第一个结点起，依次比较 p 和 p->next 的值，有一处 p->data > p->next->data 就不是递增
+s2 calc: 代码：for (p = L->next; p && p->next; p = p->next) if (p->data > p->next->data) return 0; return 1;
+s3 conclude: 时间复杂度 O(n)，空间复杂度 O(1)
+```
+```code
+id: p7
+q: 下面的 Reverse 想把数组原地逆置，跑完数组没变。改一处让它对
+target: 循环走到 n 又换回来
+level: 基础
+fn: void Reverse(int A[], int n)
+starter:
+void Reverse(int A[], int n) {
+    int i, t;
+    for (i = 0; i < n; i++) {
+        t = A[i]; A[i] = A[n - 1 - i]; A[n - 1 - i] = t;
+    }
+}
+tests:
+A = [1, 2, 3, 4, 5], n = 5 -> A = [5, 4, 3, 2, 1]
+A = [7, 8], n = 2 -> A = [8, 7]
+A = [9], n = 1 -> A = [9]
+teach default: 走到一半就停：再往后换，前面换好的又换回去了。
+```
+````
+`````
+
+### rewrite：英语的检验题（块里的 parse、translate、discriminate、errfind 也在这一节）
+
+<!-- 科目：英语 -->
+
+只在 `board check`里能作答：parse 标成分、translate 翻译、rewrite 改写、discriminate 二选一配理由、errfind 改错；字段在完整写法里。
+
+<!-- 完整写法 -->
+
+外壳、共用的字段（`id` `q` `target` `level` `facet` `teach` `retry` `family`）和数学的检验题（`recall` 那一节）一样；必做题至少 2 道 retry、至少 1 条 teach。英语题不做模板（不写 `pick`）。不写 `facet` 时：parse、translate、rewrite 能用，discriminate 能辨，errfind 边界，recall 重建。
+
+各题型：
+
+- **parse**（标成分）：`key:` 括号写法同第三节 `parse`（`[S …] [V …]`，能套 `[RC …]`），可选 `roles:`（不写照 key 里用到的）。不写 `must` / `may` / `wrong`。我点词标成分，页面照 key 逐个成分判（宽严同一类 `parse`）：一个成分一项，按句子先后，编号是成分名（同一种的第二个是 `RC2`）；话是「这是主语，标成了宾语」「没标出谓语」「谓语的范围不对：标了「were」」；多标的合成一项 `extra`（「多标了：…」）。teach 键：成分名（`V`；`RC2` 找不到退回 `RC`）→ `role=SC` → `default`。
+- **translate**（翻译）：`text:` 原句、`must` 采分点（最多 3 条）、可选 `may` `wrong`、`answer:` 参考译文（判完给我看）。页面里的 Claude 照采分点判；我打字或手写。
+- **rewrite**（改写）：`text:` 原句；`has: 片段 => 话`（要有的写法，一行一条，h1、h2…）、`not: 片段 => 话`（不该有的，n1…），`=> 话` 可选；`example:`（必填：一句对的改写，页面先拿它验 has / not）；可选 `must`（规则本身，交页面里的 Claude）。至少一条 `has:`；只写 `not:` 时要写 `must`（不然随便一句没有那些字的都算过）。
+  - 片段按整词比：大小写、弯引号、缩写（`wasn't` 就是 `was not`）、句末标点、多的空格都不算；`|` 隔开几种写法；贴着字母的 `…`（`…ed`）是一个以 ed 结尾的词，单独的 `…` 是中间隔 0～3 个词；`were …ed` 中间留空格（`were…ed` 是一个词）。`has: is` 不会对上 this。
+  - has / not 有一条没过就没过、不交 Claude；都过了、写了 `must` 再交。teach 键 `h1`、`n1`、`default`。
+- **discriminate**（两个里选一个）：`options: 谓语 | 非谓语`（只收两个）、`answer:`（两个里的一个）、`must` 理由要点（必填）；不和 `can:` 一起写，不写 `result:`。我点一个、写为什么。选错就没过（理由不判）；选对了理由交页面里的 Claude；选对、理由没过 = 没过。teach 键 `pick`（选错）、`m1`、`default`。
+- **errfind**（改错）：`text:` 句子、`word:` 错的那个词（同一个词出现几次：`are#2` 是第二个 are）、`fix:` 改成什么（`known | !knew=为什么`：`|` 隔开几种对的，`!` 开头是常见的错改法和提示；`删掉` 是这个词多了）、可选 `decoys:`（常被误点的对的词：`have=为什么没错; were=…`）、可选 `must`（为什么错，交页面里的 Claude）。我点一个词、写改成什么。点错词：`word` 没过（点的是 decoys 里的显示那句）；词对了再判改法 `fix`（大小写、句末标点、外面的引号不算；写成 `!` 的错改法显示那句提示）。teach 键 `decoy=have`、`word`、`fix`、`default`。
+- **recall**：同数学（`must` `may` `wrong` `answer`）。
+
+下面是一个能照抄的 `board check`：p1 是必做题，带两道 retry；别的写成可选题只为例子短。
+
+`````
+````board check id=ken title="被动语态" limit=15m
+block EN-L1.2.3 must=p1 optional=p2,p3,p4,p5
+```errfind
+id: p1
+q: 点出用错的那个词，再写改成什么
+text: He was know as the best teacher in the town.
+word: know
+fix: known | !knew=knew 是过去式，被动要过去分词
+decoys: was=被动的 be 没错，错在它后面的动词
+target: 被动的过去分词
+level: 基础
+teach word: 被动是 be + 过去分词：be 后面的动词原形是错的。
+teach fix: know 的过去分词是 known，不是 knew。
+teach decoy=was: was 没错，错在 was 后面那个词。
+retry: p1a, p1b
+```
+```errfind
+id: p1a
+q: 点出用错的那个词，再写改成什么
+text: The letter was write in English.
+word: write
+fix: written | !wrote=wrote 是过去式，被动要过去分词
+target: 被动的过去分词
+level: 基础
+```
+```errfind
+id: p1b
+q: 点出用错的那个词，再写改成什么
+text: The windows were break by the storm.
+word: break
+fix: broken | !broke=broke 是过去式，被动要过去分词
+target: 被动的过去分词
+level: 基础
+```
+```parse
+id: p2
+q: 标出这句的主语和谓语（谓语连着助动词一起标），从句也标出来
+key: [S The houses [RC that we saw]] [V were painted] in 1990.
+roles: S V RC
+target: 被动语态的谓语
+level: 方法
+teach V: 被动的谓语是 be + 过去分词，几个词一起标成谓语。
+teach RC: that we saw 修饰 houses，是主语里的定语从句。
+teach default: 先找谓语动词（带上前面的 be），再往前找主语。
+```
+```rewrite
+id: p3
+q: 把这句改成被动语态，时态不变
+text: The villagers built the bridge in 1990.
+has: was …ed | was built => 时态要和原句一样：be 的过去式 + 过去分词
+not: built the bridge => 还留着主动的谓语
+example: The bridge was built by the villagers in 1990.
+must m1: be 的时态跟原句（一般过去时用 was / were）+ 过去分词
+target: 主动改被动
+level: 方法
+teach h1: 原句是一般过去时，被动写成 was / were + 过去分词。
+```
+```discriminate
+id: p4
+q: “The data collected last year show a clear trend.” 里 collected 是谓语还是非谓语？为什么？
+options: 谓语 | 非谓语
+answer: 非谓语
+must m1: 句子的谓语是 show；collected 是过去分词作后置定语（= which were collected）
+target: 过去分词作定语
+level: 核心
+teach pick: 一句话一个谓语：先找真正的谓语，剩下的 -ed 是定语。
+```
+```translate
+id: p5
+q: 翻译成中文
+text: It is not until you lose your health that you realize how important it is.
+must m1: 「直到……才……」的强调句译出来
+must m2: how important it is 译成「它有多重要」
+wrong w1: 译成「直到你失去健康，你意识到……」（没有「才」）
+answer: 直到失去健康，你才意识到它有多重要。
+target: 强调句没译出「才」
+level: 核心
+```
+````
+`````
+
+### context：给页面里 Claude 的背景资料（不显示）
+
+```context
+教材：Lay《Linear Algebra and Its Applications》第 1.4 节。书中定义 Ax 时用的是列的线性组合……
+这位学生的情况：上个单元行化简常在第二步符号出错；喜欢先看几何图再看代数。
+```
+
+页面里的 Claude（「问 Claude」助教和猜想批改）看不到项目资料和项目记忆，只能看到课件。所以每个单元开头放一个 `context` 块，写上：这个单元对应的教材原文要点、定义和记号（保证和教材一致），以及我的学习情况（常犯的错误、薄弱点）。它不会显示在页面上，只会附在每次提问里。控制在 2000 字以内。
+
+### draft：草稿区（Apple Pencil 演算）
+
+```draft
+title: 草稿区
+note: 用 Apple Pencil 在这里演算。
+height: 260
+```
+
+一块可以手写演算的黑板，内容保存在我的设备上。放在需要多步计算的练习或例题前面。（「拿给 Claude 看」暂时关掉了。）
+
+**板书是自动的，不用写任何东西**：页面左下角（课堂模式在输入框的「⋯」菜单里）的「板书」按钮，打开后我可以用 Apple Pencil 在整页课件上直接写写画画（手指照常滚动），两指轻点撤销、三指轻点重做。
+
+页面上的手写板（手写作答、手写识别）**暂时关掉了**，不要让我用它们：手写的我截图粘贴交上来。
+
+<!-- 完整写法 -->
+
+- 关掉的是「✎ 手写作答」「✎ 手写」、草稿「拿给 Claude 看」、给「问 Claude」附手写，页面上不出现。手写的内容我在 Notability 里写，用截图粘贴交上来（`answer`、`conjecture`、`steps` 里写想法的地方都有粘贴框）。
+- 设计计算题时，可以鼓励我「先在草稿区写出完整过程，再填答案」。
+
+### steps：一步步揭开的例题（带着动脑）
+
+```steps
+id: ex-rank1
+title: 例2.1 求 Aⁿ
+q: 设 $\boldsymbol\alpha=[1,2]^{\mathrm T}$，$\boldsymbol\beta=[1,1]^{\mathrm T}$，$A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$，求 $A^n$。
+
+step: 写出 $A^2$
+ask: 先别算矩阵。$A^2$ 用 $\boldsymbol\alpha$、$\boldsymbol\beta$ 怎么写？
+show: $A^2=(\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})(\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})$
+
+step: 换个括号
+ask: 中间哪两个可以先乘？乘出来是什么形状？
+choices: 一个数 | 一个 2×2 矩阵 | 一个 1×2 行向量
+answer: 一个数
+show: 结合律：$=\boldsymbol\alpha(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)\boldsymbol\beta^{\mathrm T}$，$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数。
+
+step: 推到 n 次
+do: true
+answer: $(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)^{n-1}A$
+show: $A^n=(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)^{n-1}A$
+```
+
+- 开头的 `id:`（必写，同一单元不重复）、`title:`、`q:`（题目，一直显示）。
+- 每个 `step:` 开始一步（后面是小标题）。`ask:` 是揭开前问我的问题：我先交一次想法（或点「想不出来」，记一条「放弃」）才能揭开。
+- `choices:` 用 `|` 分隔，变成选项按钮；`answer:` 是正确选项，选完立刻显示对错，不管对错都能揭开。
+- `show:` 是揭开后显示的真实步骤。
+- `do: true`：这一步不揭开，我自己做出来（`answer:` 能算出数 / 向量 / 矩阵时页面判对错，`formula: n` 判含 n 的式子）。同一种题逐步撤脚手架：第一道全揭开，第二道最后一步 `do: true`，第三道全部 `do: true`。
+
+<!-- 完整写法 -->
+
+我不看一整道写好的例题，而是**每一步揭开前，先写下下一步要做什么、为什么**（打字，或者粘贴手写截图），然后才看到真实的一步。我的想法留在原处，和真实步骤并排对照。
+- `do: true` 的判法：`answer:` 能算出数 / 向量 / 矩阵时（如 `answer: [1, 2]`），我在格子里填、程序判对错；加了 `formula: n` 时，`answer:` 是含 $n$ 的式子（如 `3^(n-1)*A`），我写式子、页面代值判对错（同 `answer` 组件）；其余情况我自由作答，再对照 `answer` / `show`。做完可以「对照答案」。
+
+### steps 联动：图跟着步骤动
+
+<!-- 科目：线代 高数 概率 -->
+
+`scene`（以及下面的 `graph`、`space`）写 `link: steps 的 id`，图就固定在这道题旁边（宽屏在右侧，窄屏在上方吸顶），并且：
+
+- 表达式里可以用 `step`（已经揭开的步数：开始是 0，揭开第 1 步后是 1）。
+- 命令后加 `from=k` / `until=k`：揭开到第 k 步起 / 为止才显示。
+- 每揭开一步，变量 `t` 从 0 动到 1（约 0.8 秒），做过渡动画，比如 `grid lerp(I, A, t) from=1`。
+
+<!-- 完整写法 -->
+
+```scene
+title: 秩一矩阵把平面压成一条线
+link: ex-rank1
+let A = [[1, 1], [2, 2]]
+let x = [2, -0.5] drag
+line [0, 0] dir [1, 2] color=yellow from=1
+grid lerp(I, A, t) faint from=1
+vector x color=blue label=x
+vector A*x color=pink label=Ax from=1
+vector A*A*x color=yellow label=A²x from=2
+```
+
+### matrix：会动的矩阵
+
+<!-- 科目：线代 -->
+
+几个矩阵和公式排成一行。变量变了（拖滑块、绑定的 `steps` 揭开一步、课堂里的 `figure set` / `play`），值变了的格子会闪一下，挪了位置的数会飞过去。适合演示「一步步变」的过程：幂次、分块、乘积是怎么来的。
+
+```matrix
+id: m-pow
+title: B 的幂：1 往右上角退
+let B = [[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+slider k 1 4 = 1 step=1 label="k" play
+matrix B^k label="B^{\calc{k}} ="
+```
+
+字段：`id`、`title`、`q`（上方说明）、`note`（下方备注）、`link`（绑定 `steps`，用法同 `scene`）。命令一行一条，按顺序从左到右排：
+
+| 命令 | 作用 |
+|---|---|
+| `let 名字 = 表达式` | 定义变量（同 `scene`） |
+| `slider 名字 最小 最大 = 初值` | 滑块，默认 `step=1`（值取整，`B^k` 可以拖着看）。可选 `label="k"`、`play` |
+| `matrix 表达式` | 画出它的值：矩阵、向量（画成一列）、数（不带括号）。一律精确分数。可选 `label="A ="`（左边的 TeX）、`name=A`（给 `mark`、`split` 认；表达式就是一个变量名时默认用它）、`from=k` / `until=k` |
+| `tex 公式` | 两个矩阵之间的一段公式：`tex =`、`tex \times`、`tex +` |
+| `split rows=2 cols=1` | 分块虚线：第 2 行下面、第 1 列右边各画一条（几条用逗号：`rows=1,3`）。管前面最近的那个矩阵，或者写 `of=名字` |
+| `mark row 2 note="×2"` | 画好就带着的标注：`row` / `col` / `diag` / `entry=2,3` / `block=1,2`，可加 `note=`、`color=`、`style=`、`of=`、`from=k` / `until=k`（写法同课堂的 `board mark`） |
+| `product A B` | 画出 $A\times B=AB$；我点结果里的任意一个数，就亮出 $A$ 的那一行、$B$ 的那一列，下面写出对应相乘再相加。可选 `name=C`（结果的名字） |
+
+<!-- 完整写法 -->
+
+- 标签和 `tex` 里可以写 `\calc{…}`，跟着变量变：上例滑到 3 时标签是 $B^{3}=$。
+- 写错（表达式算不出来、尺寸对不上、`mark` 的行号超出矩阵、`split` 的位置不对）：组件下面红字报出来，自检也会报。
+
+### derive：分拍板书（一段推导一行一行写出来）
+
+```derive
+id: d-a2
+title: 推 A²
+A^2 = (\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})(\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})
+    = \boldsymbol\alpha(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)\boldsymbol\beta^{\mathrm T}   // 结合律：中间先乘
+    = (\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)\,\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}   // $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数
+    = (\operatorname{tr}A)\,A
+```
+
+- 每行一段 TeX（**不写 `$`**），`//` 后面是写在右边的旁注（Markdown，可以有 `$公式$`）。第一个 `=`（或 `\le`、`\Rightarrow` 这类关系符）前后分两栏，等号自动对齐；以 `=` 开头的行接着上一行。
+- 一开始只写第一行，我点「下一行」往下写（「全部写出来」一次写完）。`auto: 1.5`：出现在屏幕上以后每 1.5 秒自动写一行；`start: all`：一开始就全写出来。
+- 新的一行从左往右「写」出来。课堂里：`figure target=d-a2 play step 1 4 4s`（4 秒里写完 4 行，跟着你说的话写）、`set step=3`（写到第 3 行）、`highlight 2`（第 2 行闪一下）、`board mark target=d-a2 item=2`（圈第 2 行）；行里写了 `\hl{名字}{…}` 的，`board mark term=名字` 圈那一项。
+- 字段：`id`、`title`、`q`、`note`、`auto`、`start`、`link`（绑定 `steps`：揭开第 k 步时至少写到第 k 行）。
+- 要我自己一行行推、页面逐行判：`mode: do`（写法在下面「更多写法」）。
+
+<!-- 完整写法 -->
+
+**`mode: do`：我自己一行行往下推。**你给出发的式子（`start:`），我在输入框里一行一行写（`a(b'a)b'`、`αβᵀαβᵀ`、`tr(A)A` 都认：省略乘号、`'` / `ᵀ` 转置、希腊字母、上标），页面查每一行和上一行是不是相等；不相等就告诉我「取哪组数时上一行等于什么、这一行等于什么」，我改。写到 `goal:` 那个样子就推完了（没写 `goal:` 就由我点「推完了」）。
+
+```derive
+id: dd-a2
+mode: do
+title: 推 A²
+q: $A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$（3 维列向量），从 $A^2$ 推到只含 $\operatorname{tr}A$ 和 $A$ 的式子
+vars: a=vec(3) b=vec(3)
+let A = a*b'
+start: A^2
+goal: tr(A)*A
+```
+
+- `vars:`：一般的式子要随机取几组数来比（只拿一组数，碰巧相等的错式子也会判对）：`vec(3)` 随机整数列向量、`mat(2,3)`、`int(1,5)`、`num`，空格隔开。默认比 4 组（`samples:` 改）。不写 `vars:` 就用 `let` 和整节课的量，只比一组（具体数字的计算）。
+- `let 名字 = 式子`：每组数接着算。式子写法和组件里的表达式一样（`a*b'`、`tr(A)`、`det`、`inv`）。
+- 只能判「相等」：矩阵、向量、数的恒等变形、计算。证明、文字推理照旧手写。
+
+**高数：一行行求极限、求导、求积分。**
+
+```derive
+id: dd-lim
+mode: do
+title: 求极限
+calc: limit at=0
+start: (tan(x) - sin(x))/x^3
+goal: 1/2
+```
+
+- `calc: limit at=0`（单侧 `at=0+`；`at=inf` 是两侧，`+inf`、`-inf`，`side=+`）：每一行写要求极限的那个式子（前面写不写 `lim x->0`、`lim_{x→0}` 都行，一行里几个 `lim` 都去掉），最后一行是数（也能整行只写 `∞`、`+∞`、`-∞`、`不存在`，照 answer 那张表和上一行的极限比；`goal:` 也能写这几个）。和上一行恒等直接过；不恒等就比两行的极限，一样也过（说「和上一行的极限一样」，记录里带两行原文）；不一样（有限、+∞、−∞、∞ 都算）就是这一行错了：「这一行的极限是 0，上一行是 1/2」。差得很小（$10^{-6}$ 到 $10^{-4}$）或者算不出极限的那一行是「页面判不了」，能接着写。一行可以换变量：写 `lim t→0 …`，或者先写一行 `令 t = 1/x`（说明行，不判）。
+- `calc: antideriv`：每一行是一族原函数，可以带没积完的 `∫ e^x dx`、凑微分 `∫ sin(x)^2 d(sin x)`、变限 `∫_0^x … dt`；页面比两行的导数，`+C` 去掉。换元先写一行 `令 x = sin t`（或 `令 t = sqrt(x)`，可带 `, t in (0, 1)`；t 不写范围取 $(0.1, 1.2)$），之后的行可以是 t 的式子；没写「令」就换了变量的行是「页面判不了」。
+- 不写 `calc:`、`vars: x=real(-2, 2)`：判恒等，求导写 `'`：`(x^2 sin x)'`。`domain: x in (0, 1)` 给范围。
+- 记录里有每一行写的什么、和上一行相不相等、不等时两边各等于什么、每行试了几次；最后一条是推完了还是想不出来。
+
+### sketch：当场画的示意图（SVG）
+
+不用互动、偶尔用一次的示意图（分块的样子、维数关系、映射示意……）。直接写 SVG 元素，页面统一配色、过安全检查：
+
+```sketch
+id: sk-block
+title: 分块对角矩阵
+width: 340
+height: 220
+<path d="M 62 20 L 50 20 L 50 200 L 62 200" class="thick"/>
+<path d="M 238 20 L 250 20 L 250 200 L 238 200" class="thick"/>
+<rect x="64" y="28" width="80" height="76" rx="6" class="blue fill"/>
+<rect x="156" y="116" width="80" height="76" rx="6" class="pink fill"/>
+<line x1="150" y1="22" x2="150" y2="198" class="dashed faint"/>
+<tex x="104" y="66">A_1</tex>
+<tex x="196" y="154">A_2</tex>
+<path d="M 262 110 Q 290 80 318 110" class="arrow yellow"/>
+<text x="290" y="140" text-anchor="middle" class="yellow small">n 次方</text>
+```
+
+- `width` / `height` 是坐标范围（左上角是原点，向下是 y），图按屏幕缩放。
+- 只能用 `path` `line` `polyline` `polygon` `rect` `circle` `ellipse` `text`（里面可以有 `tspan`）`g`；不写外面的 `<svg>`，不能有 `style=`、`id=`、链接、图片、脚本。
+- 颜色写名字：`class="blue"`、`fill="yellow"`；样式 class 有 `dashed` `thick` `arrow` `fill` `faint` `small` 等（见完整写法）。
+- 公式写 `<tex x="…" y="…">A_1</tex>`（KaTeX，盖在图上）。写错（不认的元素、属性、颜色）会报出来要求重写。
+
+<!-- 完整写法 -->
+
+- 颜色写名字：`class="blue"`，或 `fill="yellow"` / `stroke="pink"`（`yellow` `pink` `blue` `green` `orange` `purple` `red` `white` `gray`，`none`）。样式 class：`dashed` `dotted` `thin` `thick` `arrow`（线的末端画箭头）`fill`（用这个颜色淡淡地填上）`faint` `bold` `small` `big`。默认是粉笔白的线。
+
+- `<tex>` 可以用 `\calc`，属性 `anchor="start|middle|end"`、`color="pink"`、`size="22"`。
+- 课堂里：`figure target=sk-block highlight 3`（第 3 个元素闪一下，从 1 数）、`board mark target=sk-block label=A_2`（按 `text` / `tex` 的文字找）、`at=[290, 110]`（图上的坐标）。
+
+### image：讲义原图
+
+```image
+id: img-ex21
+name: 例2.1
+caption: 讲义里例 2.1 那一页
+```
+
+- `name:` 是资料包 `images` 里登记的图；也可以写 `src:`（上传到这个 artifact 以后给的地址）。只认这个 artifact 自己的文件。点一下放大看。
+
+### let：这节课的量（不显示）
+
+```let
+A = [[-1, -1, 2], [2, 2, -4], [1, 1, -2]]
+a = [-1, 2, 1]
+b = [1, 1, -2]
+```
+
+一行一个 `名字 = 表达式`，后面的行可以用前面的名字。定义一次，之后所有的段、组件（`answer`、`scene`、`matrix`……）和公式里的 `\calc` 都能直接用这些名字，不用每个组件再写一遍 `let`（组件自己的 `let` 同名时用自己的）。精确值（分数）保存。课堂、实时黑板里 `let` 放在哪一段都行，之后的段、别的板都认。`I`、`E`、`pi`、`e`、`step`、`t` 是保留的名字。
+
+### 公式里的三个工具：`\calc`、`\hl`、`\chalk`
+
+- **`\calc{表达式}`：让页面算，不要心算。**任何公式里都能写（正文、题面、提示、解析、标签、课堂里说的话），页面用精确分数算好再写进公式：`$A^2=\calc{A^2}$`、`$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha=\calc{b'*a}$`、`$\operatorname{tr}A=\calc{tr(A)}$`。变量来自 `let` 块（组件里还有组件自己的 `let`）。矩阵写成 `bmatrix`，分数写成 $\tfrac{1}{2}$。开方、三角这类算不准的写成小数。算不出来（变量没定义、尺寸不对）会画成红框并报写法错误。**凡是要写上黑板的数，都用 `\calc` 让页面算**，改数出新题时也一样。
+- **`\hl{名字}{…}`：给一项起名字**，本身不画任何东西。课堂里 `board mark term=名字` 靠它找到这一项去圈、框、划。名字只用字母、数字、`-`、`_`。
+- **`\chalk{颜色}{…}`：这一项用彩色粉笔写**（静态的；颜色跟着黑板风格走，比 `\color` 好）。颜色同上面的颜色约定（`yellow` `pink` `blue`……）。
+
+<!-- 完整写法 -->
+
+- `\hl` 把一个矩阵整个包起来，`board mark of=名字 row=2` 就能标这个矩阵的第 2 行。
+- `\chalk` 的颜色：`yellow` `pink` `blue` `green` `orange` `purple` `red` `white`。
+- 写的时候就要强调的，直接写进公式：`\boxed{…}`、`\cancel{…}`（约去）、`\underbrace{…}_{\text{…}}`、`\chalk{pink}{…}`。
+
+### recognize：认方法快练（只认方法，不计算）
+
+一次出一题，我点一个方法，再写一句「凭题目里的什么特征」，马上看对错、标准方法和原因（练认不出该用哪个方法）。
+
+```recognize
+id: rec-power-1
+title: 认方法
+methods: 秩一公式 | 试算低次幂 | 拆 kE+B 二项展开 | 分块对角 | 其他
+reason: true
+shuffle: true
+
+item: $A=\begin{bmatrix}1&-1&1\\-1&1&-1\\1&-1&1\end{bmatrix}$，求 $A^{10}$
+answer: 秩一公式
+why: 三行成比例，$A^n=[\operatorname{tr}A]^{n-1}A$
+
+```
+
+`answer:` 可以用 `|` 写多个可接受的方法（必须是 `methods` 里的名字）。
+
+<!-- 完整写法 -->
+
+- `reason: true` 时要写理由，`shuffle: true` 打乱题序。每题计时（不扣分），做完有小结，可以「只重做错的」。题目之间空一行，每题 `item:` / `answer:` / `why:`。
+
+### findbug：找错
+
+给一份有错的解答，我先点第一处错的那一行，再写错在哪（打字）。点对了显示 `why:`。题源最好用我错题档案里的真实错误。
+
+```findbug
+id: bug-ata
+title: 这份解答错在哪？
+q: $A$ 为 $5\times3$，三列长 1、2、3，第 1、2 列垂直，第 2、3 列垂直，第 1、3 列夹角 $120^\circ$。写出 $A^{\mathrm T}A$。
+line: $A^{\mathrm T}A$ 的 $(i,j)$ 位是第 $i$ 列和第 $j$ 列的内积
+line: 对角线是每列和自己的内积，填 $1, 2, 3$
+line: $(1,3)$ 位 $=1\cdot3\cdot\cos120^\circ=-\tfrac32$
+line: 其余非对角位是 $0$
+bug: 2
+why: 每列和自己的内积是长度的**平方**，对角线应为 $1, 4, 9$。
+```
+
+`bug:` 是第一处错的行号（从 1 数）。
+
+<!-- 完整写法 -->
+
+- 可选 `rubric:`：写了的话，页面里的 Claude 会对我写的说明给一句提示（只提示，不判过关）。点错了提示「这一行是对的」，错三次后可以看答案。
+
+### graph：函数图（微积分、概率分布）
+
+<!-- 科目：线代 高数 概率 计网 -->
+
+式子一律弧度。导数、切线、面积由页面算；间断点自己断开（空心、实心点）。
+
+```graph
+id: g-mvt
+title: 中值定理：找 ξ
+x: -0.5 3.5
+f(x) = x^3/4 - x
+let c = 0.5 drag on=f(x)
+plot f(x) color=blue label=f
+secant f(x) at 0, 3 color=pink
+tangent f(x) at c color=yellow
+show 切线斜率 ${f'(c)}$
+goal f'(c) = (f(3) - f(0))/3 msg="平行了"
+```
+
+字段：`x: 最小 最大`、`y:`（不写按曲线取）、`title`、`q`、`note`、`link`。命令：
+
+- `f(x) = 式子`：定义函数，后面写 `f(x)`、`f'(x)`、`f''(x)`。
+- `plot 式子`（`for x a b` 只画一段）、`shade 式子 a b`（到 x 轴，`-inf` `inf` 可以）、`area f, g from a to b`（两线之间）。
+- `tangent 式子 at a`、`secant 式子 at a, b`、`riemann 式子 from a to b n=8`。
+- `bars 式子 for k 0 10`（分布律）、`dots 式子 for n 1 30`（数列）。
+- `let a = 1 drag`（可拖的竖线；`on=f(x)` 骑在曲线上）、`slider`、`show`、`vline` `hline` `point` `segment` `text`。
+- `goal 左 = 右` / `goal 条件`：学生拖到、调到算做到。`pick "题目" on f(x) at 值, …`：学生在图上点出来，页面判。
+- 平面上的（`equal: on`、`param` `polar` `contour` `slope` `field` `region`、二维的拖点）见完整写法。
+
+<!-- 完整写法 -->
+
+命令末尾的修饰：`color=` `label=` `dashed` `thin`，`point … hollow` 空心点，`riemann … left / right / mid`，`dots … join` 连线（这几个词只在各自的命令上是修饰，别处是普通的名字），`xlabel:` `ylabel:` 坐标轴的名字。`let` 块里的量能直接用。
+
+**算式里的几种写法**（只在函数图里；`\calc` 不认）：`sum(k, 1, n, 式子)`、`prod(k, 1, n, 式子)`（整数 k 从 1 到 n，最多 20000 项）、`maxof(k, a, b, 式子)` / `minof`；`int(式子, t, a, b)` 数值定积分（上下限能写 `inf`，算不收敛时这张图报写法错误）；`maxon(式子, x, a, b)` / `minon` 区间上的最值；`roots(式子, x, a, b)` 区间上的全部实根（一串数，含端点，极点不算）。`el(v, i)` 向量的第 i 个分量、`len(v)` 有几个。`f'` 对第一个参数求导，能求到三阶；定义里有 `sum`、`abs` 以外不会导的函数时 `f'` 报「求不了导」。
+
+**画出来的样子**：跳跃间断点两头各一个点，函数值等于哪一边哪边实心；可去间断点一个空心点（整点、半整点、π/2 的倍数上的认得出，别处的写 `point [a, b] hollow`）；无穷间断点两边断开，不连竖线；超出窗口的部分裁掉。一点另有一个值的（`(x!=1)*(x+1) + (x==1)*4`）是空心点加那个值的实心点。`plot … dots=off` 不画这些点。分段函数的尖点处 `tangent` 不画（左右差商对不上）；`f'` 只在 `f` 有定义的地方有值。式子处处算不出来（函数名写错、变量没定义、求和超过 20000 项）时这张图报写法错误。求和项数多、一帧画得慢时，拖动中先画粗的，手停了补细的。标签互相让开，`at=0.3` 指定标签挂在横向三成处。
+
+```graph
+id: g-disc
+title: 间断点
+x: -3 4
+y: -4 5
+f(x) = (x<0)*(x+2) + (x>=0)*(x<2)*(x^2-1)/(x-1) + (x>=2)/(x-3)
+plot f(x) color=blue label=f(x) at=0.3
+pick "在 $x$ 轴上点出 $f$ 的全部间断点" on x at 0, 1, 2, 3 tol=0.15
+```
+
+**`pick`**：`on f(x)` 学生的点落在这条曲线上，目标写 x 的值；`on x` 点在 x 轴上；不写 `on` 是平面上随便点，目标写 `[x, y]`。目标能写式子：`at roots(f'(x), x, -3, 3)`。`tol=` 算点到了的距离（默认窗口宽的 4%）。学生点一下加一个点，点在已有的点上是去掉；按「检查」页面一对一配：配上的变绿、多的变红，说「有 1 个不在这里，还差 1 个」（不说漏的在哪）；检查三次没对出现「看答案」。每次检查记一条作答：点了哪些值、对不对、页面说的那句；看答案记 `giveup`。目标算不出来、或者学生点不到（在窗口外、曲线在那里没定义）时这张图报写法错误，「检查」不能按。
+
+**`goal`**：`goal f'(c) = 0 tol=0.05 msg="…"`（差不到 `tol` 算做到，默认 0.05），或者一个条件 `goal maxon(abs(f(x) - 3), x, 2 - d, 2 + d) < eps`。学生自己拖、自己调到才算；图一画出来就成立的、用 `figure set / play` 摆上去的不算（学生挪开再放回才算）。式子算不出来时这张图报写法错误。做到了侧栏写 `msg`，记一条作答。
+
+**`after` / `before`**：写在命令或 `show` 的末尾，图里的 `goal`、`pick` 全做到（或看了答案）以后才显示 / 之前才显示（`goal`、`pick` 自己不能写）。
+
+```graph
+id: g-ext
+title: 极值点
+x: -2.5 2.5
+y: -4 4
+f(x) = x^3 - 3x
+plot f(x) color=blue label=f
+pick "点出 $f$ 的全部极值点" on f(x) at roots(f'(x), x, -2.5, 2.5) tol=0.15
+plot f'(x) color=pink dashed label="f′" after
+```
+
+```graph
+id: g-osc
+title: 曲率圆
+equal: on
+x: -3 3
+y: -0.5 4.5
+f(x) = x^2
+let a = 0.7 drag on=f(x) snap=0.05
+plot f(x) color=blue
+osc K = f(x) at a color=yellow label=曲率中心
+show $K = {dec(K, 3)}$，$R = {dec(1/K, 3)}$
+goal a = 0 tol=0.03 msg="顶点处曲率最大"
+```
+
+**起名字**：`riemann S = f(x) from 0 to 1 n=n mid`、`area A = f(x), g(x) from -1 to 2`，后面的 `show`、`goal` 里 `S`（黎曼和）、`A`（面积 $\int|f-g|$）是一个数。`osc K = f(x) at a`：曲线在 a 处的曲率圆（圆、圆心、到切点的半径），`K` 是曲率；$f'' = 0$ 的地方没有圆、`K` 是 0。
+
+```graph
+id: g-riemann
+title: 黎曼和
+x: -0.2 1.3
+y: 0 1.3
+f(x) = x^2
+slider n 1 60 = 5 step=1 label="n"
+plot f(x) color=blue label="y = x²"
+riemann S = f(x) from 0 to 1 n=n mid color=yellow
+show $S_n = {dec(S, 5)}$，$\displaystyle\int_0^1 x^2\,dx = {int(f(t), t, 0, 1)}$
+```
+
+```graph
+id: g-area
+title: 两条曲线围成的面积
+x: -1.6 2.6
+y: -0.6 4.6
+area A = x + 2, x^2 from -1 to 2 color=yellow
+plot x + 2 color=pink label="y = x + 2" at=0.7
+plot x^2 color=blue label="y = x²" at=0.95
+show 面积 ${A}$
+```
+
+```graph
+id: g-series
+title: 数列的点、级数的部分和、泰勒多项式
+x: 0 31
+y: 0 2.2
+slider m 0 6 = 1 step=1 label="m"
+dots sum(k, 1, n, 1/k^2) for n 1 30 color=blue join label="Sn"
+hline pi^2/6 color=pink label="π²/6"
+show $\sin 2 \approx {dec(sum(k, 0, m, (-1)^k*2^(2k+1)/(2k+1)!), 5)}$
+```
+
+**概率**：密度、分布律、分布函数直接写函数名（见「表达式」）。几组 `bars` 并排画。
+
+```graph
+id: g-norm
+title: 正态分布：拖动 a 看累积概率
+x: -4 4
+slider mu -2 2 = 0 label="μ"
+slider s 0.5 2 = 1 label="σ"
+let a = 1 drag
+shade normpdf(x, mu, s) -inf a color=yellow
+plot normpdf(x, mu, s) color=blue label=f(x)
+bars binompmf(k, 6, 0.5)/4 for k 0 3 color=pink
+show $P(X \le {a}) = {normcdf(a, mu, s)}$
+```
+
+```graph
+id: g-chi2
+title: χ²(n) 的上 α 分位点
+x: 0 30
+y: 0 0.26
+slider n 1 15 = 4 step=1 label="n"
+let c = 4 drag snap=0.01
+shade chi2pdf(x, n) c inf color=yellow
+plot chi2pdf(x, n) color=blue label="χ²(n)" at=0.6
+show 右边的面积 ${dec(1 - chi2cdf(c, n), 4)}$
+goal 1 - chi2cdf(c, n) = 0.05 tol=0.002 msg="这里是 $\chi^2_{0.05}(n)$"
+show $\chi^2_{0.05}(n) = {dec(chi2inv(0.95, n), 3)}$ after
+```
+
+**平面上的东西**（两个变量）。`equal: on`：两个方向每单位一样长（写了 `y:` 时画布的高跟着范围变）。参数、极角都是弧度。
+
+- `f(x, y) = 式子`：二元函数。偏导 `f_x(…)` `f_y(…)` `f_xx` `f_xy` `f_yy`，梯度 `f_grad(…)`（一个向量）；实参能给一个点：`f(P)`、`f_grad(P)`。
+- `param [x(t), y(t)] for t a b`：参数曲线；`polar r(t) for t a b`：极坐标曲线。末尾 `fill` 涂面（`polar … fill` 是从极点扫过的那一块）。
+- `implicit 左 = 右`：隐函数的曲线。`contour 式子 at 值, 值, …`：等高线（一条命令最多 12 条，每条上写着它的值；值能写式子，如 `at f(P)`）。过鞍点的那一条两支交在一起；式子的极点、跳跃处（`y = tan(x)` 的渐近线）不画线。
+- `slope 式子`：$y' = $ 式子的方向场（斜率无穷的地方画竖的）；`flow 式子 from 点`：过这一点的解曲线（画到窗口边；切线竖起来的地方、方向场的奇点是解的尽头，画到那里为止）。`field [P, Q]`：向量场的箭头；`flow [P, Q] from 点`：流线。`n=` 一排几个。
+- `vector 向量 from 点`：一个箭头（不写 `from` 从原点出发）。`lineint(P, Q, x(t), y(t), t, a, b)`：$\int_L P\,dx + Q\,dy$，$L$ 是参数曲线、$t$ 从 a 到 b（P、Q 里的 x、y 是曲线上的点，$x'$、$y'$ 页面求）。
+- `region D = y from 下 to 上 for x a b`（X 型）、`region x from 左 to 右 for y c d`（Y 型）、`region r from 内 to 外 for t α β`（极坐标）；边界没定义的地方不画；上下限、范围写 `inf` 时画到窗口边。`region 条件, 条件, … in D`：条件都成立的地方（`in D` 限在区域 D 里，事件 ∩ 样本空间）。`region … hide` 只起名字不画。
+- `strip D at 式子 lo=y1 hi=y2`：区域 D 里的那一条（竖条 / 横条 / 射线上的一段），`y1` `y2` 是页面读出来的上下限，后面的 `show`、`goal`、`int(…)` 里能用；出了区域的范围、那里区域没定义时不画，读数写「—」。
+- `let P = [1, 2] drag`：平面上能拖的点（`snap=0.25`）；`drag on="x + y = 3"` 只能沿这条曲线拖：点取曲线上离手指最近的地方；一开始不在线上的先投上去；约束里的量变了（滑块改了半径）点跟着回到线上。拖不出窗口，写在窗口外的起点放回边上。
+- `int2(式子, x, a, b, y, 下, 上)`：二重积分（先对后一个变量积，下、上能含前一个变量；极坐标自己乘 r）。式子里能写条件：`int2((x + y <= z)*f(x, y), x, 0, 1, y, 0, 1)`（条件、绝对值、`max` `min`、取整的断口页面先找出来再分块积）；发散的、核不准的报「页面算不出来」。`binormpdf(x, y, μ1, μ2, σ1, σ2, ρ)` 二维正态的密度。拖动中含 `int2` 的读数、目标先留着上一次的，手停了再算；`plot` 的式子里有 `int2`（直接写或者在定义里）时这条曲线只取三十几个点。
+- `pick "题目" at [x, y], …` 不写 `on`：学生在平面上点，页面按屏幕上的距离配。
+
+```graph
+id: g-polar
+title: 极坐标曲线扫过的面积
+equal: on
+x: -1 2.6
+y: -1.6 1.6
+slider th 0 6.28 = 1.2 step=0.02 label="θ"
+polar 1 + cos(t) for t 0 2pi color=blue label="r = 1 + cos θ" at=0.6
+polar 1 + cos(t) for t 0 th color=yellow fill
+param [0.3cos(s), 0.3sin(s)] for s 0 th color=pink thin
+vector (1 + cos(th))*[cos(th), sin(th)] color=yellow label=r
+show 扫过的面积 ${dec(int((1 + cos(t))^2/2, t, 0, th), 4)}$
+goal th = pi tol=0.03 msg="上半个"
+```
+
+```graph
+id: g-lagrange
+title: 条件极值
+equal: on
+x: -1 4
+y: -1 4
+f(x, y) = x^2 + 2y^2
+let P = [0.5, 2.5] drag on="x + y = 3"
+implicit x + y = 3 color=pink label="x + y = 3" at=0.25
+contour f(x, y) at 2, 12, 20 color=gray
+contour f(x, y) at f(P) color=yellow
+vector f_grad(P)/8 from P color=yellow label=∇f
+vector [1, 1] from P color=pink label=∇g
+show $f(P) = {dec(f(P), 3)}$，$f_x = {f_x(P)}$，$f_y = {f_y(P)}$
+goal f(P) < 6.02 msg="相切：最小值 6"
+```
+
+```graph
+id: g-ode
+title: 方向场和过一点的解
+x: -3 3
+y: -4 6
+let P = [0, 2] drag snap=0.1
+slope y - x
+flow y - x from P color=yellow label="过 P 的解"
+goal el(P, 2) = el(P, 1) + 1 tol=0.06 msg="这条解是直线 $y = x + 1$"
+```
+
+```graph
+id: g-field
+title: 向量场和沿曲线的积分
+equal: on
+x: -2.4 2.4
+y: -2.1 2.1
+slider th 0 6.28 = 1 step=0.02 label="θ"
+P(x, y) = -y
+Q(x, y) = x
+field [P(x, y), Q(x, y)]
+param [cos(s), sin(s)] for s 0 th color=yellow
+show $\displaystyle\int_L P\,dx + Q\,dy = {dec(lineint(P(x, y), Q(x, y), cos(s), sin(s), s, 0, th), 3)}$，$Q_x - P_y = {Q_x(0, 0) - P_y(0, 0)}$
+```
+
+```graph
+id: g-region
+title: 积分区域里的竖条；事件的概率
+equal: on
+x: -0.3 1.5
+y: -0.3 1.3
+f(x, y) = 8x*y
+slider a 0.02 0.98 = 0.3 step=0.01 label="x"
+slider z 0 2 = 1 step=0.02 label="z"
+region D = y from x to 1 for x 0 1 color=blue
+region x + y <= z in D color=yellow
+strip D at a lo=y1 hi=y2 color=pink
+show 竖条上 $y$ 从 ${dec(y1, 2)}$ 到 ${dec(y2, 2)}$，$f_X = {dec(int(f(a, y), y, y1, y2), 3)}$
+show $P(X + Y \le z) = {dec(int2((x + y <= z)*f(x, y), x, 0, 1, y, x, 1), 3)}$
+```
+
+- 上下限、`for` 的范围里能写式子（括号里的空格不拆）：`shade chi2pdf(x, n) chi2inv(1 - al, n) inf`。
+- `bars … highlight=k<=3`、`dots … highlight=n>N`：条件成立的更亮。
+- 课堂里：`figure target=g-mvt set c=1.7` / `play h 1.5 0.01 4s` / `highlight 3`（第 3 条命令闪一下），`board mark target=g-mvt at=[2, 1]`。
+
+### space：三维图（可以拖动旋转）
+
+<!-- 科目：线代 高数 -->
+
+三维向量、张成的平面、平行六面体（体积 = 行列式）。我可以用手指或 Pencil 拖动旋转，还有「正视角」「转一转」按钮。
+
+```space
+title: 两个向量张成一个平面
+let u = [1, 0, 1]
+let v = [0, 1, 1]
+slider a -2 2 = 1
+slider b -2 2 = 1
+span u, v color=blue
+vector u color=blue label=u
+vector v color=pink label=v
+vector a*u + b*v color=yellow label=w drop
+show $\mathbf w = a\mathbf u + b\mathbf v = {a*u + b*v}$
+```
+
+- `vector 表达式`（`from 点`；`drop` 加一条到地面的虚线）、`point P, …`、`segment P, Q`、`line P dir d`、`text "文字" at P`、`let`、`slider`、`show`。
+- `span u, v`：过原点的平面（共线时是直线；三个向量张成全空间时注明）。`plane normal n at P`：过 P、法向量 n 的平面。`box u, v, w`：平行六面体。`grid M`：地面网格在 3×3 矩阵 M 下的像。
+- `quadric A = c`：二次曲面 $\mathbf x^{\mathsf T}A\mathbf x=c$ 的线框（A 是 3×3 对称矩阵），左上角写着是什么曲面。
+- 平面写方程和交线、三个平面的情形、三阶的特征方向、曲面、旋转体、积分区域、能拖的点和 `goal` / `pick`：见完整写法。
+
+字段：`range`（坐标范围，默认自动）、`view: 方位角 仰角`（默认 `-32 22`）、`spin: true`（打开时慢慢转）、`title`、`q`、`note`、`link`。
+
+<!-- 完整写法 -->
+
+**角度还是弧度**：图里写了函数定义（`f(x, y) = …`）或者 `surface` `curve` `section` `tangent` `revolve` `disk` `shell` `region` `solid` `column` `slice` `field` `normals` 任何一条，整张图的三角函数按弧度；别的图照旧按角度（`cos(60)`、`rot(…)`）。`angle: rad` / `angle: deg` 明着定；按弧度的图里滑块的范围像是角度（到 90、180、360）又写进了三角函数时，页面报一条软提醒。`z: 下 上`：竖直方向看哪一段（不写时微积分的图自动对准内容的中间；内容比盒子高时盒子贴着内容多的那一头，伸出盒子的曲面沿盒子的顶 / 底裁开）。用了下面这些写法的图是上下排的（图在上、读数在下）。
+
+**平面、直线（空间解析几何；三个平面的位置关系）**
+
+- `plane 2x + y - z = 3`：写方程的平面（一次式），画的是它在范围里的那一块；前面能起名 `plane p1 = …`。几张平面互相切开、按远近画。
+- `line l1 = [1, 0, 0] dir [1, 1, 1]`：直线能起名。
+- `meet p1, p2`：两个平面的交线（平行、重合时读数下面写一行）。`meet p1, p2, p3`：三个平面——两两的交线、公共点画出来，读数下面写是哪种情形和两个秩，如「r(A) = 2，r(A, b) = 3：无解（两两相交，三条交线互相平行，围成三棱柱）」。
+- `angle p1, p2`：夹角的弧（两个平面、两条直线、直线和平面）。`foot [1, 2, 3] on p1`：点到平面 / 直线的垂线段和垂足。
+- 起了名字的平面、直线在式子里是一个量：`dist(点, p1)`（点到平面、到直线、两点的距离）、`angleof(p1, p2)`（弧度）、`angledeg(p1, l1)`（度）。平面也能直接写成 `[a, b, c, d]`（$ax + by + cz = d$）。
+- `eigen A`：3×3 矩阵的实特征方向（一条线；重根有两个方向时是一张平面），线上写着 λ；特征向量不够 3 个时读数下面写一行。
+
+```space
+id: sp-planes
+title: 三个平面
+range: 3
+slider d -2 2 = 1 step=0.25 label="d"
+plane p1 = y = 0
+plane p2 = z = 0
+plane p3 = x/2 + y + z = d
+meet p1, p2, p3 color=white label=P
+meet p1, p2 color=yellow label=l
+angle p2, p3 label=θ
+foot [1, 2, 2] on p2 label=H
+show 夹角 ${dec(angledeg(p2, p3), 1)}^\circ$，点到 $\pi_2$ 的距离 ${dist([1, 2, 2], p2)}$
+goal d = 0 tol=0.01 msg="三个平面都过原点"
+```
+
+```space
+id: sp-eig
+title: 特征方向
+range: 3
+let A = [[2, 0, 0], [0, 3, 4], [0, 4, 9]]
+slider th 0 360 = 40 step=1 label="θ"
+let v = [cos(th), sin(th), 0.5]
+eigen A
+vector v color=blue label=v
+vector A*v/5 color=pink label="Av/5"
+```
+
+**曲面、空间曲线（多元函数、二次曲面）**
+
+- `surface z = f(x, y)`：显式曲面。`for x a b, y c d` 给范围（`y` 的上下限能含 `x`；下限是一个不带空格的式子）；`for r 0 2, t 0 2pi` 是极坐标的底（`r` 和 `t` / `theta` 先写哪个都行）；直角坐标的两个范围只认 `x`、`y`，别的名字报写法错误；`over D` 贴着一个 `region`；不写就是整个范围。
+- `surface [x(u, v), y(u, v), z(u, v)] for u a b, v c d`：参数曲面。`surface x^2 + y^2 - z^2 = 1`：任意方程的曲面，按三族平面的截痕画线框（柱面、锥面、抛物面、双曲面都行）。前面能起名 `surface S = …`。
+- `curve [cos(t), sin(t), t/3] for t 0 4pi`：空间曲线，能起名。
+- `section x = a of S`（或 `y = b`、`z = c`）：曲面 S 被这张平面截出来的曲线（显式曲面和写方程的曲面）。
+- `tangent S at [a, b]`：曲面在这一点的切平面和法向量（参数曲面写 `[u, v]`，写方程的曲面写曲面上的点 `[x, y, z]`）；`tangent C at t0`：曲线的切线，末尾加 `plane` 画法平面。导数是页面求的。不可微的点（圆锥的顶点、棱）不画切平面，速度是零的点（尖点）、折角不画切线，读数下面各写一句；写方程的曲面，`at` 的点不在曲面上报写法错误。
+- `normals S n=5`：曲面上的法向量（参数曲面朝 $r_u \times r_v$ 那一侧）。`field [P, Q, R] n=4`：空间向量场。
+
+```space
+id: sp-surf
+title: 曲面、截痕、切平面
+range: 2.5
+f(x, y) = 3 - x^2/2 - y^2/3
+let P = [1, 0.5] drag on=S snap=0.05
+slider b -2 2 = 0.8 step=0.05 label="y₀"
+surface S = z = f(x, y) for x -2.2 2.2, y -2.2 2.2 color=blue
+section y = b of S color=pink
+tangent S at P color=yellow
+show $f_x = {dec(f_x(P), 3)}$，$f_y = {dec(f_y(P), 3)}$
+goal norm(f_grad(P)) < 0.12 msg="切平面水平：驻点"
+```
+
+```space
+id: sp-quad
+title: 写方程的曲面、参数曲面、空间曲线
+range: 2.5
+slider c -1 1 = 0.6 step=0.05 label="c"
+surface x^2 + y^2 - z^2 = c color=blue
+surface T = [0.5sin(v)*cos(u), 0.5sin(v)*sin(u), 0.5cos(v)] for v 0 pi, u 0 2pi color=pink
+normals T n=3 color=yellow
+curve C = [2cos(t), 2sin(t), t/3 - 2] for t 0 4pi color=green
+tangent C at 2 plane color=yellow
+field [0, 0, 0.3z] n=3 color=gray
+```
+
+**能拖的点、点一点**：`let P = [1, 0.5] drag`（`snap=`）是地面（xy 平面）上能拖的点；`drag on=S` 时曲面上对应的那一点也是把手，手指指到曲面上看得见的哪一处点就到哪；点被前面的曲面挡住时画成空心的圆点、读数下面写一句（转一下图看得到；直接拖会落到看得见的这一面）。按在把手上是拖点，别处是转视角；视线和地面的夹角小于 8° 时地面上的点拖不动。`pick "题目" at [x, y], …`：学生在地面上点；`pick "题目" on S at [x, y], …`：点在曲面 S 上（记的是它下面的 `[x, y]`；被前面的曲面挡住的地方要转一下才点得到）；目标里能用滑块、能拖的点。`goal`、`after` / `before` 和 graph 一样。
+
+```space
+id: sp-pk
+title: 在曲面上点出驻点
+range: 2.5
+view: 20 60
+f(x, y) = (x^3 - 3x + y^2)/2
+surface S = z = f(x, y) for x -2.2 2.2, y -2 2 color=blue
+pick "在曲面上点出两个驻点" on S at [1, 0], [-1, 0] tol=0.35
+tangent S at [1, 0] color=yellow after
+```
+
+**旋转体、积分区域**
+
+- `revolve V = sqrt(x) for x 0 4 about x`：$y = f(x)$ 绕 x 轴转出来的面（`about y` 绕 y 轴，图里竖着的那根轴；这时 `x` 的范围不能跨过 0）；`upto=角` 转到哪。起了名字的 `V` 是体积（转到 `upto` 的那一部分）；`area=S` 把侧面积 $2\pi\int|f|\sqrt{1 + f'^2}\,dx$ 记成 `S`（绕 x 轴的）。`disk V at x0`：一片圆盘（绕 x 轴的）；`shell V at x0`：一层柱壳（绕 y 轴的）。
+- `region D = r from 0 to 2 for t 0 2pi`：地面上的区域（写法和 graph 的一样；`hide` 只起名字）。两条边界线交叉以后（下限高过上限的那一段）按两条线之间算：画的、在不在里面、截面面积是同一块。
+- `solid T = z from 下 to 上 over D`（或 `for x a b, y c d`）：两张曲面之间的区域，画底、顶和侧面。`solid K = rho from 0 to 2 for phi 0 pi/4, t 0 2pi`：球面坐标的区域。
+- `column T at P lo=z1 hi=z2`：区域里过地面上的点 P 竖着的一根（先一后二），`z1` `z2` 是页面读的上下限；P 在底的外面时读数写「—」。`slice T at z0 area=A`：平面 $z = z_0$ 截出来的那一块（截面法），`A` 是页面积出来的面积（截面贴着平的顶 / 底时是那一面的面积；上下限没定义的地方没有立体）。
+- 式子里的积分：`int3(式子, x, a, b, y, c, d, z, e, f)` 三重积分（后面的上下限能含前面的变量；柱面、球面坐标把雅可比写进式子）；`flux(P, Q, R, x(u, v), y(u, v), z(u, v), u, a, b, v, c, d)` 通量 $\iint_\Sigma \mathbf F\cdot d\mathbf S$（朝 $r_u \times r_v$ 那一侧）；`lineint3(P, Q, R, x(t), y(t), z(t), t, a, b)` 空间曲线上的 $\int_L P\,dx + Q\,dy + R\,dz$。算不出来（发散、核不准）报「页面算不出来」。
+
+```space
+id: sp-rev
+title: 旋转体
+range: 4
+slider th 0 6.2832 = 4 step=0.02 label="转到" play
+revolve V = sqrt(x) for x 0 4 about x upto=th color=blue
+disk V at 2.5 color=yellow
+show 体积 ${dec(V, 3)}$
+```
+
+```space
+id: sp-shl
+title: 柱壳
+range: 2.2
+slider x0 0.1 1.9 = 0.6 step=0.02 label="x₀"
+revolve W = x*(2 - x) for x 0 2 about y color=blue
+shell W at x0 color=yellow
+show $V = {dec(W, 4)}$
+```
+
+```space
+id: sp-sol
+title: 区域：先一后二、截面法
+range: 2.5
+let P = [1, 0.5] drag snap=0.05
+slider h 0.1 4 = 3 step=0.05 label="z₀"
+region D = r from 0 to 2 for t 0 2pi color=gray
+solid T = z from x^2 + y^2 to 4 over D color=blue
+column T at P lo=z1 hi=z2 color=pink
+slice T at h area=A color=yellow
+show $z$ 从 ${dec(z1, 2)}$ 到 ${dec(z2, 2)}$，$A(z_0) = {dec(A, 3)}$，$V = {dec(int3(r, t, 0, 2pi, r, 0, 2, z, r^2, 4), 3)}$
+show 球面上的通量 ${dec(flux(x, y, z, sin(v)*cos(u), sin(v)*sin(u), cos(v), v, 0, pi, u, 0, 2pi), 3)}$，环流 ${dec(lineint3(-y, x, 0, cos(t), sin(t), 0, t, 0, 2pi), 3)}$
+```
+
+### venn：文氏图（事件的关系和运算、加法公式、条件概率）
+
+<!-- 科目：概率 -->
+
+一到三个事件。式子页面读成区域；给了概率，每一块、问的量页面精确地算（分数）。
+
+```venn
+id: v-add
+sets: A B
+given: P(A) = 0.5, P(B) = 0.4, P(AB) = 0.2
+shade: A - B
+ask: "至少有一个不发生" ~(AB)
+ask: P(A + B)
+```
+
+- 式子：`A + B`（并）、`AB`（交）、`A - B`、`~A` 或 `A'`（对立）、括号。
+- `ask:` 写式子是我在图上点区域（圆外面那一块也能点），写 `P(…)` 是我填概率，`P(A | B)` 是条件概率；页面判，一条一条做。
+- `given`、`find`（读数）、`probs`，判法、认的错法见完整写法。
+
+<!-- 完整写法 -->
+
+| 字段 | 作用 |
+|---|---|
+| `sets: A B C` | 一到三个事件，名字是一个大写字母（能带一位数字） |
+| `given: P(A) = 0.5, P(AB) = 1/5, P(B \| A) = 40%` | 给的条件：`P(式子) = 数`，条件概率也能给。每一块的概率由它们加上「和是 1、每块非负」解出来 |
+| `shade: 式子` | 涂出来的区域；能写几行，各一种颜色，图例里写成公式 |
+| `find: P(A + B), P(A \| B)` | 读数，页面算；定不下来的写「条件不够」和它能取的范围（不替学生假设独立、互斥），条件的概率是 0 的写「没有定义」 |
+| `ask: "题目" 式子` | 我点区域；也能写 `ask: 题目 => 式子`，只写式子时题目就是那个式子 |
+| `ask: "题目" P(式子)` | 我填概率（分数、小数、百分数都认；小数要两位以上、三位有效数字，四舍五入；百分数换成小数以后照同一条：52.6% 当 0.526） |
+| `probs: on / off` | 每一块里写不写它的概率。不写时：有填概率的题就不写，没有就写 |
+
+- 式子的写法：并 `+` `∪`，交并排写或 `∩` `*`，差 `-` `\`，对立 `~A` `!A` `A'` `Ā` `\overline{…}`，全集 `Ω`，空集 `∅`；交比并、差先算，并和差从左往右。夹在两个事件中间的字母 `U` 当并（`A U B`）。`given` 里条件概率定下来的比值（`P(B | A) = 0.4`）问它本身、问由它推得出的条件概率都算定得下来。
+- 点区域：全对才过；不对时只说多点了几块、少点了几块。填概率：按精确值比。检查三次没对出「看答案」。
+- 填概率时页面认的错法（告诉我一句，记录里 `misread`）：并当成两个概率直接相加（`add-twice`）、差当成直接相减（`minus-whole`）、没说独立就相乘（`assume-indep`）、条件概率没除以条件的概率（`joint-for-cond`）、条件和结果写反（`cond-reversed`）。
+- 自检报的：`given` 自相矛盾、`ask: P(…)` 由给的条件定不下来、式子读不懂、名字不在 `sets` 里。
+- 没有正在做的点区域题时，点一块会写出它是什么事件（$A\overline{B}$：A 发生、B 不发生）。
+- 作答记成 `type: venn`：点的区域写成 `AB'、A'B`（带撇的是不发生）。
+
+```venn
+id: v-three
+sets: A B C
+ask: "恰好有一个发生" AB'C' + A'BC' + A'B'C
+ask: "至少有两个发生" AB + BC + AC
+```
+
+### ptree：概率树和面积图（全概率、贝叶斯）
+
+<!-- 科目：概率 -->
+
+一行一个原因：先验，冒号后面是结果和条件概率。页面画树（边上写概率、叶子上写乘积）、面积图、后验那一条，数都是页面算的。
+
+```ptree
+id: t-fac
+A1 0.5: B 0.02
+A2 0.3: B 0.01
+A3 0.2: B 0.03
+labels: A1=甲厂 A2=乙厂 A3=丙厂 B=次品
+drag: on
+ask: P(B)
+ask: "抽到次品，它是甲厂的概率" P(A1 | B)
+```
+
+- `drag: on`：面积图的分界能拖（竖的改先验、横的改条件概率），树上的数、后验当场一起变。
+- `ask:` 我填一个数：`P(B)`、`P(A1 | B)`、`P(A1 B)`、`P(~B | A2)`；页面按树现在的数判。
+- 多层的树（不放回地摸几次）、`blank`、`find`、认的错法见完整写法。
+
+<!-- 完整写法 -->
+
+| 写法 | 作用 |
+|---|---|
+| `A1 0.5: B 0.02` | 原因 A1 的概率 0.5，这时结果 B 的概率 0.02（对立那一支页面补上）。原因最少两个，概率加起来要是 1；每行冒号后面是同一个结果 |
+| 缩进的行 `红 3/5`、`  红 2/4` | 多层的树：一行「名字 概率」，缩进比上一行多的是它的孩子；每个结点下面几支加起来要是 1。只有树，没有面积图 |
+| `labels: A1=甲厂 B=次品` | 图上显示的名字（式子里还是写 A1、B） |
+| `drag: on` | 面积图的分界能拖，取到 0.01；拖完记一个动作。有 `ask` / `blank` 时，题答完以后才能拖 |
+| `find: P(B), P(A1 \| B)` | 读数，跟着拖动变 |
+| `ask: "题目" P(…)` | 我填，按树现在的数判；检查三次没对出「看答案」 |
+| `blank: A1:~B, A2 B, A3` | 树上先打问号、让我填的地方：对立那一支（`A1:~B`）、叶子上的乘积（`A2 B`）、一个先验（`A3`）。给的条件（`A1:B`）不能空。先填它们，再做 `ask` |
+
+- 能问的量：`P(A2)`、`P(B | A2)`、`P(~B | A2)`、`P(A2 B)`（两个都发生）、`P(B)`（全概率）、`P(A1 | B)`（后验）、`P(A1 + A2 | B)`、`P(A1 + B)`（并）、`P(~(A1 + A2))`（能加括号）。
+- 多层的树按位置问：`P(红, 红)`（第一步红、第二步红）、`P(_, 红)`（第二步是红，第一步哪个都行）、`P(红, _ | _, 红)`；名字只在一层出现的能直接写。
+- 面积图：单位正方形横着按先验分列，每列里下面那一块高是条件概率；后验是把结果发生的那几块抽出来排成一条。点树上的一条路、面积图上的一块，页面写出这条路怎么乘出来的。还有问后验的 `ask` 没答时，后验那一条先不画；路上有没填的 `blank` 时，点那条路不写数。
+- 页面认的错法（`misread`）：条件和结果反了（`cond-reversed`）、没除以条件的概率（`joint-for-cond`）、拿先验当后验（`prior-for-post`）、条件概率直接相加 / 平均当全概率（`sum-cond` / `mean-cond`）、拿条件概率当联合（`cond-for-joint`）。
+- 写的是小数（0.02）时图上除得尽的照小数写，除不尽的写分数。结果的概率是 0 时后验写「没有定义」。
+- 作答记成 `type: ptree`。
+
+```ptree
+id: t-urn
+q: 袋里 3 红 2 白，不放回地摸两次。
+红 3/5
+  红 2/4
+  白 2/4
+白 2/5
+  红 3/4
+  白 1/4
+ask: "第二次摸到红" P(_, 红)
+```
+
+### joint：联合分布表（二维离散型：边缘、条件、独立、Z 的分布、协方差）
+
+<!-- 科目：概率 -->
+
+行是 X 的取值、列是 Y 的取值。边缘、条件分布、期望方差协方差、Z = g(X, Y) 的分布都是页面算的（分数）。
+
+```joint
+id: j-xy
+X: 0 1 2
+Y: 0 1
+p: 1/10 1/5; 1/5 3/10; 1/10 1/10
+z: X + Y
+ask: margins
+ask: independent
+ask: Cov(X, Y)
+```
+
+- `p:` 一行是 X 的一个取值，分号或换行分行。点一行 / 一列的表头，页面写出那个条件下的分布。
+- `z:` Z 的式子：取值相同的格子同一种颜色，下面一张 Z 的分布表。
+- `ask:` `margins`（填边缘）、`z`（填 Z 的分布）、`independent`、`cells`、一个量（`E(X)`、`Cov(X, Y)`、`P(X + Y <= 1)`）；`show`、空着的格见完整写法。
+
+<!-- 完整写法 -->
+
+| 字段 | 作用 |
+|---|---|
+| `X: 0 1 2`、`Y: 0 1` | 取值（能是负数、分数） |
+| `p: …; …` | 概率表，`?` 是空着的格 |
+| `px: 1/3 2/3`、`py: …`、`independent: on` | 补空着的格用的条件（X 的边缘、Y 的边缘、独立）；加上「和是 1」补不出来页面报错 |
+| `show: margins, moments, independent` | 页面写出来的：边缘（写在表边上）、矩（E、D、Cov、ρ）、独立不独立（不独立时写出一格对不上的） |
+| `z: max(X, Y)` | Z = g(X, Y)：`X + Y`、`X*Y`（`XY`）、`max(X, Y)`、`min(X, Y)`、`abs(X - Y)`…… |
+| `ask: margins` | 我在表边的格子里填边缘，逐格判，错的格标出来 |
+| `ask: cells` | 我填表里空着的格（配 `px` / `py` / `independent`） |
+| `ask: z` | 我填 Z 的分布表（取值页面写好） |
+| `ask: independent` | 我点「独立 / 不独立」；不独立的还要在表里点出一格（它的概率不等于两个边缘的乘积）才算完 |
+| `ask: "题目" 量` | 我填一个数 |
+
+- 能问的量：`E(X)`、`E(XY)`、`E(X^2)`、`E(2X - Y)`，`D(X)`、`D(X + Y)`，`Cov(X, Y)`，`rho`，`P(X + Y <= 1)`、`P(X = Y)`、`P(X = 1, Y = 0)`、`P(0 < X <= 2)`、`P(X = 1 | Y = 0)`，条件期望 `E(X | Y = 0)`。`P( )` 里要是比较（只写 `P(X)` 报写法错误）。
+- 还有题没答完时，点表头只亮出那一行 / 列、说怎么算，不写边缘和条件分布的数。
+- 相关系数开不尽时页面写成最简根式；我写小数（三位有效数字）或 `-sqrt(6)/21` 都认。
+- 页面认的错法（`misread`）：协方差只算了 E(XY)（`exy-for-cov`）、方差只算了 E(X²)（`ex2-for-var`）、相关系数填成协方差（`cov-for-rho`）、条件概率没除（`joint-for-cond`）、符号反了（`sign`）。
+- 一组格子没填完不判；检查三次没对出「看答案」。作答记成 `type: joint`。
+
+```joint
+id: j-ind
+q: $X$、$Y$ 独立。
+X: 0 1
+Y: -1 0 1
+p: 1/12 ? ?; ? 1/4 ?
+px: 1/3 2/3
+independent: on
+ask: cells
+```
+
+### sim：抽样模拟（大数定律、中心极限定理、抽样分布、置信区间）
+
+<!-- 科目：概率 -->
+
+从一个分布里一次次抽 n 个，看统计量长什么样。随机数带种子：同一张图每次打开是同一组数。按钮「抽一次 / 抽 100 次 / 抽 1000 次 / 清空」。
+
+```sim
+id: s-clt
+draw: X ~ Exp(1)
+slider n 1 60 = 2 step=1
+stat: z
+curve: normpdf(x, 0, 1) label="N(0, 1)"
+x: -4 4
+show 模拟了 {reps} 次；平均 {dec(mean, 3)}、方差 {dec(var, 3)}
+```
+
+- `draw:` 分布照教材写：`N(μ, σ²)`（第二个是方差）、`U(a, b)`、`Exp(λ)`、`B(n, p)`、`P(λ)`、`Geo(p)`。
+- `stat:` 画哪个统计量：`mean` `sum` `S2` `var`（除以 n）`z` `t` `chi` `max` `min` `median`。
+- `view:` `hist`（直方图）/ `path`（样本均值的路径）/ `intervals`（一排置信区间）/ `scatter`（散点）；别的字段见完整写法。
+
+<!-- 完整写法 -->
+
+| 字段 | 作用 |
+|---|---|
+| `draw: X ~ 分布` | `N(μ, σ²)`、`U(a, b)`、`Exp(λ)`（均值 1/λ）、`B(n, p)`、`P(λ)`、`Geo(p)`（第几次才成功，从 1 数）、`chi2(n)`、`t(n)`、`{0: 0.5, 1: 0.3, 4: 0.2}`（离散）；成对的 `(X, Y) ~ N2(ρ)`（标准二维正态）。参数能写滑块的名字 |
+| `n: 30` 或 `slider n 1 60 = 5 step=1` | 每次抽几个。滑块一动就清空重来 |
+| `slider 名字 小 大 = 初值 step= label=` | 别的滑块（分布的参数） |
+| `stat:` | `mean` `sum` `var`（除以 n）`S2`（除以 n − 1）`S` `max` `min` `median`；`z` = $(\bar X-\mu)/(\sigma/\sqrt n)$、`t` = $(\bar X-\mu)/(S/\sqrt n)$、`chi` = $(n-1)S^2/\sigma^2$（μ、σ 是这个分布的理论值）；或者用 `xbar` `S` `S2` `var` `n` `mu` `sigma` `total` `max` `min` 写的式子 |
+| `view: hist` | 统计量的直方图（面积按全部次数算）。`bins:`、`x: 左 右`、`y:`；`discrete: on` 时一个取值一根（和、次数） |
+| `curve: 式子 label="…"` | 叠在直方图上的理论曲线（x 的函数，能用 `n` `mu` `sigma` 和滑块；`discrete: on` 时在整数上画点）。能写几条 |
+| `view: path` | 一次画一条：抽 n 个的过程里样本均值怎么走。`band: 0.05` 画 μ ± ε 的带子 |
+| `view: intervals` | 一次一个均值的置信区间，没盖住 μ 的标红。`level: 0.95`、`sigma: known / unknown`（已知用正态的分位点，未知用 t 和 S） |
+| `view: scatter` | 配 `N2(ρ)`：一次抽 n 个点 |
+| `seed: 7` | 种子（不写是 1） |
+| `show 文字 {式子}` | 读数：`reps`（抽了几次）、`mean` `var`（这些统计量的平均、方差）、`last`、`n` `mu` `sigma`、滑块；路径的 `inband`（最后落在带子里的占比）；区间的 `total` `miss` `cover`；散点的 `r` |
+| `ask: "题目" = 式子` | 我填一个数，按式子现在的值判。式子里只能用理论上的量：`n` `mu` `sigma` `level` `band` 和滑块；用了模拟出来的量（`reps` `mean` `var` `last` `miss` `total` `cover` `inband` `r`）报写法错误。滑块不能起这些名字 |
+
+- 模拟出来的数只拿来看；判对错用的是式子算的值。
+- 一张图最多攒 20000 次；常见的参数下抽 1000 次约 0.2 秒（`B(n, p)` 的 n 上千、自由度几百、样本量几百时要几秒）。路径只画最近 24 条、区间只画最近 40 个，计数是全部的。
+- 切比雪夫的界写在读数里：`{dec(max(0, 1 - sigma^2/(n*band^2)), 3)}`。
+- 作答记成 `type: sim`；拖滑块记一个动作。
+
+```sim
+id: s-ci
+draw: X ~ N(10, 4)
+n: 8
+view: intervals
+level: 0.95
+sigma: unknown
+seed: 5
+show {total} 个区间里 {miss} 个没盖住 $\mu$
+```
+
+### 演示组件（stepper）：一步步走的过程
+
+行化简、行列式、对角化、排序、遍历、查找、页面置换、调度这类「一步步走」的过程，都用演示组件：你只写输入，**每一步的状态、说明和结果都由页面算**，不要自己算轨迹。线代的是 `elim` `det` `eig` `schmidt` `quad`，计算机课的见各自小节；菜单上没有的过程用 `frames` 自己写每一步。所有演示组件共用这些字段和用法：
+
+- `ask:` **先猜再揭晓**：走到某一步之前先问我，我答了才揭晓。写问题的种类（见各组件的说明），几种用逗号；`ask: rotate#2` 只问第 2 次；或者写步号 `ask: 3, 7`；`ask: all` 全问。
+- **三种做法**：`mode: demo`（默认，看过程 + `ask`）；`mode: quiz`（只给输入，我写出结果，页面判分；做完可以「看一步步的过程」）；**`mode: fill`（我自己把整张表填出来**，页面逐格批，标出第一处错；加 `by: row` 一行一行判：竖式、过程表写一行判一行）。
+- 字段还有 `id`、`title`、`q`（上方的题目或说明）、`note`、`start: end`（一开始停在最后）。输入的字段里可以用这节课 `let` 的量：`matrix: \calc{A}`。
+- 课堂里：`figure target=s1 set step=5` / `play step 0 12 8s` / `highlight 3`，`board mark target=s1 item=3`（或 `label=B`）。
+
+<!-- 完整写法 -->
+
+- **错法诊断**：我的答案和某种常见错法算出来的一样时，作答记录里写「页面看出来：像是按 FIFO 换的」。只给你看：用它来追问，推我自己发现。
+- **滑块 `vary:`**（只用在演示上）：`vary: d = 1..10 step 1 km`，字段里写 `\calc{d}`（`dist: \calc{d}km`），我拖滑块时整个演示按新值重算，看结果怎么变。
+- 画面下面是一句说明和控制条（上一步 / 下一步 / 播放 / 进度条）；第 0 步是开始的样子。`ask` 问的时候「下一步」点不了；在图上点的题，可以点的格子会虚线框出来；种类、步号写错了自检会报。我点「想不出来」也会揭晓。
+- `mode: fill` 的表：每一趟之后的序列、每一轮的 dist、每次访问后的各物理块、每一步之后的系数……不给答案。错法诊断对猜的、quiz 写的、fill 填的都管用（「像是交换两行时忘了变号」）。作答记录里有我走到第几步、猜了什么、每一格填了什么。
+- 步与步之间有过渡（同一个数、同一个结点滑到新位置）。课堂里 `figure target=s1 set step=5` 跳到第 5 步（不问）、`play step 0 12 8s` 8 秒里从头走到第 12 步（跟着你说的话走）、`highlight 3` 第 3 个格子 / 结点闪一下；`board mark target=s1 item=3` 圈第 3 个格子、`label=B` 圈写着 B 的那个。
+- `start: end` 一开始就停在最后（直接看结果）；`start: 5` 停在第 5 步。`speed: 0.8` 播放时每步 0.8 秒（默认 1.2）。`auto: true` 出现在屏幕上就自己播（有 `ask` 时不自己播）。
+- **步号**：第 0 步是开始的样子，之后每一步是一次操作（交换一次、访问一个结点、做一次行变换……）。要知道某个状态是第几步：先不写 `ask`，`start: end` 看最后一共几步；或者用种类（`ask: pass`）代替步号，不用数。
+- **`mode: fill` 的表**由组件自己决定（每个组件的说明里写着「fill 填什么」）。几个字段调整要填的部分：`given: 2`（前 2 行 / 列直接给出，我从第 3 个开始填）、`rows: 3`（只填前 3 行 / 列，比如排序只写前 3 趟）、`cols: dist, path`（只填这几列，按表头的名字；其余给出）。表下面有时还有几格单独的（ASL、总移动距离、D 的值）。数可以写分数或小数（小数写到两位以上按近似算），向量写 `(1, 2, 3)` 或空格隔开；∞ 写 `∞`、`inf` 或「无穷」；空着的格子写 `-` 或 `#`。「✓ / 缺页」这类格子是点一下切换。一列和前一列大部分相同时（页面置换的各物理块），有「照抄」按钮。
+- **按顺序点 `ask: order`**：在图上依次点出一串（遍历序列、Dijkstra / Prim 依次确定的顶点、拓扑序列）。点错一个时，前面对的留着，从错的那个重新点。`tree` 的 `walk`、`net` 的 `bfs` / `dfs` / `topo` / `dijkstra` / `prim` 都有，放在第 1 步之前问。
+- `ask: none`（或不写）不问；同一个组件里可以混着写种类和步号：`ask: pass, 9`。
+- **让我自己一步步建**：每一次插入、合并都问，就是我自己把整棵树建出来，页面一步步判：二叉排序树 `tree` 的 `ask: insert`（点双亲），`avl` 的 `ask: insert, root, rotate`，`btree` 的 `ask: split, up`，`huffman` 的 `ask: pick`（每次并哪两棵）。自己做行变换是 `elim` 的 `mode: do`，自己点进程走 P/V 是 `pv` 不写 `run:`，自己画波形是 `encode` 的 `mode: do`。
+- **不用数步号**：`ask: rotate#2`（只问第 2 次旋转）、`figure target=s1 set step=rotate#2`（跳到第 2 次旋转那一步）、`set step=end`（最后一步）。课堂的黑板现状里每个演示组件后面写着「一共几步、每种问题在第几步」，对着它指就行。
+- `vary:` 的细节：`init 2` 开始的值（默认最小值），最后的字是单位（写在读数后面）；最多 3 个，用 `;` 隔开（`vary: d = 1..10 init 2 km; r = 10..100 step 10 Mb/s`）。换了值停在原来那一步（停在最后的还停在最后）；某个值算不了时画面留在上一个能算的，下面写出为什么。课堂里 `figure target=cd set d=5`、`play d 1 10 6s`（按滑块的刻度走）。要我作答的（`ask:`、`quiz`、`fill`）不能配 `vary:`：要换数练，用 `practice` 的 `use:`。
+
+### frames：自己写每一步的演示（菜单上没有的过程）
+
+菜单上没有的过程（AVL 旋转、中缀转后缀、PV 交替执行、距离向量表、手算的某种变换……）：你写出每一步的样子，页面负责上一步 / 下一步 / 播放、换步动画、先猜再揭晓、挖空让我填、课堂的 `figure step`。**每一步的内容要你自己算对**（能用专门的组件就用专门的）。
+
+````frames
+id: fr-post
+title: 中缀转后缀：a + b * c
+---
+array 中缀: a + b * c
+stack:
+> 从左往右读，栈是空的。
+---
+array 中缀: ~a ~+ b * c
+array 输出: a
+stack: +
+?? 读到 +，栈是空的，接下来？ = + 入栈 | + 直接输出
+> a 直接输出；运算符入栈。
+---
+array 输出: a b c {{*}} {{+}}
+stack:
+> 读完了：栈里的运算符依次弹出，后缀式是 a b c * +。
+````
+
+- 字段（`id`、`title`、`q`、`note`、`speed`、`mode`……）写在第一个 `---` 之前；之后**每一帧之间用一行 `---` 隔开**，最多 60 帧。第 1 帧是开始的样子。
+- 一帧里每行一样东西：`array: …`（一排格子，`array 输出: …` 左边带名字）、`stack: …`（栈，右边是栈顶）、`queue: …`（左边是队头）、`tree: A(B(D, E), C)`（二叉树，写法同 `tree` 的 `nodes:`）、`> 说明`（这一步下面的那句话）、其余的行是 Markdown（表格、文字、公式）。格子前面加 `*` `!` `~` 标成黄 / 红 / 绿。
+- **问我**：`? 问题 = 答案`（走到这一帧之前先问；答案是数按数判，否则按序列判，几种都对用 `|`）；`?? 问题 = 对的 | 错的 | 错的`（选择题，显示时打乱）。`{{答案}}` 是要我填的空（格子里、表格里、文字里都行，不能写在 `$…$` 里；几种都对写 `{{3|三}}`），填对了才往下走。第 1 帧不能问、不能挖空。
+
+<!-- 完整写法 -->
+
+- 格子的前缀：`*38` 正在看（黄）、`!65` 冲突 / 交换（红）、`~97` 已完成（绿）、`_` 空格子、`13@low` 格子下面写指针 low。前后两帧里同一个值的格子会滑过去（重复的值按出现的先后对应）。
+- `hl: A, D` 这一帧高亮写着 A、D 的格子 / 结点；课堂里 `highlight`、`board mark item=` 按格子的顺序数（几排格子接着往下数）。
+- 不是格子、栈、队列、二叉树的东西（链表、图、内存框图）：一帧里用 Markdown 表格表示；要画成图，改用 `steps` + `sketch` 或 `derive`。
+- `mode: quiz` 不适用（没有页面能算的「结果」）；要我写出最后结果，用最后一帧的 `{{…}}`，或者另放一个 `answer`。
+- 一帧的问题对应「走到这一帧之前」：`?` 写在第 3 帧，就是看完第 2 帧以后、看到第 3 帧之前问。
+
+### elim：初等行变换（秩、极大无关组、解方程组、含参讨论、求逆、矩阵方程）
+
+<!-- 科目：线代 -->
+
+你只写矩阵和要求什么，**每一步行变换、每个中间矩阵都由页面精确地算**（分数、含参数的式子都精确），并且说出每一步在做什么。
+
+```elim
+id: el-a
+title: a 取何值时无解、唯一解、无穷多解
+matrix: [[1, 1, a], [1, a, 1], [a, 1, 1]]
+b: [1, 1, -2]
+param: a
+ask: special, case
+```
+
+- 写哪个字段决定做什么：`matrix:`（只写它：求秩，化成阶梯形）、`vectors: a1 = (1, 2, 3), a2 = (2, 4, 6), a3 = (1, 0, 1)`（向量组：秩、极大无关组、其余的怎么表示）、`matrix:` + `b: [1, 1, -2]`（解 $Ax=b$，最后写出唯一解或通解）、`matrix:` + `inverse: true`（$[A\mid E]\to[E\mid A^{-1}]$）、`matrix:` + `rhs: [[…]]`（矩阵方程 $AX=B$；`side: right` 是 $XA=B$）。写成增广矩阵的写 `augmented: true`（最后一列是常数项）。
+- **含参数**：`param: a`（一个字母），矩阵里直接写 `a`、`a-1`、`a^2`、`(a+2)(a-1)`。页面消元时遇到含参数的主元会记下「这里要它不为 0」，最后列出要单独讨论的取值（让主元为 0 的值），一种情况一步：每种情况的秩、解的情况（$r(A)$、$r(A\mid b)$ 对比）。
+- `ask:` 能问的：`rank`（秩）、`basis`（在图上点出一个极大无关组）、`combo`（其余向量的表示系数）、`kind`（无解 / 唯一解 / 无穷多解）、`free`（几个自由未知数）、`particular`（特解）、`x`（唯一解）、`entry`（$A^{-1}$ 或 $X$ 的某个元素）、`invertible`（可逆吗）、`special`（参数取哪些值要单独讨论）、`case`（每种情况的结论）。
+- **`mode: do`：我自己写行变换**（`r2 - 2r1`、`r1 <-> r3`、`r2 / 3`，有 r1、r2、↔ 的按钮），页面精确地做出来，化到目标就算完（求秩：行阶梯形；解方程组、向量组：行最简形；求逆、矩阵方程：左边是 E）；能撤回、能要「提示下一步」。`write: rows`：变了的那一行我自己算出来，页面逐个数核对。记录里有每一步、看了几次提示、算错几次，和「页面自己做是几步」。
+
+<!-- 完整写法 -->
+
+- `mode: quiz`：求秩写秩，解方程组写解的情况，含参数写要讨论的取值。`mode: fill`：含参数时每种情况一行（秩、解的情况）；方程组写特解和基础解系（基础解系按「自由未知数依次取 1」的取法）；向量组写表示系数；求逆写出 $A^{-1}$ 的每一格。
+- 默认的变换顺序：一列一列往下消，尽量不出分数（选 ±1 当主元，一行有公因数就提出来），要行最简形时再从下往上化。**想按教材的写法走**，写 `ops: r2 - 3r1; r3 + (1/2)r1; r1 <-> r2; 2r2; r2 / 3`（`;` 隔开；系数可以含参数：`r3 - a r1`）。ops 做完还没化完的，页面接着自动做；ops 写错（第几行不存在、乘 0）会报出来。
+- `goal:` 改要求：`goal: rank` / `basis` / `solve` / `inverse`（比如给了 `matrix:` 却要当列向量组看极大无关组，写 `goal: basis`）。`mode: ref` 只化到行阶梯形（求秩时默认就是）。`vars: x y z w` 给未知数起名字（默认 $x_1, x_2, \dots$）。
+- 矩阵最大 6 行 7 列。含参数的只能求秩、向量组、解方程组（求逆、矩阵方程先把参数取定）；`mode: do` 不能含参数。
+- `mode: do` 的细节：`target: ref` / `target: rref` 改目标（求逆、矩阵方程不能改）；左边出现零行、化不成 E 时也算做完（说明不可逆）；做完以后有「看页面一步步的做法」；课堂里刷新后做过的步骤会放回来。倍加让系数出了分数、某一步没改变矩阵时，页面会提醒我一句（只提醒，不算错）。
+- 页面讲解的口径：$r(A) < r(A\mid b)$ 无解；$r(A) = r(A\mid b) = n$ 唯一解；$= r < n$ 无穷多解、有 $n-r$ 个自由未知数；特解是自由未知数都取 0。
+- 错法诊断认得出：没化简就数原矩阵的非零行；向量组的表示系数取反、以为线性无关；基础解系主元未知数没变号、特解没放回主元的位置；逆矩阵写成转置、写成伴随矩阵（没除以 $|A|$）；$AX=B$ 算成 $BA^{-1}$。
+
+### det：行列式的计算
+
+<!-- 科目：线代 -->
+
+```det
+id: dt-1
+title: 每列加到第一列，提公因子
+matrix: [[3, 1, 1, 1], [1, 3, 1, 1], [1, 1, 3, 1], [1, 1, 1, 3]]
+ops: c1 + c2 + c3 + c4; c1 / 6; r2 - r1; r3 - r1; r4 - r1
+ask: effect, value
+```
+
+- 画面是 $D = k\cdot|\cdots|$：每做一步，左边的系数 $k$ 跟着变（换两行 / 列变号，倍加不变，提出公因数 $k$ 时乘 $k$），最后化成上三角，主对角线相乘。不写 `ops` 时页面自动化上三角。
+- `ops:`（`;` 隔开）：`r1 <-> r2`、`c1 <-> c3`（交换）、`r2 - 3r1`、`c2 + (1/2)c1`（倍加）、`c1 + c2 + c3 + c4`（几列都加到第 1 列）、`r1 / 10`（第 1 行提出公因数 10）、`2r1`（第 1 行乘 2，系数要除以 2）、`expand r1` / `expand c2`（按这一行 / 列展开：只有一个非零元时降一阶，否则每个元素乘代数余子式直接算出来）。
+- `ask:` 能问的：`effect`（这一步行列式怎么变：不变 / 变号 / 乘 k）、`sign`（按行展开时代数余子式前面的符号）、`value`（D 是多少）。`mode: quiz`：写出 D。`mode: fill`：每一步之后的系数 $k$，最后写 D。
+- **含参数**：`param: a`，格子写 `a`、`a+1`、`2a`……；`ops:` 还能写含参的倍数 `r2 - a r1`、提出含参的公因式 `c1 / (a+2)`（除不尽报错）。不写 `ops:` 时只拿不含参数的数当主元自动化，碰到只能拿含参式子当主元的那一列报写法错误。结果写成因式分解；`mode: quiz` 收展开的和因式的（`value`、`mode: fill` 不用）。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：换行（列）忘了变号、某行乘 k（提出 k）后系数没跟着变、按行展开忘了 $(-1)^{i+j}$。
+
+### eig / schmidt：特征值、相似对角化、施密特正交化
+
+<!-- 科目：线代 -->
+
+```eig
+id: eg-1
+title: 实对称矩阵正交相似对角化
+matrix: [[1, -2, 2], [-2, -2, 4], [2, 4, -2]]
+ask: values, geo, schmidt
+```
+
+- **`eig`**：`matrix:` 2～4 阶方阵。一步步：写出 $|\lambda E - A|$ 并因式分解 → 特征值（重根标出来）→ 每个 $\lambda$ 解 $(\lambda E - A)x = 0$ 得基础解系 → 代数重数和几何重数比较、能不能对角化 → 写出 $P$ 和 $\Lambda$。实对称矩阵接着做：同一个特征值的特征向量施密特正交化、单位化，写出正交矩阵 $Q$（根号精确，如 $\tfrac{1}{\sqrt 2}$）。`goal:` 选 `eig`（只求特征值和特征向量）、`diag`（相似对角化，非对称矩阵默认）、`orth`（正交相似对角化，对称矩阵默认）。特征值不是有理数时只讲到特征多项式（考研题几乎都是整数）。
+- `ask:` 能问的：`values`（特征值是哪几个，顺序不限）、`geo`（这个 λ 有几个线性无关的特征向量）、`diag`（能不能对角化）、`schmidt`（不同特征值的特征向量要不要再正交化）。`mode: quiz`：写出全部特征值。`mode: fill`：每个特征值的代数重数、几何重数，最后判断能否对角化。
+- **`schmidt`**：`vectors: (1, 1, 0), (1, 0, 1), (0, 1, 1)`，一步一个 β（减去在前面每个 β 上的投影，$(\alpha,\beta)$ 和 $(\beta,\beta)$ 写出来），最后单位化（`normalize: no` 不单位化）。`ask: dot`：$(\alpha_k, \beta_1)$ 是多少。`mode: fill`：写出每个 β（按公式算出来的，不约分乘整）。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：`eig` 把主对角元当特征值、有重根就以为不能对角化、把 $r(\lambda E - A)$ 当成特征向量个数；`schmidt` 往 α 上投影、忘了除以 $(\beta,\beta)$。
+
+### quad：二次型
+
+<!-- 科目：线代 -->
+
+```quad
+id: qd-1
+title: 配方法化标准形
+f: x1^2 + 2x2^2 + 5x3^2 + 2x1x2 + 2x1x3 + 6x2x3
+ask: matrix, square, definite
+```
+
+- `f:` 二次型的式子（变量写 `x1 x2 x3` 或 `x y z`，最多 4 个；`2x1x2`、`-6x2x3`、`x1^2` 都认），或者 `matrix:` 对称矩阵。一步步：写出二次型的矩阵（交叉项系数除以 2）→ 化标准形 → 正负惯性指数、秩 → 正定性（和顺序主子式对照）。
+- `method: complete`（配方法，默认：按 $x_1, x_2, \dots$ 的顺序凑完全平方，每一步的可逆变换 $x = Cy$ 写出来；只有交叉项时先作 $x_1 = y_1 + y_2,\ x_2 = y_1 - y_2$）或 `method: orth`（正交变换法：标准形的系数是特征值，3 个变量时说出 $f = 1$ 是什么曲面；$Q$ 用 `eig` 求）。
+- `ask:` 能问的：`matrix`（矩阵的某个交叉项元素）、`square`（配方后某个平方项的系数）、`values`（正交变换法的系数）、`surface`（是什么曲线 / 曲面）、`definite`（正定 / 半正定 / 负定 / 半负定 / 不定）。`mode: quiz`：写正、负惯性指数。`mode: fill`：矩阵、标准形的系数、惯性指数和正定性一起填。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：交叉项的系数没除以 2、看主对角元的正负判正定、正交变换法把主对角元当成系数。
+
+### stack：栈的应用（中缀转后缀、后缀求值、括号、出栈序列）
+
+<!-- 科目：数据结构 -->
+
+```stack
+id: st1
+infix: a + b * (c - d) / e
+ask: pop, out
+```
+
+- 写一种：`infix:`；`postfix: 1 2 3 * + 4 -`（求值）；`brackets: {[()]}`；`push: 1 2 3 4` 配 `pop: 3 2 4 1`（合法吗）；`count: 4`（几种出栈序列）。
+- `ask:` infix `out` `top` `pop`；postfix `top` `value`；brackets `match` `result`；push `legal` `op`；count `count`。
+
+<!-- 完整写法 -->
+
+- 每读一个符号一步：竖着的栈（栈底在下）、读到哪儿、写出来的后缀。按王道：运算符先弹出栈里优先级**高于或等于**它的（碰到 `(` 或栈空停）再入栈；`)` 弹到 `(` 为止，括号不写进后缀。`out` 是读完这个符号后缀写到哪（我写整串，不写空格也认），`top` 是栈顶（选），`pop` 是这次弹出哪些（选，只在运算符那一步问）。
+- 后缀求值：数之间用空格隔开；先弹出的是右操作数；除不尽的是分数（`8/3`，我写 2.67 也算对）。
+- 出栈序列：照着出栈序列模拟，要出的不在栈顶就接着入栈，被压在下面就不合法。`legal` 在第 1 步先问，`op` 是每一步「入栈还是出栈」。元素不能重复，最多 10 个。`count:` 是卡特兰数 $\frac{1}{n+1}C_{2n}^{n}$，n ≤ 5 时列出全部序列。
+- `mode: quiz`：写出后缀式 / 值 / 匹配吗 / 合法吗 / 几种。`mode: fill`：王道那张表，每读一个符号之后栈里有什么（底→顶）、后缀写到哪（infix）；栈里的数（postfix）；栈里的括号（brackets，配不上就停，后面空着）；每个元素出栈前先入栈的、出栈后剩下的（push / pop）。
+- 错法诊断认得出：同优先级的没弹栈、把 `(` 写进了后缀（只有 fill 看得出：序列题把括号当分隔符）；减法 / 除法的操作数弄反、算完没压回栈；只看括号个数不看种类、读完没检查栈空；以为只能倒过来出、当成先进先出；卡特兰数忘了除以 n+1、当成 n!。
+
+### cqueue：循环队列
+
+<!-- 科目：数据结构 -->
+
+```cqueue
+id: cq1
+size: 6
+ops: enqueue a b c d e, dequeue 2, enqueue f g h
+ask: rear#1, full
+```
+
+- `size:` MaxSize；`ops:` 入队 `enqueue a b`、出队 `dequeue`（`dequeue 2` 出两个），一个元素一步。
+- `full:` `spare`（牺牲一个单元，默认）、`count`（增设 size）、`tag`（增设 tag）。
+- `ask:` `front` `rear` `len`、`full`（入队前满了吗）、`empty`。
+
+<!-- 完整写法 -->
+
+- 按王道：front 指队头元素，rear 指队尾元素的下一个位置；入队放进 Q[rear]，rear = (rear + 1) % MaxSize。画成一圈（下标在里圈，front / rear 的箭头在外圈）；`draw: row` 画成一排，size 大于 12 自动一排。
+- 一开始 front = rear = 0；`front: 3`、`rear: 0` 换起点（中间原来就有的元素画成 ·），对应「当前 rear = 0、front = 3，删一个再加两个」这类题。入队失败（满）、出队失败（空）也算一步，指针不动。
+- `mode: quiz`：做完以后的 front、rear、长度（三个数）。`mode: fill`：每一步之后的 front、rear、长度。
+- 错法诊断认得出：长度公式没先加 MaxSize（rear 绕回来以后得负数）、把 rear == front 当队满（牺牲的那格也放了）、指针加 1 以后没取模、增设 size / tag 以后还按牺牲一个单元判满。
+
+### compress：特殊矩阵的压缩存储
+
+<!-- 科目：数据结构 -->
+
+```compress
+id: cp1
+matrix: symmetric 5
+at: 3 4
+ask: index
+```
+
+- `matrix:` `symmetric n` `lower n` `upper n` `tridiagonal n`，或 `sparse` 配 `data: 0 0 3; 0 5 0`。
+- `at: i j` 问 a[i][j]；`base:` A 从几数（默认 1），`from:` B 从几存（默认 0），`order: col`，`store: upper`（对称存上三角）。
+- `ask:` `index` `cell`（在 B 里点）`count` `line`；sparse `triple`。
+
+<!-- 完整写法 -->
+
+- n ≤ 8 画出每个元素、一行一行放进 B（下面写下标）；n 更大（最多 200，真题的 100 阶照写）只画示意图、讲公式。写了 `at` 时第 1 步就问：先数它前面存了几个，画面把这些涂黄；后面再一行行放进去对照。`line` 问每一行第一个元素的下标。
+- 下三角 / 上三角矩阵另一半是同一个常数 c，存在最后（from 0 时是 B[n(n+1)/2]）；三对角矩阵 |i − j| > 1 的是 0，不存。对称矩阵 at 在另一半时换成 a[j][i]。
+- sparse：最多 8 × 8，按行优先（`order: col` 按列）扫出非零元，三元组 (行, 列, 值)；`at` 问它是三元组表的第几个。
+- `mode: quiz`：at 的下标（没写 at 问 B 一共几个元素）；sparse 写整张三元组表。`mode: fill`：每一行（列）存在 B 的哪一段（n 大时只填第 1、2 行和 at 那一行），再填 B 的长度、at 的下标；sparse 填三元组表。
+- 错法诊断认得出：行优先当列优先、对称矩阵另一半没换成 a[j][i]、B 的下标起点差 1、A 的下标起点差 1；sparse 按列扫、行列号起点差 1。
+
+### sort：排序演示（按王道的代码走）
+
+<!-- 科目：数据结构 -->
+
+```sort
+id: s-quick
+title: 快排的第一次划分
+algo: quick
+array: 49 38 65 97 76 13 27 49'
+ask: pivot
+```
+
+- `algo:` 选算法：`insert`（直接插入）、`binsert`（折半插入：每次折半的 low、high、mid 一步，相等往右，`ask: mid`）、`bubble`（冒泡）、`select`（简单选择）、`quick`（快排）、`merge`（二路归并）、`radix`（基数排序）、`shell`（希尔排序，`gaps: 5 3 1`，不写就是 ⌊n/2⌋ 每次减半；相隔 d 的一组、同组同色，一组一步做直接插入）。
+- `array:` 初始序列，位置从 1 数，最多 16 个；重复的数后面加 `'`（`49'`，画成带下划线的），看稳定性。
+- `ask:` 都有 `pass`（这一趟之后的序列；快排叫 `partition`），另外 insert `place`、bubble `swap`、select `min`、quick `pivot`（点出来）。
+- `mode: quiz` 配 `pass: 2`：只给初始序列，我写出第 2 趟（快排是第 2 次划分）之后的序列。
+
+<!-- 完整写法 -->
+
+- `ask: place` 插在第几个、`swap` 这两个交换吗、`min` 这一趟的最小值在第几个、`pivot` 枢轴最后落在第几个，都是在图上点。
+- 算法的口径：insert 带哨兵 A[0]；bubble 每趟从后往前，一趟没交换就提前结束；quick 用王道的 Partition（枢轴取区间第一个，high、low 轮流填坑）；merge 按趟（段长 1、2、4……）；radix 最低位优先、十进制、画出 0～9 号队列。
+- `mode: fill`：每一趟（快排是每一次划分）之后的整个序列，一趟一行；`rows: 3` 只填前 3 趟，`given: 1` 第 1 趟给出。
+- 错法诊断认得出：快排用交换法划分（不是填坑）、取最后一个当枢轴；冒泡从前往后冒、每趟只挪最小的；选择每趟选最大的、把中间的往后挪；插入把第 1 个也算一趟；归并把落单的一段并进前一组；基数排序从最高位开始、队列后进先出；希尔排序按连续的段分组。
+- 希尔排序也可以用后面的 `shellsort`（按王道的代码逐行走）/ `sortpass`（我写一趟的结果）。
+
+### extsort：外部排序（败者树、置换-选择、最佳归并树）
+
+<!-- 科目：数据结构 -->
+
+```extsort
+id: ex1
+loser: 17 5 10 29 15
+next: 44 12
+ask: loser
+```
+
+- 写一种：`loser:`（各段当前的关键字，`next:` 依次补进来的）；`replace: 51 94 37 …` 配 `work: 3`；`merge: 9 30 12 …` 配 `k: 3`。
+- `ask:` loser `loser` `winner`；replace `out` `runs`；merge `virtual` `merge`（点出合哪几段）`wpl` `io`。
+
+<!-- 完整写法 -->
+
+- 败者树（k = 2～8）：叶子 b0～b(k−1)，内部结点 ls[1]～ls[k−1] 记败者的段号，ls[0] 记冠军，关键字小的胜。建树从 ls[k−1] 往上一场场比；输出冠军后那一段补进 `next:` 的下一个（写 `∞` 是这一段读完了），只和从它的叶子到根路上的败者比。`loser` 问这一场结点里记谁（选），`winner` 在叶子上点出冠军。
+- 置换-选择（最多 30 个记录）：先读满 WA；每次从比 MINIMAX 大的里选最小的输出，再从 FI 补一个；选不出来这一段结束（画面里比 MINIMAX 小的标「下一段」）。`out` 问下一步输出谁（选，含「这一段结束」），`runs` 在第 1 步先猜一共几段。
+- 最佳归并树（最多 15 段，k = 2～6）：(n − 1) % (k − 1) = u ≠ 0 时补 k − 1 − u 个长度为 0 的虚段；每次合最短的 k 段；WPL = 所有非叶结点之和，I/O 次数 = 2 × WPL（每个记录占一个物理块）。
+- `mode: quiz`：loser 写最后的 ls[0]～ls[k−1]；replace 写几个归并段；merge 写 I/O 次数。`mode: fill`：loser 每次建好 / 调整后的 ls（一次一列）；replace 每一段；merge 每次合哪几段（不管先后）、合成多少，再填虚段数、WPL、I/O。
+- 错法诊断认得出：内部结点记了胜者（成了胜者树）、把大的当胜者；比 MINIMAX 小的也输出、每次读满工作区排好就输出一段；没补虚段、用 n % (k − 1) 算虚段、I/O 只算了一遍 WPL。
+
+### tree：二叉树的遍历、二叉排序树、堆
+
+<!-- 科目：数据结构 -->
+
+三种用法，看写哪个字段：
+
+```tree
+id: t-in
+title: 中序遍历
+nodes: A(B(D, E(G)), C(, F))
+walk: inorder
+ask: visit
+```
+
+- **遍历**：`nodes:` 括号写法（逗号前是左子树，空着表示没有：`C(, F)` 是 C 只有右孩子 F；只写一个 `A(B)` 是左孩子），或 `level:` 层序写法（`A B C # D`，`#` 是空位置，按完全二叉树编号）。`walk:` 选 `preorder`（先序）、`inorder`（中序）、`postorder`（后序）、`levelorder`（层序）。`ask: visit`：每访问一个结点前，我先在图上点出下一个访问谁。`mode: quiz`：我写出整个遍历序列。
+- **二叉排序树**：`bst: 53 17 78 09 45 65 87 32` 依次插入建树（不写 `ops:` 时，演示的就是建树过程）。`ops: delete 17, insert 50, search 32` 在建好的树上依次操作。`ask:` 能问 `insert`（新结点是谁的孩子）、`compare`、`case`（删除哪种情况）、`replace`。`mode: quiz` 配 `quiz: level`（或 `pre` / `in` / `post`）：我写出最后这棵树的那种序列。
+- **堆**：`heap: 53 17 78 09 45 65 87 32`，`type: max`（大根堆，默认）或 `min`。`ops: build, insert 63, delete, sort`（建堆、插入、删除堆顶、堆排序；不写就是建堆）。`ask:` 能问 `build`（建好的堆写出来）、`swap`（这次和谁交换，点出来）、`pass`（堆排序每一趟之后的序列）。`mode: quiz`：写出最后的序列；有 `sort` 时配 `pass: 2` 写第 2 趟之后的。
+
+<!-- 完整写法 -->
+
+- 遍历的画面下面写着已经访问的序列、递归栈（层序是队列）。二叉排序树两棵子树都有的结点删除时用直接后继替代（`replace: pred` 改用前驱）。堆的树和数组一起画，下标对得上。
+- 结点最多 31 个。遍历的树每个结点名字不同；点结点、`label=` 都按名字找（堆按下标）。
+- 二叉排序树的删除按王道：叶结点直接删；只有一棵子树就让子树顶上来；两棵子树都有用直接后继（右子树里最小的）替代。`ask: insert` / `replace` 是在图上点。
+- 堆：建堆从 ⌊n/2⌋ 往前逐个往下调整；插入放最后、往上浮；删除堆顶把最后一个放上来、往下坠。`figure … highlight 3`、`board mark … item=3` 树上和数组里的 A[3] 一起标。
+- `mode: fill`：遍历填整个序列；二叉排序树填每个结点的双亲、是左孩子还是右孩子；堆填建好的堆、堆排序每一趟之后的数组。
+- `ask: order`（遍历）：第 1 步之前让我在图上按顺序点出整个遍历序列。
+- 错法诊断认得出：按别的次序遍历；二叉排序树大的往左、删除时前驱后继用反；建成小根堆、逐个插入上浮建堆。
+
+### avl：平衡二叉树
+
+<!-- 科目：数据结构 -->
+
+```avl
+avl: 15 3 7 10 9 8
+ask: bf, root, rotate
+```
+
+- `avl:` 依次插入，一个个插、一步步调（王道：平衡因子 = 左子树高 − 右子树高）。`ops: delete 7, insert 5` 改成在建好的树上做这些。`ask:` 能问 `bf`（某个结点的平衡因子）、`root`（最小不平衡子树的根，我在图上点）、`rotate`（LL / RR / LR / RL）。`mode: quiz` 写最后的层序序列。
+
+<!-- 完整写法 -->
+
+- 每插一个：先放进去（`ask: insert`：我点出它的双亲），再标出每个结点的平衡因子，失衡了把最小不平衡子树标出来，再画旋转（双旋分两步画）。插入只调一次。
+- 删除：按二叉排序树删（`ask: case`：叶结点 / 一棵子树 / 两棵子树；两棵都有用直接后继替代，`replace: pred` 改用直接前驱），再从删掉的位置往上看；转完这棵子树矮了 1，就接着往上，可能转好几次。删除时 y 是失衡结点更高的孩子、x 是 y 更高的孩子，一样高取和 y 同一边的（单旋）。
+- 写了 `ops:` 时，`avl:` 的关键字直接建好（不演示），题目上画着这棵树。
+- `quiz: pre` / `in` / `post` 改成写那种序列。`mode: fill`：每一步填最小不平衡子树的根、调整类型、做完以后整棵树的根（删除转了几次就按先后写几个）。
+- 结点最多 31 个，关键字不能重复。
+- 错法诊断认得出：LR 当成 LL（RL 当成 RR）只转一次、平衡因子算成右减左、找了离根最近的失衡结点。
+
+### rbt：红黑树的插入
+
+<!-- 科目：数据结构 -->
+
+```rbt
+rbt: 20 10 5 30 40 57 3 2 4 35
+ask: case
+```
+
+- `rbt:` 依次插入（王道：新结点染红；父黑不用调；叔叔红：叔父爷变色，爷爷当新结点往上；叔叔黑：LL / RR / LR / RL 旋转、换色）。结点画成红 / 黑，父、叔、爷标在旁边。`ask:` 能问 `case`（这一步哪种情况）、`color`（某个结点调整完是红是黑）。`mode: quiz` 写最后的层序序列，加 `quiz: red` 写红结点。
+
+<!-- 完整写法 -->
+
+- `ask: case` 的选项：是根：染黑、父黑：不用调、叔红：变色、LL：右旋、RR：左旋、LR：左右双旋、RL：右左双旋。叔叔红变色以后爷爷当新结点，会再问一次。
+- `ask: color` 在每插一个之前问（我看着插入前的树猜）：问这一次变得最多的结点——双旋转上来的、单旋转上来的父结点、变色的爷爷，都没有就问新结点自己。
+- `ops: insert 15, insert 25`：在 `rbt:` 建好的树上接着插。只演示插入（删除不考）。
+- `quiz:` 还能写 `pre` / `in` / `post` / `black`。`mode: fill`：每插一个填做了哪些调整（叔叔红写「变色」，叔叔黑写 LL / RR / LR / RL，几次就按先后写几个）、树根、红结点（从小到大）。
+- 结点最多 31 个，关键字不能重复。
+- 错法诊断认得出：叔叔红也去旋转、忘了把根染黑。
+
+### btree：B 树、B+ 树
+
+<!-- 科目：数据结构 -->
+
+```btree
+btree: 5 6 9 13 8 2 12 15
+order: 4
+ask: split, up
+```
+
+- `btree:` 依次插入 m 阶（`order:`，默认 3）B 树：满了 m 个从第 ⌈m/2⌉ 个分开，它上移。`ops: delete 30` 在建好的树上删；`nodes: [30]([10 20], [40 50])` 直接给一棵树。`plus: true` 是 B+ 树插入。`ask:` 能问 `split`（要不要分裂）、`up`（上移哪个，我点）、`case`（删除哪种情况）。
+
+<!-- 完整写法 -->
+
+- 删除按王道：终端结点里删完还有 ⌈m/2⌉ − 1 个就直接删；不够先向兄弟借（父子换位：父结点的关键字下来、兄弟的上去，先看右兄弟）；兄弟都只有 ⌈m/2⌉ − 1 个就合并（兄弟、父结点里夹在中间的关键字、剩下的合成一个，先看左兄弟），父结点少了接着借或合并，根空了树高减 1。不在终端结点的用前驱（左边子树最右下的）替代，`replace: succ` 改用后继。
+- `nodes:` 每个结点一对方括号，孩子按从左到右写在后面的圆括号里：`[22]([5 11]([1 3], [6 8], [13 15]), [36]([30 35], [40 42]))`。不合 B 树定义（关键字个数、孩子个数、大小顺序、叶结点不在同一层）会报出来；要配 `ops:`。
+- B+ 树按王道的定义：结点里关键字和子树一样多，最多 m 个，分支结点里是每棵子树最大的关键字，叶结点从左到右链起来。叶结点满了 m + 1 个，分成前 ⌈(m+1)/2⌉ 个和后面的，父结点添上左半边最大的（`ask: up` 问它）。只演示插入。
+- `mode: quiz`：写按层的所有关键字（`[30] [10 20] [40 50]` 这样，方括号可写可不写）；`quiz: root` 写根结点，`quiz: leaf` 写最下面一层。`mode: fill`：每插一个填上移的关键字、根结点；有删除时填怎么调的（分裂、替代、直接删、借、合并）、根结点；B+ 树填有没有分裂（打勾）、根结点。
+- 关键字最多 40 个，`order:` 3 到 9。
+- 错法诊断认得出：关键字上限算成 m（B+ 树算成 m − 1）、分裂时上移错了（偶数阶上移了中间偏右的、奇数阶上移了刚插进来的）、向兄弟借时没经过父结点；B+ 树把右半边最小的当成父结点里新添的关键字。
+
+### huffman：哈夫曼树和编码
+
+<!-- 科目：数据结构 -->
+
+```huffman
+id: hf
+weights: a:7 b:5 c:2 d:4
+ask: pick, wpl, code
+```
+
+- `weights:` 权值（`7 5 2 4`，或带字符 `a:7`），每次并根最小的两棵，小的放左。`k: 3` 三叉（自动补权 0 的虚结点）。`ask:` 能问 `pick`（并哪几棵，我点）、`wpl`、`code`（某字符的编码）、`dummy`（补几个虚结点）。`mode: quiz` 写 WPL（`quiz: code` 写编码）。
+
+<!-- 完整写法 -->
+
+- 王道的口径：每次从森林里选根权值最小的两棵（k 叉选 k 棵）当新结点的子树，小的在左（k 叉从小到大从左往右），新结点权值是它们的和。权值一样时先选原来就在的、后选新合并出来的（这样和教材的图一致；`ask: pick` 时并列的选哪个都算对）。
+- 合并到一半时森林「底对齐」画，树一层层往上长；最后一步是平常的样子。算 WPL 那一步叶子下面写路径长度（×2），旁边一张「权值 × 路径长度」的表，也写出「= 所有非叶结点的权值之和」；整数权值还会比一比等长编码的总位数。编码那一步边上写 0 / 1（k 叉写 0、1、2……），旁边是编码表。
+- k 叉：(n − 1) mod (k − 1) ≠ 0 时补 (k − 1) − (n − 1) mod (k − 1) 个权为 0 的虚结点（画成虚线圈），k 叉时有一步专门讲这个（`ask: dummy`）。
+- `ask: code` 问码最长的那个字符（一样长问先写的）；写 `110` 或 `1 1 0` 都认。
+- `mode: fill`：每次合并选的几个权值（不管先后）和新结点的权值，表下面写 WPL。
+- 权值有一样的时，学生画的树可能和页面不一样，`quiz: code` 会把对的判错，页面会提醒改用 `quiz: wpl`（WPL 唯一）。叶子最多 16 个，权值是非负的数（可以是小数）。
+- 错法诊断认得出：WPL 算成所有结点权值之和（或路径长度按层数算、多算一层）、k 叉没补虚结点、每次拿刚合并出的树去和下一个最小的并（不放回森林一起比）。
+
+### uf：并查集
+
+<!-- 科目：数据结构 -->
+
+```uf
+id: uf
+n: 8
+ops: union 1 2, union 3 4, find 4
+ask: root, parent
+```
+
+- 元素 0～n−1（`from: 1` 从 1 起），S 是双亲数组，根存 −1。`union a b`：先找两个根，S[Root2] = Root1。`rank: true` 小树并大树（根存 −结点数），`compress: true` 路径压缩。`ask:` 问 `root`（Find 的结果，我点）、`parent`（某个 S[i]）、`array`（整个 S）。`mode: quiz` 写最后的 S。
+
+<!-- 完整写法 -->
+
+- 画面是森林加 S 数组，下标对得上（`highlight 3`、`board mark … item=3` 树上的 3 和 S[3] 一起标）；Find 时把往上走的路径标黄。
+- 照王道的代码：`rank: true` 时 `if (S[Root2] > S[Root1])` Root2 挂到 Root1 下，否则 Root1 挂到 Root2 下——一样大时走 else（第一个的根挂到第二个的根下），页面会写出来。`rank: height` 按树高合并（一样高同样走 else）。`size: true` 不按大小合并也让根存 −结点数（王道那张 S = −4 −3 −3 2 1 2 0 0 0 1 的图）；`rank: true` 时默认就是。
+- `compress: true`：Find 时把路径上每个结点都直接挂到根下，union 里的两次 Find 也压缩；压缩单独一步（`ask: parent` 问离根最近的被改的那个）。
+- `ops:` 也认 `Union(1, 2)`、`Find(4)`、`合并 1 2`、`查找 4`，最多 24 个。`init: -1 0 0 -1 …` 从给定的 S 开始（不能有环）。`quiz: find` 改成写每次 Find 的结果。
+- `mode: fill`：每做完一个操作写一行 S 数组（有「照抄」），有 Find 的再写结果。n 最多 16。
+- 错法诊断认得出：根接反（第一个的根挂到了第二个下）/ 大树挂到小树下、路径压缩只改了第一个结点、没先找根直接把元素挂上去、根里没存 −结点数。
+
+### buildtree：由遍历序列建二叉树
+
+<!-- 科目：数据结构 -->
+
+```buildtree
+id: bt
+pre: A B C D E F G H I
+in: B C A E D G H F I
+ask: root, split
+```
+
+- `in:` 配 `pre:` / `post:` / `level:` 中的一个；`pre:` + `post:` 也行，定不下来会报。序列里标出每段的根和左右两半。`ask:` 能问 `root`（这一段的根，我在序列里点）、`split`（左子树几个结点）。`mode: quiz` 写另一种序列（`quiz: post` 等）。
+
+<!-- 完整写法 -->
+
+- 先序第一个、后序最后一个、层序里最先出现的是根；在中序里找到根，左边是左子树、右边是右子树。层序 + 中序时，左子树的层序是层序里属于左边那些结点、保持原来的顺序。
+- 先序 + 后序：只有每个结点都有 0 个或 2 个孩子才唯一，否则页面报出是哪个结点只有一个孩子、左右定不下来。两个序列对不上（结点不一样、某一段的根不在中序那一段里）也会报。
+- 序列用空格隔开，全是单个字时可以连着写（`ABCDEFGHI`）；最多 15 个结点，名字不能重复。
+- 结点位置照建好的样子先定好（横坐标就是中序里的名次），长出来的时候别的不挪。
+- `quiz:` 默认：先序 + 中序问后序，后序 / 层序 + 中序问先序，先序 + 后序问中序。`mode: fill`：每个结点的左孩子、右孩子（没有就空着）。
+- 错法诊断认得出：左右子树切反、后序时把第一个当根、先序时把最后一个当根、层序当先序切（左子树直接取紧跟着的几个）。
+
+### thread：线索二叉树
+
+<!-- 科目：数据结构 -->
+
+```thread
+id: th
+nodes: A(B(D, E), C)
+ask: pred, succ
+```
+
+- `nodes:` 写法同 tree（也可 `level:`）；`order: in`（默认）、`pre`、`post`。线索是虚线箭头（前驱蓝、后继粉），旁边是 lchild ltag data rtag rchild 表。`ask:` 能问 `pred`、`succ`（这个空指针指向谁，我点；NULL 也能点）。`mode: quiz` 写右线索（`quiz: pred` 左线索）。
+
+<!-- 完整写法 -->
+
+- 一开始空指针画成一小截加 ∧（n 个结点有 n + 1 个）。按遍历次序一个个访问（画面下面写着 pre 是谁），空的左指针指向前驱（ltag = 1），空的右指针指向后继（rtag = 1）；第一个的左线索、最后一个的右线索指向 NULL（tag 也是 1）。说明里写了王道代码里右线索是访问到后继时才连的（pre->rchild = p）。
+- 问的时候题面不说「前驱 / 后继」，只问「这个空指针线索化以后指向谁」，前驱后继弄反才看得出来。
+- `quiz: succ`（默认）：右指针空着的那些结点（按层序列在题面里），线索依次指向谁；`quiz: pred` 是左指针。`mode: fill`：每个结点的 lchild、ltag、rtag、rchild（有孩子的直接给出，线索要写，指向 NULL 写 NULL）。结点最多 15 个。
+- 错法诊断认得出：前驱、后继弄反；按别的次序（先序 / 中序 / 后序）线索化。
+
+### forest：树、森林与二叉树的转换
+
+<!-- 科目：数据结构 -->
+
+```forest
+id: fo
+forest: A(B, C, D) E(F, G)
+ask: parent
+```
+
+- 括号里是孩子，几棵树并排写，左孩子右兄弟一个个接成二叉树（两张图并排）。`binary:`（写法同 tree）或 `back: true` 是反过来还原成森林。`ask: parent`（是谁的左 / 右孩子，我选）。`mode: quiz` 写二叉树的序列（默认 `quiz: post`）。
+
+<!-- 完整写法 -->
+
+- 按先序一个结点一步：第一个孩子 → 左孩子（这条线留着）；右边的兄弟 → 右孩子（兄弟之间加一条粉色虚线，和双亲的线抹掉）；后一棵树的根 → 前一棵树根的右孩子。二叉树里右孩子的边画成粉色（原来是「兄弟」）。最后一步写出遍历的对应：树的先根（森林的先序）= 二叉树的先序，树的后根（森林的中序）= 二叉树的中序；森林的叶子数 = 二叉树里左指针空着的结点数。
+- 反过来：左孩子 → 第一个孩子，右孩子 → 右边的兄弟；根的右链断开就是各棵树。`ask: parent` 问「在森林里的双亲是谁」（选项里有「没有：它是一棵树的根」）。反过来时 `quiz:` 默认 `level`（一棵树写完再写下一棵，每棵一层一层），也能 `pre`（先根）、`post` / `in`（后根）。
+- 正着时 `quiz:` 能写 `pre`、`in`、`post`、`level`（二叉树的）。`mode: fill`：正着填每个结点在二叉树里的双亲、是左还是右孩子；反过来填每个结点在森林里的双亲（根空着）。结点最多 24 个，名字不能重复。注意 `forest: A(B, C)` 里 B、C 都是孩子，`binary: A(B, C)` 里是左、右孩子。
+- 错法诊断认得出：第一个孩子放到右边（兄弟放到左边）、把最右边的孩子当第一个；还原时右孩子也当成孩子（没还原成兄弟）、左右当反。
+
+### kmp / hash / bsearch / blocksearch：查找
+
+<!-- 科目：数据结构 -->
+
+```kmp
+id: k-nv
+title: 求 nextval
+pattern: abaabc
+show: nextval
+ask: next, nextval
+```
+
+- **`kmp`**：`pattern:` 模式串（最长 16）。`show: next` 一步步求 next 数组（王道：从 1 数，`next[1] = 0`，`next[j]` = T[1..j−1] 最长相等前后缀的长度 + 1，画面上把前后缀标出来）；`show: nextval` 接着求 nextval。写了 `text:`（主串）就是 `show: match`：KMP 匹配，主串和模式串对齐画，失配时 i 不动、j 退到 next[j]（`use: nextval` 改用 nextval）。
+- **`hash`**：`hash: 19 14 23 01 68 20 84 27 55 11 10 79`（非负整数），`p: 13`（H(key) = key % p），`probe:` 选 `linear`（线性探测，默认）、`quadratic`（平方探测：0, 1², −1², 2², −2², …）、`chain`（拉链法，新关键字接在链表末尾）；开放定址可以写 `size: 16`（表长，默认等于 p）。一个一个插入，冲突一次记一步；最后两步算 ASL成功 和 ASL失败（按王道的算法）。
+- **`bsearch`**：`bsearch:` 有序表（从小到大、不重复，最多 31 个），`key: 32`（要查的，几个用逗号），`tree: true` 同时画判定树（并在最后算 ASL成功、ASL失败）。位置从 1 数，mid = ⌊(low + high)/2⌋。
+- **`blocksearch`** 分块查找：`blocks: 22 12 13 | 33 42 44 | 60 58 74`（`|` 分块，块和块之间有序），`key:`；先查索引表（每块最大的关键字、起始位置；`find: binary` 折半，默认顺序）再在块里顺序找。`ask:` `block` `pos` `asl`（`asl: on`，每块一样长）；`mode: quiz` 写依次比较的关键字。
+
+<!-- 完整写法 -->
+
+- `kmp` 的提问和测验：`ask:` 能问 `next`、`nextval`（这一格是多少）、`slide`（失配后 j 变成多少）。`mode: quiz`：写出 next / nextval 数组，或者匹配成功的位置。
+- `hash` 的提问和测验：`ask:` 能问 `hash`（H(key) 是多少）、`place`（最后放在哪个地址，点出来）、`asl`、`aslfail`（可以写分数）。`mode: quiz`：写出整张表（空的写 #），或者 `quiz: asl` 写 ASL成功。
+- `bsearch` 的提问和测验：`ask:` 能问 `mid`（下一次和哪个比，点出来）、`asl`、`aslfail`。`mode: quiz`：写出查 `key` 时依次比较的元素。
+- ASL失败按王道：开放定址查失败时，和空位置的那次比较也算；拉链法和空指针的比较不算；按 H 能算出的 p 个地址平均。
+- `mode: fill`：`kmp` 填每个 j 的 next、nextval（一列一个 j）；`hash` 填每个关键字的比较次数，下面写 ASL成功 和 ASL失败（可以写分数）；`bsearch` 填每一次比较的 low、high、mid、比的元素。
+- 错法诊断认得出：next 按「从 0 数、next[0] = −1」算的、写成了部分匹配值 PM、nextval 照抄 next；散列按别的探测方法、把表长当成 p、查失败时空位置那次没算、ASL失败按表长平均或除以关键字个数，拉链法和空指针比也算了；折半查找 mid 向上取整、位置从 0 数、判定树失败结点那层也算了比较、ASL失败除以 n。
+- `blocksearch` 的错法诊断认得出：顺序查索引表和折半查索引表弄反。
+
+### net：图的算法（数据结构里的图；函数图是上面的 graph）
+
+<!-- 科目：数据结构 -->
+
+```net
+id: g-dij
+title: Dijkstra
+edges: V1->V2 10, V1->V5 5, V2->V3 1, V2->V5 2, V3->V4 4, V4->V1 7, V4->V3 6, V5->V2 3, V5->V3 9, V5->V4 2
+run: dijkstra from V1
+ask: next
+```
+
+- `edges:` 边，逗号隔开：`A-B 4` 是无向边（权 4），`A->B 4` 是有向边；权可以都不写。顶点按名字排（1 < 2 < 10，V2 < V10），这就是「按顶点编号」的顺序；要别的顺序或者有孤立的顶点，写 `nodes: A B C D`。最多 14 个顶点。
+- `run:` 选算法：
+  - `bfs from A` / `dfs from A`：广度 / 深度优先遍历。邻接点按顶点编号的顺序（`order: list` 按 edges 写的顺序，即邻接表）。`ask: visit`：下一个访问谁（点顶点）。
+  - `prim from A` / `kruskal`：最小生成树（无向带权图）。Prim 的 `ask: next`：下一个加进来的顶点（点出来）；Kruskal 的 `ask: take`：这条边选不选（会不会成环）。
+  - `dijkstra from A`：王道那张表（每一轮一列）。`ask: next`：这一轮确定哪个顶点。
+  - `floyd`：一轮一个矩阵 A⁽⁻¹⁾、A⁽⁰⁾……，变小的格子标出来。
+  - `topo`：拓扑排序。每次选入度为 0、编号最小的（`ask: next` 时任何一个入度为 0 的都算对；`use: stack` 用栈）。
+  - `critical`：关键路径（有向带权图，边是活动）。算 ve、vl，再列出每个活动的 e、l、l − e。`ask:` 能问 `ve`、`vl`（这个事件的值）、`length`（关键路径长度）。
+
+<!-- 完整写法 -->
+
+- 位置不写时自动摆；要和教材的图对上写 `pos: A(0,0) B(2,1)`（y 往上）。
+- `mode: quiz`：bfs / dfs 写遍历序列；prim / kruskal 写权值之和；dijkstra 写各顶点被确定的顺序；topo 写一个拓扑序列（任何一个对的都算）；critical 写关键路径长度。floyd 没有 quiz。
+- 自动摆的位置：圆上；拓扑排序、关键路径从左往右分层。有向图里一对反向的边画成两条弧。BFS / DFS 不连通时接着从下一个没访问的顶点开始；`order: list` 时邻接表画在下面。
+- Dijkstra 的表：每一轮一列，dist 和确定的顶点 ✓，下面是集合 S，还有 dist、path；不能有负权。拓扑排序图上标着每个顶点现在的入度，有回路会说出来。关键路径一步一个事件算 ve（拓扑序）、vl（逆拓扑序），关键活动标绿。
+- `mode: fill`：bfs / dfs / topo 填序列；dijkstra 每一轮一列（各顶点的 dist、这一轮确定谁）；prim / kruskal 填依次选的边；critical 填每个事件的 ve、vl，每个活动的 e、l、l − e，最后是关键路径长度。
+- `ask: order`：bfs / dfs / topo / dijkstra / prim 在第 1 步之前让我在图上依次点出顶点（拓扑序列任何一个对的都算）。
+- 错法诊断认得出：BFS 和 DFS 弄反、邻接点按 edges 顺序（或按编号）走反了；Dijkstra 用了 Prim 的更新、有向图当无向图；Prim 用了 Dijkstra 的更新、只看刚加进来的顶点；Kruskal 不判环、判环判错；拓扑排序选了出度为 0 的、栈和队列弄混；关键路径 ve 取最小、vl 取最大、活动的 e 用了终点的 ve。
+
+### store：图、树的存储结构（原图和存储并排）
+
+<!-- 科目：数据结构 -->
+
+```store
+id: st-g
+title: 邻接矩阵和邻接表
+graph: A-B, A-C, B-D, C-D
+show: matrix, list
+ask: list
+```
+
+- `graph:` 图的边（写法同 `net` 的 `edges:`），或者 `tree:` 树（写法同 `forest`，几棵并排是森林）。一条边（一个结点）一步，存储跟着长。
+- `show:` 一到两种。图：`matrix` 邻接矩阵、`list` 邻接表、`cross` 十字链表（有向图）、`multi` 邻接多重表（无向图）。树：`parent` 双亲表示、`child` 孩子表示、`cs` 孩子兄弟、`seq` 二叉树的顺序存储（单独用）。
+- `ask:` 图 `matrix` `list` `degree`；树 `parent` `child` `cs`；顺序存储 `seq`。`mode: quiz` 写一条链表 / 双亲数组 / 顺序存储；`mode: fill` 填邻接矩阵、双亲一列或数组。
+
+<!-- 完整写法 -->
+
+- 口径：链表默认尾插（按边的先后接在后面），`insert: head` 头插；十字链表、多重表的指针写弧 / 边的编号（按 edges 的先后从 0 数），空指针写 ∧；带权的邻接矩阵对角线 0、没边 ∞；双亲表示按层序编号、下标从 0 数，根的双亲 −1；顺序存储从 A[1] 开始，编号 i 的孩子是 2i、2i+1，空的写 #，`tree:` 写二叉树（`A(B(, D), C)`，逗号前是左子树）。
+- 错法诊断认得出：无向边只存了一个方向、头插尾插弄反、双亲表示按先序编号、顺序存储下标从 0 数。
+
+### deque：双端队列（输入受限、输出受限）
+
+<!-- 科目：数据结构 -->
+
+```deque
+id: dq-in
+title: 输入受限
+kind: in
+push: 1 2 3 4
+seq: 4 1 3 2
+ask: possible, op
+```
+
+- `kind:` `in` 输入受限（右端能进能出，左端只能出）、`out` 输出受限（右端能进能出，左端只能进）、`both`。`push:` 依次进队的元素，`seq:` 要得到的出队序列。页面找一种做法一步步走；得不到的走到卡住的那一步，说要出的是哪个、为什么出不来。
+- `ask:` `possible`（得不得到）、`op`（下一步做什么）。`options: 4 1 3 2, 4 2 1 3, 4 2 3 1` 配 `mode: quiz`：挑出得到的那几个。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：把输入受限当成输出受限（或者反过来）。
+
+### slist：静态链表
+
+<!-- 科目：数据结构 -->
+
+```slist
+id: sl-1
+size: 7
+list: a b c
+ops: insert 2 x, delete 1
+ask: slot, next
+```
+
+- 照王道：`a[0]` 是头结点，`next = −1` 是表尾，`−2` 是空闲。`ops:` `insert 2 x`（插到第 2 个位置：找第一个空闲的格，先接后面再改前驱）、`delete 3`。数组和按 next 连成的链并排，改的两格标出来。`ask:` `slot` `next` `pre`；`mode: quiz` 按链的顺序写元素。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：插入时先改了前驱的 next（后面的链断了）。
+
+### trace：代码逐行跟踪（真的把 C 代码跑一遍）
+
+<!-- 科目：数据结构 操作系统 组成原理 -->
+
+```trace
+id: tr-ins
+title: 直接插入排序（带哨兵）
+call: InsertSort(A, 5)
+let A = [0, 38, 49, 65, 13, 27]
+predict: 7 if i == 4 -> j
+code:
+void InsertSort(ElemType A[], int n){
+    int i, j;
+    for(i=2;i<=n;i++)
+        if(A[i]<A[i-1]){
+            A[0]=A[i];
+            for(j=i-1;A[0]<A[j];--j)
+                A[j+1]=A[j];
+            A[j+1]=A[0];
+        }
+}
+```
+
+- 页面里有一个 C 的解释器，**每执行一行记一步**：左边代码高亮这一行，右边是调用栈、这一层的变量（这一步变了的亮一下）、数组（`i`、`j`、`low`、`high`、`mid` 这类下标变量画在格子下面；`pointers: i, j` 自己指定）、二维数组的表、输出。说明里写着这一行做了什么（哪个变量从几变成几、条件成立没有、调用、返回）。
+- `code:` **单独一行、放在最后**，下面全是代码（王道的写法照抄）。代码里有 `main` 就从 `main` 跑；没有就写 `call: 函数(参数)`，用 `let A = [0, 38, 49]`、`let n = 5` 给输入（一行一个，数组的下标从 0 数）。
+- 支持 C 的常用写法（数组、函数、递归、引用参数、结构体、指针）；**不支持 `switch`、指针运算（`p++`）**：写了会报出来。
+- `predict: 7 if i == 4 -> j`：先猜。走到第 7 行（`i == 4` 的那一次）先停下，问我「执行完这一行，j 是多少」，答了才往下走。几个用 `;` 隔开；`if` 可以不写（第一次走到就问）。写了 `predict` 就自动问；没走到的 predict 自检会提醒。
+
+<!-- 完整写法 -->
+
+- 指针、结构体：`typedef struct LNode {…} LNode, *LinkList;` 照抄，`.` `->` `*p` `&x` `NULL` `malloc(sizeof(LNode))` `free(p)` `LinkList &L` 都行。结点画成框、指针画成箭头。`let L = list [头, 1, 2]`（带头结点）、`let T = tree A(B, C)` 直接给。`predict: 9 -> p`：问 p 指哪个结点（`->` 两边空格）。出错（空指针、越界、死循环……）都停在那一行说清楚。
+- `mode: quiz`：只给代码，我写出结果：`quiz: output` 写输出（有 printf 时默认就是它），`quiz: A` 写运行完数组 A 的内容。
+- 下标越界、变量没赋值就用、死循环（超过 1 万步）、递归没出口，都会停在那一行说清楚（如果是有意的，正好给我看错在哪）。
+- 空指针、野指针、free 后再用、free 两次停在那一行；没 free 又没人指着的结点提醒内存泄漏。
+
+- 支持的写法：`int` `long` `char` `double` `float` `bool`（`ElemType` 默认是 int，也可以 `typedef`），`#define` 常量，一维、二维数组和 `{…}` 初始化，函数、递归、引用参数 `int &a`，`if` / `for` / `while` / `do-while` / `break` / `continue` / `return`，各种运算符，`printf`、`putchar`、`puts`，没写的 `swap(a, b)` 当成交换两个变量。**不支持 `switch`、指针运算（`p++`、`p + 1`）**：写了会报出来。
+- `ask: cond`（这次条件成立吗）、`ask: line`（接下来执行第几行）可以练控制流。
+- 课堂里：`figure target=tr-ins set step=20`、`play step 0 40 20s`；`highlight 7` / `board mark target=tr-ins item=7` 指第 7 行代码。
+- **结构体**：王道的写法都认：`typedef struct LNode { ElemType data; struct LNode *next; } LNode, *LinkList;`、`typedef struct { ElemType data[MaxSize]; int length; } SqList;`（成员可以是数组）、`typedef struct VNode {…} VNode, AdjList[MaxVertexNum];`（数组类型）、`struct LNode *p`。结构体变量、结构体数组（`G.vertices[i].first`）、`SqList L = {{3, 5, 8}, 3};` 按成员顺序初始化、整个赋值（`*p = *q`、`L2 = L`）、按值传参（拷贝一份）。
+- **指针**：`*p`、`&x`、`p = q`、`p == NULL`、`p != q`、`!p`、`if (p)`、`while (p && p->data != x)`；指针参数（`void f(int *a)` 配 `f(&x)`）、返回指针（`LNode *GetElem(LinkList L, int i)`）、指针的引用 `LinkList &L`、`BiTree &T`（`CreateBiTree(T->lchild)` 这种递归也行）。数组能传给指针参数（`int *a` 接 `A`），`p[i]` 只能用在指向数组的指针上。
+- **malloc / free**：`(LNode *)malloc(sizeof(LNode))`、`(LinkList)malloc(sizeof(LNode))`、不写转换也行；`malloc(sizeof(int) * n)` 分配一串（动态顺序表的 `L.data`），画成一排格子。新结点的成员一开始没有值（画成 ?），用之前要赋值。`free(p)` 以后结点画成虚线框、标「已释放」，还指着它的指针在说明里点名（悬空指针）；`free(NULL)` 什么也不做。最多 malloc 200 次。
+- **`let` 给链表、二叉树**：`let L = list [头, 1, 2, 3]`（第一个写「头」就带头结点，头结点的 data 不用；不写就是不带，`list []` 是 NULL）、`let T = tree A(B(D, E), C(, F))`（括号写法同 `tree` 组件，也认层序 `A B C # D`），结点按先序编号。结点类型看 `call:` 里把它传给了哪个形参（`LinkList L` → LNode）；代码里只有一种链表结点（有 next）或二叉链表结点（有 lchild、rchild）时也认得出。有 `prior` 成员的建成双链表。data 是 char 时写字母，是 int 时写数。
+- **`visit(T)`**：代码里没写 `visit` 时，输出结点的 data 和一个空格（先序遍历 `visit(T)` 直接能跑）。
+- **画面**：堆上的结点画成框，一个成员一格：单链表 [data | next]、双链表 [prior | data | next]、二叉链表 [lchild | data | rchild]；指针从格子中间的圆点画箭头指到结点，NULL 写 ∧。链表顺着 next 从左往右排，一条链一行（长了换行，绕回来接上）；二叉链表画成树（线索二叉树 ltag / rtag 是 1 的那边不当孩子）；结构体数组里有指针的（邻接表的顶点表）画在最左边一列，每个顶点的边表接在同一行。指针变量的名字写在它指着的结点上面（树写在左边），结构体变量里的指针成员写成 `Q.front`、`Q.rear`。结点下面的 ①②③ 是 malloc 的先后，说明里也这么叫（「①.next：NULL → ②」）。这一步新建的结点闪一下，改了的格子、箭头、指针名字是黄的；换步时结点和名字滑到新位置。变量区里指针写成「p → ③」「p NULL」，结构体变量（SqList L、LinkQueue Q）画成卡片，里面的数组画成格子，`top` / `front` / `rear` 画在格子下面。
+- **先猜问指针**：`predict: 11 if p->data == 3 -> p->next`。分隔的 `->` 两边要有空格（或者写 `→`、`=>`），不然会和 C 的 `->` 混。要问的是指针时问「指向哪个结点」，我写那个结点的 data（头结点写「头」，空指针写 NULL 或 ∧）；问 `p->data` 这种是数。那一次取不到值（比如 p 是 NULL 还问 `p->data`）、问整个结构体，自检会提醒。
+- **出错，停在那一行说清楚**：
+  - 空指针：「q 是 NULL（空指针），不能用 q->next」。
+  - 野指针：「p 还没赋值就用了（野指针：还没让它指向任何结点）」，malloc 来的结点的成员没赋值就用也是（「s->next 还没赋值……」）。
+  - 用了已经 free 的结点：「p 指向的结点①已经 free 了，不能再用 p->data（悬空指针）」。
+  - free 两次：「q 指向的结点①已经 free 过了，这里又 free 了一次」；free 的不是 malloc 来的：「free 只能释放 malloc 来的空间」。
+  - 类型对不上：「BiTNode * 不能指向 LNode」；指针当数用、`p.next` 写成点（「p 是指针：要写 p->next」）、结构体写成 `L->length`。
+  - 不支持的：指针运算 `p++`、`p + 1`（「链表往后走写 p = p->next」）、指针的指针 `**p`、`new` / `delete`（写 malloc / free）、`calloc`、`union` / `enum`。
+- **内存泄漏**（不停）：结点既没 free、又没有任何指针指着了（顺着变量、结构体、数组里的指针都走不到），那一步的说明后面提醒「③ 现在没有指针指着了，又没有 free：内存泄漏」，最后一步再总结一次；自检也提醒作者。main 结束时局部变量都没了，那时不算。
+- **课堂里**：`board mark target=tr-rev label=p` 标 p 指着的结点（连同名字），`label=3` 标 data 是 3 的结点，`label=③` 标 ③ 号结点。`highlight 7` 还是第 7 行代码。
+- `mode: quiz` 链表的题用 `quiz: output`：代码最后把链表输出出来（`for (p = L->next; p; p = p->next) printf("%d ", p->data);`）。
+
+### code：写代码题（算法设计题，页面真的跑测试）
+
+<!-- 科目：数据结构 -->
+
+我在框里写 C 函数（王道的写法），点「运行测试」：页面用 `trace` 的解释器跑你给的每个测试，告诉我哪个过了、哪个没过（期望什么、我的是什么、哪一行越界 / 死循环）；全过了再估时间、空间复杂度。
+
+````code
+id: cj-rev
+title: 逆置顺序表
+q: 把顺序表 A 的 n 个元素就地逆置，空间 O(1)。
+fn: void Reverse(int A[], int n)
+tests:
+A = [1, 2, 3, 4, 5], n = 5 -> A = [5, 4, 3, 2, 1]
+A = [7], n = 1 -> A = [7]
+scale: n = 8 16 32 64; A = rand(n)
+````
+
+- `fn:` 要我写的函数（框里一开始就是它，函数体空着；`starter:` 可以给别的起始代码）。`tests:` 一行一个：`输入 -> 期望`，期望可以是数组（跑完以后的内容）、`return = 3`、`out = "…"`（printf 的输出）。
+- 链表题：测试里写 `L = list [头, 1, 2, 3] -> L = list [头, 3, 2, 1]`（写法同 `trace`：第一个写「头」带头结点，不写不带；王道的单链表，结点 `LNode`、成员 `data` `next`，起始代码里带着定义），跑完顺着 `next` 读回来比，成环、空指针都报。
+- 答案不唯一（「相对次序不限」）时写 `check:`：一个 C 函数 `int check(int A[], int A0[], int n)`（A 是我跑完的、A0 是原来的），返回 1 算对，`printf` 的就是没过的原因；这时 `tests:` 只写输入。
+
+<!-- 完整写法 -->
+
+- 作答记录里有我每次运行的代码、过了几个、第一个没过的是哪个，你据此追问。
+- `ref:` 参考解法（多行，我看不到）：没写期望的测试用它算期望；也估它的复杂度，和我的放在一起显示。
+- `call: Reverse(A, n)`：调用的写法（不写就按 `fn:` 的参数名调用）；只有 `main` 的程序写 `call: main()`，期望写 `out = "…"`。
+- `scale: n = 8 16 32 64; A = rand(n)`：估复杂度时 n 取这几个值（最大 256，数组最多 400 个元素），其余输入由 n 生成：`rand(n)`（0～99 的随机数）、`range(n)`（1..n）、`rev(n)`（n..1）、`zeros(n)`，或者含 n 的算式（`k = n / 2`）。按执行的行数挑最合适的增长方式（O(1)、O(log n)、O(n)、O(n log n)、O(n²)、O(n³)、O(2ⁿ)）；额外空间看新开的数组和递归深度。只是估计，写在记录里给你参考。
+- `check:` 的调用默认是学生函数的参数、每个数组参数后面跟一个原来的（`A, A0`），有返回值的再加 `ret`；要别的写法用 `check_call:`。
+- 解释器的范围同 `trace`（数组、函数、递归、引用参数；指针和结构体见 `trace` 的说明）；写错的语法、越界、没赋值就用、死循环都报行号，行号在框左边标红。
+- 代码框：等宽字，回车自动缩进，`}` 自动退一格，Tab 是四个空格，下面有一排常用符号（点了不收键盘）。课堂里刷新后框里的代码会放回来。
+
+### sched / paging / banker / disk：操作系统的过程
+
+<!-- 科目：操作系统 -->
+
+```sched
+id: os-rr
+title: 时间片轮转
+algo: rr q=2
+procs: P1 0 5, P2 2 4, P3 4 1, P4 5 6
+ask: next
+```
+
+- **`sched` 进程调度**：`procs:` 一个进程一组「名字 到达时间 运行时间 [优先级]」，逗号隔开（`P1 0 3, P2 2 6`）。`algo:` 选 `fcfs`、`sjf`（非抢占）、`srtf`（抢占式短作业优先 / 最短剩余时间）、`hrrn`（高响应比，每次调度时算出各进程的响应比写在说明里）、`prio`（优先级，非抢占）、`pprio`（优先级，抢占）、`rr q=2`（时间片轮转）。优先级默认数越小越高，写 `prio: large` 改成数越大越高。RR 的约定（王道）：同一时刻有新进程到达、又有进程用完时间片，新进程先入队。画面：甘特图（同一个进程同一种颜色）、就绪队列、进程表；最后一步算周转、带权周转、等待时间和平均值。`ask:` 能问 `next`（接下来运行谁，在就绪队列里点）、`avg`（平均周转时间，可以写分数）。`mode: quiz`：默认写 CPU 上依次运行的进程，`quiz: avg` / `quiz: wait` 写平均周转 / 平均等待时间。
+- **`paging` 页面置换**：`refs: 7 0 1 2 0 3 0 4`（页面引用串），`frames: 3`（物理块数），`algo:` 选 `fifo`、`lru`、`opt`、`clock`（简单 CLOCK：访问位、指针）、`eclock`（改进型 CLOCK：访问位 + 修改位，引用串里写访问写成 `2w`）。画成王道那张表：一列一次访问，每个物理块一行，缺页打 ✓，FIFO 下面写进入的先后、LRU 写最近使用的先后，CLOCK 标访问位和指针。一开始调入也算缺页。OPT 里以后都不用的页有几个时，换先调入的那个。`ask:` 能问 `hit`（命中还是缺页）、`victim`（换出哪一页，在表的最后一列点）、`faults`（一共缺页几次）。`mode: quiz`：缺页次数，`quiz: victims` 写依次换出的页。想看 Belady 现象，就放两个 FIFO，物理块 3 和 4。
+- **`banker` 银行家算法**：`avail: 3 3 2`，`max:` 和 `alloc:` 一行一个进程（`P0 7 5 3; P1 3 2 2; …`），可选 `request: P1 1 0 2`（某个进程提出的请求：先查是否超过 Need、是否超过 Available，再试着分配看安不安全）。表里有 Max、Allocation、Need、每个进程是第几个运行完的；安全性算法每次从编号小的开始找 Need ≤ Work 的进程（能满足的有好几个时，选哪个都对）。`ask:` 能问 `next`（下一个能运行完的进程，点进程名）、`request`（这个请求能不能分配）。`mode: quiz`：写一个安全序列（任何一个对的都算），有 `request` 时写「能」或「不能」。
+- **`disk` 磁盘调度**：`requests: 98 183 37 122 14 124 65 67`，`head: 53`，`algo:` 选 `fcfs`、`sstf`、`scan`、`cscan`、`look`、`clook`；`dir: up`（往磁道号大的方向，默认）或 `down`；`tracks: 0-199`（磁道范围，默认 0-199）。SCAN、C-SCAN 走到磁盘尽头才掉头 / 跳回，LOOK、C-LOOK 到最远的请求就掉头 / 跳回；C-SCAN、C-LOOK 跳回去的距离默认不算，`jump: count` 算上（`jump: skip` 写明不算）。**有的教材题目里的「SCAN」走到最远的请求就掉头，那其实是 LOOK：按题目说的选。**画面是磁头移动的折线图（纵向是时间）。`ask:` 能问 `next`（下一个去哪个磁道）、`total`（一共移动多少）。`mode: quiz`：移动的磁道总数，`quiz: order` 写服务顺序。
+
+<!-- 完整写法 -->
+
+- 给开始时的状态：`init: 1 1 0, 2 1 1, 3 0 1`（每个物理块「页 访问位 修改位」，简单 CLOCK 写「页 访问位」，别的算法只写页）、`ptr: 1`（指针指着第几块）；这时 `frames:` 可以不写。改进型 CLOCK 按王道：第 1 轮找 (0,0) 不改位，第 2 轮找 (0,1) 扫过的访问位清 0，再不行回到第 1 轮；错法诊断认得出第 1 轮就清了访问位。
+- `paging` 的 `board mark item=5` / `highlight 5` 指第 5 次访问那一列（表头）。
+- `mode: fill`：`sched` 每个进程一行（完成时间、周转时间、带权周转、等待时间）；`paging` 每次访问一列（各物理块里的页、缺页打勾、换出哪一页，有「照抄」；`clock` / `eclock` 还有每块的访问位、修改位和指针，就是考卷上那张过程表）；`banker` 每个进程的 Need 和安全性算法每一步的 Work（向量写 `3 3 2`）；`disk` 依次访问的磁道和每次移动的距离。
+- 错法诊断认得出：调度按别的算法排、RR 把用完时间片的进程排在新到的前面；页面置换按别的算法换、一开始调入没算缺页；银行家把 Max 当成 Need、Work 加的是 Need 或 Max、请求没先和 Need 比、试分配后没改状态；磁盘调度按别的算法、方向弄反、C-SCAN 跳回的距离算没算。
+
+### alloc：动态分区分配
+
+<!-- 科目：操作系统 -->
+
+```alloc
+id: om-1
+title: 首次适应
+memory: 640K
+algo: first
+ops: alloc 1 130K, alloc 2 60K, alloc 3 100K, free 2, alloc 4 200K
+ask: where, merge
+```
+
+- `memory:` 内存大小，`algo:` 选 `first`（首次适应）、`best`（最佳适应）、`worst`（最坏适应）、`next`（邻近适应）；`ops:` 依次 `alloc 名字 大小`、`free 名字`；`used: OS 0 40K` 给开始时已经占了的。按王道：从空闲区的低地址分；回收时和上邻 / 下邻 / 上下的空闲区合并。画成按容量占宽度的内存条 + 空闲分区表。`ask:` 能问 `where`（分在哪个空闲区，在条上点）、`start`（起始地址）、`merge`（回收属于哪种情况）、`holes`（回收后几个空闲区）、`max`（最后最大的空闲区）。`mode: quiz` 写每次的起始地址；`mode: fill` 填每个作业的起始地址。
+
+<!-- 完整写法 -->
+
+- 分不到时那一步写「分配失败」（`where` 问的是「能分配吗」），quiz 和填表里写 ×。
+- 错法诊断认得出：按别的算法找、回收时没和相邻的空闲区合并。
+
+### pagetable：多级页表
+
+<!-- 科目：操作系统 -->
+
+```pagetable
+id: pt-1
+title: 多级页表
+vbits: 32
+page: 4KB
+pte: 4B
+vaddr: 0x12345678
+ask: offset, per, levels, idx
+```
+
+- `vbits:` 逻辑地址位数，`page:` 页面大小，`pte:` 页表项大小。按王道：每一级页表都放进一个页面（一页 page ÷ pte 项），级数 = ⌈页号位数 ÷ 每级位数⌉，分不匀时最高一级（页目录）少几位。画出逻辑地址怎么拆。可选 `vaddr:` 拆出每一级的下标、`pbits:` 物理地址位数（算页表项至少几字节）、`levels:` 题目定了几级。`ask:` 能问 `offset`（页内偏移几位）、`per`（一页几个页表项）、`levels`、`split`（页目录号几位）、`idx`（页目录号是多少）、`ptebytes`、`mem`（没有快表时访问几次内存）。`mode: quiz` 写级数；`mode: fill` 填每个字段的位数（和下标）。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：一页的项数没除以页表项大小、级数向下取整、让最低一级少了几位。
+
+### fileidx：混合索引
+
+<!-- 科目：操作系统 -->
+
+```fileidx
+id: fi-1
+title: 混合索引
+block: 1KB
+entry: 4B
+direct: 10
+single: 1
+double: 1
+triple: 1
+offset: 10240, 300000
+ask: n, max, level, reads
+```
+
+- `block:` 盘块大小、`entry:` 地址项大小（一个索引块放 block ÷ entry 个地址项），`direct:` `single:` `double:` `triple:` 直接 / 一级 / 二级 / 三级间接地址项各几个（默认 10、1、1、0）。画每一级能指向几个块、管哪段逻辑块号（从 0 数）、最大文件长度。`offset:` 要读的字节号（最多 4 个；或者 `blockno:` 直接给逻辑块号）：一步步算逻辑块号、在哪一级、从索引结点一路指到数据块、访问几次磁盘（默认索引结点已经在内存里；`inode: disk` 再加 1 次）。`size: 1MB` 再算这么大的文件要几个索引块。`ask:` 能问 `n`、`max`（最多几个盘块）、`lblock`（第几号逻辑块）、`level`（哪一级）、`reads`（访问几次磁盘）、`idx`（几个索引块）。`mode: quiz`：有 offset 时问第一个要访问几次磁盘，没有时问最多几个盘块；`mode: fill` 填每一级的块数和逻辑块号范围。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：逻辑块号从 1 数了、访问次数没算最后读数据块那一次。
+
+### mem：访存的整条链、有效访问时间
+
+<!-- 科目：操作系统 -->
+
+```mem
+id: vm-1
+title: 各要多久
+page: 4KB
+table: 0->101H, 1->-, 2->254H
+vaddr: 2362H, 1565H, 25A5H
+cost: tlb=10 mem=100 fault=10^8
+resident: 2
+ask: tlb, victim, paddr, time
+```
+
+- 快表 → 页表 → 缺页（LRU）→ 物理地址，逐段计时（2009 年第 46 题口径）。`ask:` page tlb inmem victim paddr time。`rate: tlb=0.9 fault=0.0001` 改算 EAT（ask: hit miss fault eat）。
+
+<!-- 完整写法 -->
+
+- 一串地址（`vaddr:`，最多 8 个）：`page:` 页面大小；`table:` 页表（`页号->块号`，`-` 是有效位 0）；`cost:` 各段时间（`tlb` `mem` `fault`，单位 `unit:`，默认 ns；可写 `10^8`、`1e8`、`8ms`）；`tlb:` 快表里一开始有哪几页（默认空）、`tlbsize:` 快表几项（满了换最久没用的）；`resident:` 驻留集几块（默认 = 在内存的页数 + `free:` 给的空闲块数），没满时缺页调进 `free:` 的块，满了按 `replace:`（`lru` 默认 / `fifo`）换，`order:` 驻留的页从老到新（默认页号从小到大）；`bits:` `pbits:` 地址位数（默认按数推）。
+- 口径：查完页表把这一项放进快表，不计时；缺页处理的时间含更新快表和页表。别的教材的约定：`retry:` 缺页处理完怎么走（`tlb` 默认：重新执行，快表命中，再访存；`table`：重新执行，快表还没命中，再查页表；`mem`：直接访存；`none`：缺页时间里含了访存）、`parallel: true`（快表和页表同时查，没命中不计查快表的时间）、`levels: 2`（快表没命中访问 2 次内存查页表）。
+- 有效访问时间（`rate:`，不写 vaddr）：`rate: tlb=0.9 fault=0.0001 cache=0.95`（快表命中率、缺页率——占全部访问的比例、Cache 命中率，可写 90%），`cost:` 加 `cache=`；分快表命中 / 没命中（页在内存）/ 缺页三种算时间，再按概率加。有 Cache 时取一次数据 = 命中率 × Cache + (1 − 命中率) × (Cache + 内存)。`ask:` data（取一次数据）、hit、miss、fault、eat。
+- `mode: quiz`：一串地址写各次时间（空格隔开；没写 cost 写物理地址），rate 写 EAT。`mode: fill`：每个地址的页号、快表命中（打 √）、缺页（打 √）、物理地址、用时；rate 填每种情况的概率、时间和 EAT。
+- 错法诊断认得出：缺页处理完没重新执行、以为重新执行时快表还没命中、查完页表没放进快表、没命中时没算查快表的时间、多级页表只算了一次访存、换出了刚访问过的页、按另一种置换算法换；EAT 再加：没命中时没算访存、Cache 没命中时没算查 Cache。
+
+### bitmap：位示图
+
+<!-- 科目：操作系统 -->
+
+```bitmap
+id: bm-1
+title: 分配和回收
+map: 1111 0011 1010 0000; 0000 1111 1111 1110
+ops: alloc 3, free 5, where 20, block 1 3
+ask: alloc, blocks, word, bit, block
+```
+
+- `ops:` where b（盘块→字号位号）、block i j、alloc k、free b；`base: 1` 从 1 编号（默认 0），0 是空闲。`ask:` word bit block alloc（点格子）blocks。位示图存在磁盘上：`at: 32` `block: 1KB`，ask: disk word bit。
+
+<!-- 完整写法 -->
+
+- 位示图：`map:` 一行一个字（分号隔开，空格随意）；或者 `word: 16` 加 `words: 4`、`used: 0-5, 9`（已分配的盘块）；只做换算时只写 `word:`（不画整张图，只画那一个字）。最多 32 行 × 32 位。
+- 编号：`base: 0` / `1` 是字号、位号、盘块号一起，分开写 `base: word=1 bit=1 block=0`。公式写成一般的样子：i = ⌊(b − b₀) ÷ n⌋ + i₀，j = (b − b₀) mod n + j₀。`idle: 1` 换成 1 表示空闲。分配从第一个字开始一行行、从左往右找。
+- 位示图存在磁盘上（`at:` 从第几号盘块开始存，`block:` 盘块大小）：一块放 block × 8 位，块内按字节数（`word:` 默认 8），`ops:` 只能用 where、free。2015 年统考：`at: 32` `block: 1KB` `ops: free 409612` → 82 号盘块、块内第 1 个字节。
+- `mode: quiz` 问第一个 op（where 写「字号 位号」，磁盘上的写「盘块号 字节号」，block 写盘块号，alloc 写分到的盘块号）。`mode: fill` 填每个盘块的字号、位号、盘块号（给出的那一格不用填；磁盘上的是盘块、块内字节、位）。
+- 错法诊断认得出：编号从 0 还是从 1 弄反、商和余数弄反、把另一个值当成空闲；磁盘上的再加：一块按字节数当成了位数、忘了加起始盘块号。
+
+### deadlock：死锁检测（化简资源分配图）
+
+<!-- 科目：操作系统 -->
+
+```deadlock
+id: dl-1
+title: 有环，死锁吗
+res: R1 3, R2 2
+edges: R1->P1 2, P1->R2, R1->P2, R2->P2, P2->R1
+ask: avail, next, dead
+```
+
+- `res:` 每类资源几个；`edges:` R1->P1 分配、P1->R2 请求，几条写 `R1->P1 2`。画图和表，一步步化简。`ask:` avail（一开始可用）、next（点进程）、dead、who（死锁的进程）。
+
+<!-- 完整写法 -->
+
+- 矩阵写法（和 edges 二选一）：`alloc: P1 1 0; P2 0 1`、`request: P1 0 1; P2 1 0`（按 res 的顺序，一行一个进程）。`res: 3 2` 只写个数时名字是 R1、R2。`procs: P1 P2 P3` 定进程的顺序（也能加没有边的进程；不写时按名字排）。`show:` `graph` / `table` / `both`（默认）。最多 8 个进程、5 类资源、每类 1～6 个。
+- 口径按王道：找请求都能满足的进程，去掉它所有的边、还回它占着的资源；能化简的有几个时按编号小的先（next 点哪个都算对）。能完全化简就没有死锁，化简不掉的就是死锁的进程（死锁定理）；资源不止一个时有环不一定死锁，说明里会点出来。
+- `mode: quiz` 写「无」或死锁的进程（顺序随意）。`mode: fill` 填一开始的可用、每次化简掉谁和之后的可用（编号小的先）、有没有死锁。
+- 错法诊断认得出：有环就判了死锁、拿资源总数（不是可用的）和请求比、化简以后没把资源还回去。
+
+### pv：信号量 P/V
+
+<!-- 科目：操作系统 -->
+
+```pv
+id: pv-1
+title: 交换两个 P 会怎样
+problem: 生产者消费者
+buffer: 1
+swap: P
+run: deadlock
+ask: block, wake
+```
+
+- 王道口径：P 减完 < 0 阻塞，V 加完 ≤ 0 唤醒队头。`problem:` 生产者消费者 / 读者写者 / 哲学家 / 吸烟者 / 苹果橘子，或 `code:` 自己写；`swap: P` 换 P 的头两个 P。`run: P P C`（`P×3`；`P+` 走到阻塞；`deadlock` 页面找最短死锁）；不写 `run:` 是我自己点进程。`ask:` block、value、wake、deadlock、buffer。
+
+<!-- 完整写法 -->
+
+- 自己写进程：`code:` 单独一行、放在最后，下面一行一个进程「名字: 语句; 语句; …」，或者「名字() { … }」写成几行（王道的代码能直接贴，`semaphore mutex = 1;`、`int count = 0;` 也认）。认得 `P(s)` `V(s)`（`wait` / `signal` 也行）、`while(1) { … }`（`do { } while(1)`、`for(;;)`）、`if (count == 0) P(rw);`、`else`、`count++`、`num = (num + 1) % 3`；别的句子都是「做一件事」（读文件、吃饭）。信号量写 `semaphore: mutex = 1, empty = 3, full = 0`（数组 `chopstick[5] = 1`），共享变量写 `var: count = 0`。一个进程几份：`R×2:` 是 R1、R2；`P(i)×5:` 是 P0～P4，代码里用 i（`P(chopstick[(i+1)%5])`）；`P（生产者）:` 括号里是卡片上的名字。
+- 例子（两个生产者、没有 mutex）：
+
+```pv
+id: pv-2
+semaphore: empty = 2, full = 0
+buffer: 2
+find: bad
+code:
+P×2（生产者）: while(1) { P(empty); 把产品放入缓冲区; V(full); }
+C（消费者）: while(1) { P(full); 从缓冲区取出一个产品; V(empty); }
+```
+
+- `buffer: 2`（或 `buffer: 盘子 1 苹果 橘子`）：句子里有「放入 / 放进」「取出」的是缓冲区操作，画成格子；满了还放、空了还取、取错了东西都会指出来。缓冲区操作自动算临界区；别的句子后面写 `// 临界区`（或 `/* 临界区 */`）也算，`// 临界区 读` 是读者之间可以一起进的。两个进程同时在临界区里 = 互斥被破坏。
+- 经典问题的写法：`生产者消费者 P×2 C×2`（`buffer:` 改位置数，默认 2）、`读者写者`（读者优先，R×2 W；`读者写者 写者优先` 是加了 w 的读写公平法）、`哲学家`（默认 5 人、每人先拿左边，会死锁；`哲学家 互斥` 拿两根筷子互斥、`哲学家 限四人`、`哲学家 奇偶`、`哲学家 4` 改人数）、`吸烟者`、`苹果橘子`（一个盘子，爸爸放苹果、妈妈放橘子）。代码照王道。
+- `run:` 每个名字是那个进程执行它的下一句：`P×3` 连走 3 句、`P+` 一直走到阻塞或做完、`(P C)×2` 括号里的轮流走两遍；`run: deadlock` / `run: bad` 是页面把所有走法试一遍，挑一种最短的死锁 / 出错（死锁、同时进临界区、缓冲区越界）走法来演示，找不到会报错。轮到的进程阻塞着、做完了、名字写错，都会报出来，不会悄悄跳过。
+- 不写 `run:`（或写 `mode: do`）：我点「下一步让谁走」里的进程，它就执行下一句，能撤回、从头再来。`find: deadlock` / `find: bad` 是给我的目标：找到了算做完；觉得怎么走都不会，点「我觉得不会死锁」，页面把所有状态走一遍来判（判错两次以后可以看页面找到的走法）。`ask:` 写了的种类，点了进程以后、执行之前先问我。
+- `ask:` 能问 `block`（这个 P 会不会阻塞）、`value`（执行完这个信号量是多少，负数写 -1）、`wake`（这个 V 唤醒谁，在图上点进程，谁也不唤醒就点「不唤醒」）、`deadlock`（有进程阻塞了：现在死锁了吗）、`buffer`（缓冲区里有几个）。
+- `mode: quiz`：有 `run:` 时写走完以后各信号量的值（按声明的顺序）；没有 `run:` 时问会不会死锁（`find: bad` 时问会不会出错），答案由页面把所有状态走一遍得出，讲解里给最短的那种走法。`mode: fill`：每个 P / V（和改共享变量）之后各信号量的值，一行一步，能照抄上一行。
+- 死锁：没有进程能往下走、至少两个阻塞着。只剩一个阻塞、别的都做完了，叫「永远阻塞」，不算死锁。最多 8 个进程、12 个信号量（数组的每一个都算）、`run:` 200 步，状态超过 4 万种时页面判断不了（会说）。
+- 错法诊断认得出：按「信号量不会是负数」算（值是 0 时 P 直接阻塞、不减）、减到 0 就当成阻塞、V 只加 1 不唤醒、V 加完等于 0 时没唤醒、V 唤醒了队尾而不是队头。
+
+### addr：分页存储的地址变换
+
+<!-- 科目：操作系统 -->
+
+```addr
+id: ad-1
+title: 0A5CH 在哪
+vaddr: 0x0A5C
+bits: 16
+page: 1KB
+table: 0->5, 1->10, 2->4, 3->7
+```
+
+- `vaddr:` 逻辑地址（`0x0A5C`、`0A5CH` 或十进制，几个用逗号，最多 8 个），`bits:` 逻辑地址的位数，`page:` 页面大小（`1KB`、`4K`、`2^12`），`table:` 页表（`页号->块号`，不在内存写 `2->-`），可选 `tlb:`（快表里有哪几项，写法同页表）、`pbits:`（物理地址位数，默认同 bits）、`cost: tlb=20 mem=100 fault=100000000`（ns，算每个地址实际用了多久：快表命中 = 快表 + 取数；没命中 = 快表 + 页表 + 取数；缺页再加缺页处理）。
+- 画面：逻辑地址按「页号 | 页内偏移」拆开的二进制位（四位一组，正好是一位十六进制）、快表和页表（查到的那一行标出来）、物理地址「块号 | 页内偏移」。缺页、越界（页号超出页表）会停下来说。
+- `ask:` 能问 `page`（页号）、`tlb`（快表命中没有）、`frame`（块号；缺页 / 越界时是选择题）、`paddr`（物理地址，写十六进制，带不带 0x / H 都行）。`mode: quiz`：写第一个地址对应的物理地址。
+
+<!-- 完整写法 -->
+
+- `mode: fill`：每个逻辑地址一行（页号、页内偏移、物理块号、物理地址）。
+- 错法诊断认得出：页面大小的位数多算 / 少算了一位。
+
+### bits / cache / pipe：组成原理
+
+<!-- 科目：组成原理 -->
+
+```bits
+id: b-neg5
+title: −5 的几种编码
+num: -5
+width: 8
+ask: twos
+```
+
+- **`bits` 数的表示**，三种用法：
+  - `num: -5`（`width: 8`，默认 8 位）：一步一种写出原码、反码、补码、移码（`show: 补码 移码` 只看其中几种），说清怎么来的（取反、加 1、加偏置）；−2^(n−1) 会说原码、反码表示不了。`ask:` 能问 `orig` `ones` `twos` `bias`（我写二进制，要写满 width 位）。`mode: quiz` 配 `quiz: 补码`。
+  - `float: -0.75`：IEEE 754 单精度编码：符号、二进制、规格化、阶码（加 127）、尾数（隐藏位）、合起来的十六进制，画成 1 | 8 | 23 三段（除不尽的就近舍入）。写十六进制 `float: 0xC0A00000`（或 `C0A00000H`）就是反过来解码。`ask:` 能问 `sign`、`exp`、`hex`（编码），`exp`、`value`（解码）。
+  - `add: 0x7F + 0x01` / `sub: 5 - 7`（`width: 8`）：补码加减法的竖式（减法写成加 Y 的反码、Cin = 1），每一位的进位写在它进入的那一位上面，再一个个求标志位：OF = Cn ⊕ Cn−1，SF = 最高位，ZF，CF = Cout ⊕ Cin（王道的定义），说清当成有符号 / 无符号数各是多少、溢出没有。`ask:` 能问 `neg`（Y 取反）、`result`、`of` `sf` `zf` `cf`。
+- **`cache` Cache 的映射和替换**：`lines: 8`（行数），`ways: 2`（每组几行：1 是直接映射，默认；`full` 是全相联），`replace: lru` 或 `fifo`。访问序列两种写法：`blocks: 0 4 8 2 0 6 8`（主存块号），或者 `refs: 0x0010, 0x0124`（字节地址）配 `block: 16B`（块大小）、`addr: 16`（地址位数），这时每个地址先按「标记 | 组号（行号）| 块内地址」拆开画出来。表里有每组每路的有效位、标记、存的主存块，下面一排是访问序列和命中 / 缺失。`ask:` 能问 `set`（映射到哪一组 / 行）、`hit`、`victim`（换出哪一块，点出来）、`hits`（一共命中几次）。`mode: quiz`：命中次数。
+- **`pipe` 五段指令流水线**：`instrs:` 一行一条指令（或用分号隔开），如 `add r1, r2, r3`（第一个寄存器是目的）、`lw r1, 0(r2)`、`sw r1, 0(r2)`、`beq r1, r2, L`（这两种不写寄存器），可以带标号 `I1: …`。`forward: yes` 有转发（默认没有，只能阻塞）；没有转发时默认寄存器「前半周期写、后半周期读」（用结果的指令 ID 段最早和写结果的 WB 段同一周期），`split: no` 改成写完才能读。画时空图（阻塞的周期打斜线），一步加一条指令并说清它和谁相关、停几个周期。`ask:` 能问 `stall`（这条停几个周期）、`cycles`（一共多少周期）。`mode: quiz`：一共多少周期。
+
+- **`answer` 的 `type: fixed`：定点数**（双符号位）：`answer: 11.0101`，或者让页面算 `answer: \calc{fix(-11/16, 2, 4)}`（补码，2 位符号位、4 位小数）。我写的小数点可以不写；写了的话符号位要写够位数（双符号位写成一位会提醒），判错时说是符号位还是小数点后第几位。
+
+<!-- 完整写法 -->
+
+- `mode: fill`：`bits` 填原码、反码、补码、移码（或 IEEE 754 的符号、阶码、尾数，补码加减的结果和标志位）；`cache` 每次访问一行（组号、标记、命中与否、换出谁）；`pipe` 每条指令一行（停几个周期、EX 和 WB 在第几周期）。
+- 错法诊断认得出：补码忘了加 1、移码没把符号位取反、反码连符号位也取反了、正数也取反；浮点编码偏置用 128 / 126、尾数写进了隐藏的 1，解码阶码减 128、没补隐藏的 1；把最高位的进位当成溢出、减法的 CF 没有异或 Cin、SF 按真实结果写；cache 按别的映射方式、别的替换算法；流水线按有转发算、没用上「前半周期写、后半周期读」、以为有转发 load-use 也不用停。
+
+### memexp：存储器扩展
+
+<!-- 科目：组成原理 -->
+
+```memexp
+id: me-1
+title: 2K×4 位的芯片组成 8K×8 位
+chip: 2K×4
+target: 8K×8
+addr: 16
+base: 6000H
+ask: count, cs, range
+```
+
+- `chip:` 芯片、`target:` 要组成的存储器，都写「字数 × 位数」（`2K×4`、`8K x 8 位`）；按字编址。字数不够就字扩展（几组，一组一个片选），位数不够就位扩展（一组里几片并排）。画成芯片阵列（一行一组，右边是这一组的地址范围）和地址线怎么分（片内 / 片选 / 固定）。可选 `addr:` CPU 的地址线条数（多出来的高位固定，由 `base:` 定）、`base:` 起始地址（`6000H`，要按整块对齐）。片选用译码器（log₂ 组数 位）。`ask:` 能问 `count`（几片）、`lines`（片内地址线）、`cs`（片选几位）、`range`（第 2 组的地址范围，写 `0800H～0FFFH`）。`mode: quiz` 写片数；`mode: fill` 填片数、片内地址线、片选位数和每组的起止地址。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：片内地址线写成了整个存储器的地址位数、片选按线选法数（一组一根）、结束地址写成下一组的起始。
+
+### fadd：浮点加减运算
+
+<!-- 科目：组成原理 -->
+
+```fadd
+id: fa-1
+title: 浮点加法
+x: 2^010 × 0.11011011
+y: 2^100 × (-0.10101100)
+ask: shift, sum, norm, round
+```
+
+- `x:`、`y:` 写「2^阶码 × 尾数」，阶码、尾数都是**二进制真值**（和教材一样：`2^-011 × (-0.1011)`）；`op: -` 是减法（默认加）。阶码和尾数都用双符号位补码，按王道 / 唐朔飞的五步：对阶（小阶向大阶看齐，小阶的尾数右移，移出去的位写在括号里）、尾数加减（减法加 [−My]补）、规格化（00.1×× / 11.0××：左规或右规）、舍入、溢出判断（看阶码的符号位：01 上溢、10 下溢）。可选 `ebits:` / `mbits:` 阶码 / 尾数的数值位数（不写按 x、y 里最长的）、`round: 截断`（默认 0 舍 1 入）。`ask:` 能问 `code`（负数尾数的补码）、`shift`（右移几位）、`sum`（尾数相加的结果，括号里的位也写）、`norm`（左规 / 右规 / 不用）、`round`（舍入后的尾数）、`of`（溢出没有）。我写二进制时小数点、括号写不写都行。`mode: quiz` 写结果的尾数；`mode: fill` 填尾数相加、规格化舍入后的尾数、右移几位、怎么规格化、结果的阶码和溢出。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：大阶向小阶看齐、减法直接加了 [My]补、把 11.1×× 当成规格化的、没做 0 舍 1 入。
+- `ebits:` 2～6，`mbits:` 3～16；舍入以后尾数溢出会再右规一次。
+
+### mul：定点乘法
+
+<!-- 科目：组成原理 -->
+
+```mul
+id: ml-1
+title: Booth 补码一位乘
+x: -0.1101
+y: 0.1011
+algo: booth
+ask: op, result
+```
+
+- `x:`、`y:` 写二进制定点小数的真值（`-0.1101`），`algo:` 选 `booth`（补码一位乘）或 `orig`（原码一位乘）。画成王道那张「部分积 | 乘数 | 说明」的表，一步一次加和移位。Booth：部分积、被乘数双符号位，乘数末尾补 y_{n+1} = 0，看 y_n y_{n+1}（00 / 11 加 0，01 加 [x]补，10 加 [−x]补），算术右移，加 n + 1 次、移 n 次。原码一位乘：符号位单独异或，|x|、|y| 相乘，逻辑右移 n 次。`ask:` 能问 `code`（[−x]补）、`sign`（原码：符号位）、`op`（这一次加什么）、`result`（乘积）。我写二进制时小数点可写可不写。`mode: quiz` 写 [x·y]补（或原）；`mode: fill` 填每次右移后的部分积和乘数。
+
+<!-- 完整写法 -->
+
+- `n:` 数值位数（默认按 x、y 里最长的，2～8）。
+- 错法诊断认得出：Booth 把最低两位读反了、最后一次也移位了、只加了 n 次；原码一位乘当成算术右移。
+
+### asm：机器级代码（x86）
+
+<!-- 科目：组成原理 -->
+
+```asm
+id: as-1
+title: 函数调用和循环
+call: sum(4)
+predict: 8 -> eax
+code:
+sum:
+push ebp
+mov ebp, esp
+mov ecx, [ebp+8]
+mov eax, 0
+L1: cmp ecx, 0
+jle L2
+add eax, ecx
+dec ecx
+jmp L1
+L2: pop ebp
+ret
+```
+
+- `code:` 放在最后，下面是 Intel 写法的汇编（王道 / 真题照抄；反汇编的地址和机器码可以带着：`00401000  55  push ebp`）。一条指令一步：寄存器（变了的亮）、ZF SF CF OF、栈（一格一个双字，标出 esp、ebp）、写过的内存。`call: sum(4)` 从标号 sum 开始、参数从右往左压栈；`regs: ecx=3`、`mem: [0x1000]=5` 给开始的状态。`predict: 8 -> eax`：执行完第 8 行以后问 eax（也能问 `[ebp-4]`、`ZF`）。`ask: jump`：条件转移跳不跳。`mode: quiz` 写跑完的 eax（`quiz: ecx` 换一个）。
+
+<!-- 完整写法 -->
+
+- 支持：mov、movzx / movsx、lea、add、sub、inc、dec、neg、imul（1～3 个操作数）、mul、cdq、idiv、div、and、or、xor、not、shl / sal、shr、sar、cmp、test、jmp 和各种 jxx、push、pop、call、ret（`ret 8`）、leave、nop、hlt；32 位寄存器和 al、ax 这类；操作数 `[ebx+ecx*4-8]`、`byte ptr [eax]`；数写 `10`、`0x1F`、`1Fh`。32 位、小端；cmp a, b 按 a − b 设标志；jg / jl 看 SF、OF（有符号），ja / jb 看 CF（无符号）。
+- `predict: 7 if ecx == 2 -> eax`：第 7 行、执行之前 ecx 是 2 的那一次。`mode: fill` 填每执行一条以后几个寄存器的值（`watch: eax, ecx` 选哪几个，最多 30 条）。
+- 写错（不认的指令、两个内存操作数、找不到的标号）会报行号；死循环（超过 2000 条）、除以 0 停在那一行。
+- 错法诊断认得出：cmp 当成 b − a、lea 当成取内存、有符号转移按无符号判、shr 当成算术右移。
+
+### div：定点除法
+
+<!-- 科目：组成原理 -->
+
+```div
+id: dv-1
+title: 原码加减交替除法
+x: -0.1011
+y: -0.1101
+algo: orig
+ask: q, result
+```
+
+- `x:`、`y:` 写二进制定点小数的真值（|x| < |y|），`algo:` 选 `orig`（原码加减交替法，默认）或 `comp`（补码加减交替法）。画成「被除数（余数）| 商 | 说明」的表。原码：符号单独异或，余数 ≥ 0 上商 1、左移减 |y|，< 0 上商 0、左移加 |y|，最后余数负了再加 |y|。补码：同号先减、异号先加，余数和除数同号上 1，做 n 次，末位恒置 1。`ask:` 能问 `code`、`q`（这一位商上几）、`result`。`mode: quiz` 写商；`mode: fill` 填每次的余数和上商。
+
+<!-- 完整写法 -->
+
+- `n:` 数值位数（默认按 x、y 里最长的，2～8）。余数 = 最后的余数 × 2^−n，和被除数同号。
+- 错法诊断认得出：原码时最后余数是负的没恢复、末位也恒置 1、余数的符号跟了商；补码时第一步不看同号异号都减、只看余数正负上商、末位按余数上了商。
+
+### ea：寻址方式
+
+<!-- 科目：组成原理 -->
+
+```ea
+id: ea-1
+ins: 变址 R 2000H
+reg: R=1000H
+mem: 2000H=3000H, 3000H=4000H
+ask: ea, operand
+```
+
+- `ins:` 方式 + 形式地址，几条用逗号隔开（共用 `reg:`、`mem:`）；相对寻址写 `at:` 指令地址、`len:` 指令长。
+- `ask:` `ea` `operand` `access`（访存几次，不算取指）。
+
+<!-- 完整写法 -->
+
+- 方式：`立即` `直接` `间接`（`二次间接`、`间接 20H 3次`）`寄存器 R1` `寄存器间接 R1` `基址`（默认 BR，或 `基址 R2 10H`）`变址`（默认 IX）`相对` `先变址后间址` `先间址后变址` `出栈` `进栈 5`。用到的寄存器都在 `reg:` 里写值（`IX=1000H, PC=2000H, SP=0400H`），`mem:` 写「地址=内容」。全写十进制就按十进制答（课本上「20 号单元里是 40」）。
+- 按王道：访存次数不算取指；相对寻址 EA = (PC) + A，(PC) 是取出这条指令以后的 PC（指令地址 + `len:`），A 是补码；`相对 06H 转移` 是转移指令（EA 就是目标地址，不访存）；`scale: 4` 偏移按指令数（MIPS 的 bne）；基址 / 变址的 A 用补码时写 `signed: true`（`dbits:` 形式地址字段的位数，不写按十六进制的位数）；`width:` 地址位数（默认 16，有 8 位十六进制的地址时 32）。出栈：SP 指向栈顶元素，先读 (SP) 再 SP + 1；进栈先 SP − 1 再写。几条指令各自独立，都从同一组寄存器、主存开始。
+- 画面：左边每条指令一行（EA | 操作数 | 访存），右边寄存器和主存，这条指令访问过的单元标 ①②。
+- `mode: quiz`：一条时写操作数（主存里没给就写 EA），几条时按顺序写操作数；`mode: fill`：每条指令填 EA、操作数、访存次数（立即寻址的 EA 空着，寄存器寻址的 EA 写寄存器名）。
+- 错法诊断认得出：访存次数算上了取指、相对寻址用了这条指令自己的地址、偏移量忘了乘单位、少间接了一次、立即数当成地址去取、寄存器间接当成寄存器寻址、补码的形式地址没符号扩展。
+
+### opcode：扩展操作码
+
+<!-- 科目：组成原理 -->
+
+```opcode
+id: oc-1
+len: 16
+addr: 4
+need: 三地址 15, 二地址 15, 一地址 ?, 零地址 16
+ask: avail, max
+```
+
+- `len:` 指令字长、`addr:` 地址码位数，`need:` 每类几条（`?` 问最多几条；`len: ?` 求最短字长，`unit: 8` 凑整）。
+- `ask:` `avail` `range` `left` `max` `len`。
+
+<!-- 完整写法 -->
+
+- 按王道：地址码多的先分；每一类从小往大用编码，剩下的留作前缀，下一类可用 = 剩下的个数 × 2^多出来的位数；中间那一类问最多几条时，要给后面留够前缀；最后一类不用留。编码按「第一类的操作码 | 每次扩展的几位」分组写（`1111 0000～1111 1110`）。一次只问一个 `?`；放不下时页面报原因。
+- 问的：`avail` 这一类有几个编码可用，`range` 操作码范围（我写「第一个～最后一个」，分不分组、`～` `-` `至` 都行），`left` 用完还剩几个，`max` 最多几条，`len` 指令字长至少几位。
+- `mode: quiz`：有 `?` 写最多几条，`len: ?` 写字长，都没有时写最后一类的第一个操作码（二进制）；`mode: fill`：每类填操作码位数、可用编码数、条数（问的那一类）、第一个和最后一个操作码。
+- 错法诊断认得出：扩展时忘了乘剩下的个数、中间那一类没给后面留前缀、最后一类也留了一个、字长没凑成编址单位的整数倍。
+
+### layout：大小端与对齐
+
+<!-- 科目：组成原理 -->
+
+```layout
+id: ly-1
+struct: int a; char b; short c
+at: 0xC008
+set: a = 273
+ask: offset, size, byte
+```
+
+- `struct:` 成员（分号隔开）、`at:` 首地址、`set:` 成员的值、`endian: big`（默认小端）；一个数写 `value:`、`type:`。
+- `ask:` `offset` `addr` `size` `byte` `bytes` `lsb` `code`。
+
+<!-- 完整写法 -->
+
+- 按王道（32 位）：char 1、short 2、int / long / float / 指针 4、double 8；按边界对齐：每个成员从自己大小的整数倍开始（数组按元素），总大小凑成最大成员的整数倍。`align: none` 不对齐，`align: 4` 是 #pragma pack(4)；`arch: 64` 时 long 和指针 8 字节。
+- 值：整数（十进制、`0x`、负数按补码）、`'A'`、float / double 的小数（IEEE 754）。`look: 0xC008` 问这个地址里是哪个字节（`byte`，不写就问这个成员最低地址的那个）；`bytes` 从低地址到高地址写出各字节，`lsb` 最低有效字节的地址，`code` 机器数，`addr` 成员的地址。一个数：`value: -64`、`type: int`、`name: i`、`at: 8000H`。
+- 画面：成员表（类型、大小、偏移、地址），下面一行 4（有 double 时 8）个字节，一个成员一种颜色，空出来的字节画斜线。
+- `mode: quiz`：结构体写 sizeof，一个数写各字节（从低地址起）；`mode: fill`：每个成员填偏移量和地址，再写 sizeof（有 `look:` 时再写那个字节）；一个数时每个地址填字节。
+- 错法诊断认得出：没对齐（一个挨一个放）、末尾没补齐、每个成员都按 4 对齐、大小端弄反。
+
+### irq：中断屏蔽与处理次序
+
+<!-- 科目：组成原理 -->
+
+```irq
+id: iq-1
+prio: A > B > C > D
+order: D > A > C > B
+req: B@10, A@20, C@30, D@40
+time: 20μs
+ask: mask, next
+```
+
+- `prio:` 硬件响应优先级，`order:` 要的处理次序（或 `mask: A=1110, …`），`req:` 请求时刻，`time:` 服务时间。
+- `ask:` `mask` `rank` `next` `finish`。
+
+<!-- 完整写法 -->
+
+- 屏蔽字按 `prio:` 的顺序写各位，1 屏蔽：X 屏蔽处理次序不比它高的（含自己）。按王道：没被屏蔽的请求马上响应（保存现场、换屏蔽字、开中断）；几个同时可响应时硬件排队先响应高的，它刚开中断，处理次序更高的那个马上打断它（轨迹上画成一个点）；做完恢复被打断的程序和它的屏蔽字。现场保护的时间不计。
+- `req: B C@5` 同时请求，`all@0` 全部同时；每个中断源只请求一次。`time: A=20, B=10` 各自不同。不写 `req:` 只设计屏蔽字；`mask:` 给了就问 `rank`（从屏蔽字读处理次序）。
+- 画面：屏蔽字表（每一位一格、状态：执行中 / 被打断 / 挂着 / 做完），下面是王道那种 CPU 执行程序的轨迹（一条横线一个程序，往下是被打断去执行服务程序）。`next` 是「接下来 CPU 执行哪个程序」（选项），`finish` 是处理完的先后。
+- `mode: quiz`：有 `req:` 写处理完的次序，没有写各个屏蔽字；`mode: fill`：每个中断源填屏蔽字、开始处理和处理完的时刻，再写处理完的次序（给了 `mask:`、没有 `req:` 时填处理次序）。
+- 错法诊断认得出：照硬件优先级处理（屏蔽字没改）、屏蔽字没屏蔽自己、1 和 0 弄反、当成单重中断。
+
+### crc / hamming：校验码
+
+<!-- 科目：组成原理 计网 -->
+
+```crc
+id: crc-1
+title: CRC
+data: 101001
+gen: x^3 + x^2 + 1
+ask: zeros, rem
+```
+
+- **`crc`**：`data:` 信息位，`gen:` 生成多项式（`x^3 + x^2 + 1` 或 `1101`）。按王道：G 是 r 阶就补 r 个 0，模 2 除法（异或、不借位）画成竖式一步一次异或，最后得余数（校验码）和发送的帧。`recv: 1010010010` 改成接收方检错（余数是 0 就没检出错）。`ask:` 能问 `zeros`（补几个 0）、`xor`（这次异或得多少）、`rem`、`frame`；接收方问 `ok`。`mode: quiz` 写余数；`mode: fill` 填每次异或的结果、余数和帧。
+- **`hamming`**：`data: 1010`（D_n … D_1，左边是高位）：求校验位个数 k（2^k ≥ n + k + 1）、每个 P_i（P_i 在 H_{2^(i−1)}，管位置编号第 i 位是 1 的那些），最后写出 H_n … H_1；`parity: odd` 用奇校验（默认偶校验）。`recv: 1000010` 改成纠错（只写 `recv:`、不写 `data:` 就行）：算 S_k … S_1，指出第几位错了并改正。`ask:` 能问 `k`、`p`、`code`；纠错问 `s`、`pos`。`mode: quiz` 写出整个海明码（纠错时写出错的是第几位，没错写 0）。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：CRC 没补 0、补了 r + 1 个 0；海明码奇偶校验弄反、信息位从 D_n 开始往 H3 放。
+- `data:` 最多 24 位（CRC）、16 位（海明码）；`recv:` 海明码最多 31 位。
+
+### encode：编码波形
+
+<!-- 科目：计网 -->
+
+```encode
+id: ec-1
+title: 曼彻斯特和差分曼彻斯特
+bits: 10110010
+code: manchester, diffman
+ask: level
+```
+
+- `bits:` 要编码的比特（最多 16 位），`code:` 选 `nrz`、`nrzi`、`manchester`、`diffman`（几种用逗号，画在一起对比，先猜问第一种）。按王道 / 谢希仁：曼彻斯特每位中间跳变，1 是向下跳（前高后低）（`manchester: 1=up` 反过来）；差分曼彻斯特中间也跳，位开始处有跳变是 0、没有是 1；NRZI 0 翻转、1 不变；`start: high` 开始前是高电平（默认低）。一步画一位，说清为什么。`levels: 10 01 10`（每位两个半码元，1 / H / 高，0 / L / 低）配一种 `code:` 是反过来读波形。`rate: 10Mb/s` 再算码元速率。`ask:` 能问 `level`（前半个码元高还是低）、`bit`（读波形：这一位是几）、`baud`。`mode: quiz` 写半码元电平串（读波形时写比特串）；`mode: fill` 每一位填「高低」。
+- **`mode: do`：我自己画波形**（`bits:` 配一种 `code:`）：每半个码元点上半格是高、下半格是低，页面指出第几位不对；画成别的编码、约定反了的，记录里告诉你。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：曼彻斯特的约定反了、差分曼彻斯特把「有跳变」当成 1、按曼彻斯特读差分曼彻斯特、NRZI 按「1 翻转」、码元速率没乘 2。
+
+### frag：IP 分片
+
+<!-- 科目：计网 -->
+
+```frag
+id: nf-1
+title: IP 分片
+total: 4000
+mtu: 1500
+ask: max, count, offset
+```
+
+- `total:` 数据报总长度（含首部；或者 `data:` 只写数据部分），`header:` 首部长度（默认 20），`mtu:` 链路的 MTU，路上有几段就依次写几个（`1500, 576`，最多 3 段：已经分过的片过更小的 MTU 再分，片偏移还是相对原数据报）。按王道：每片数据最多 ⌊(MTU − 首部) ÷ 8⌋ × 8 字节，片偏移以 8 字节为单位，只有最后一片 MF = 0。`df: 1` 不许分片：要分时丢弃、发 ICMP。画成原数据报的数据部分按分片切开 + 每片的总长度、片偏移、MF。`ask:` 能问 `max`（每片最多多少数据）、`count`（几片）、`len`（第 1 片总长度）、`offset`（第 2 片起每一片的片偏移，一片问一次）、`mf`（最后一片的 MF）、`df`。`mode: quiz` 按顺序写各片的片偏移；`mode: fill` 填每片的总长度、片偏移、MF。
+
+<!-- 完整写法 -->
+
+- 错法诊断认得出：每片数据没取 8 的倍数、片偏移写成字节数、总长度当成了数据长度。
+
+### csma：CSMA/CD
+
+<!-- 科目：计网 -->
+
+```csma
+id: cd1
+rate: 10Mb/s
+dist: 2km
+bsend: last
+ask: minframe, detect
+```
+
+- `rate:` 配 `dist:`（`v:` 默认 200m/μs）或 `delay:`（τ）；`minframe: 128B` 反求 τ；`dframe: -800bit` 距离怎么变；`bsend:` B 何时开始发（`0`、`8μs`、`last`）；`r: 1, 3` 退避。
+- `ask:` `tau` `period` `minframe` `detect` `wait` `range`。
+
+<!-- 完整写法 -->
+
+- 按王道：τ = 距离 ÷ 传播速率，争用期 2τ，最短帧长 = 2τ × 数据率（比特）。`minframe:` 反过来：2τ = 最短帧长 ÷ 数据率，τ 最多是一半，配 `v:` 再求最远距离（`ask: dist`）。`dframe:` 最短帧长变了多少（`-800bit` 是减少），距离变化 = 帧长变化 × 传播速率 ÷ (2 × 数据率)，`ask: dchange` 是四选一（增加 / 减少多少米）。
+- `bsend:` 冲突时间线：A 在 0 时刻发，B 在这个时刻侦听、开始发（`0` 和 A 同时，`last` 是 A 的信号快到 B 时）。画成「横着是位置、往下是时间」的图：两个信号相遇（`meet`）、B 在 τ 检测到冲突（`bdetect`）、A 在 t_B + τ 检测到（`detect`），发 jam 后退避；`jam: 48` 再算发完干扰信号的时刻。B 在 τ 以后才发：听到信道忙、推迟，不冲突（`ask: idle`）。
+- 退避：`r: 1, 3, 0` 是第 1、2、3 次重传随机取到的 r（`retry: 11` 从第 11 次数起；只写 `retry:` 不写 `r:` 就只看范围和最多推迟多久，`ask: maxwait`）。k = min[重传次数, 10]，r 从 0～2^k − 1 里取，推迟 r × 基本退避时间：默认争用期 2τ，以太网写 `slot: 51.2μs`。`ask:` 还有 `k`。
+- `mode: quiz`：只写一个数——有 `bsend:` 时写 A 什么时候检测到冲突，不然写最短帧长 / τ / 推迟多久（只有 `dframe:` 时写距离变化，减少写负数）。`mode: fill`：每个量一行（τ、争用期、最短帧长、两边检测到冲突的时刻、每次重传的 k、r 最大、推迟），单位写在行名里。
+- 错法诊断认得出：争用期当成 τ、最短帧长写成字节（反求时把字节当比特）、距离变化方向反了、以为信号相遇时就检测到冲突、以为 A 总在 2τ 检测到、k 没有封顶 10、r 的范围多算一个、退避按 τ 算。
+
+### switch：交换机自学习
+
+<!-- 科目：计网 -->
+
+```switch
+id: sw1
+hosts: A 1, B 1, C 2, D 3
+frames: A→B, B→A, C→*, A→D
+ask: out
+```
+
+- `hosts:` 主机接在几号端口（同一端口写几台就是接了集线器），`frames:` 依次发的帧（`→*` 广播），`init: B 2` 原有表项。每帧：先记源地址，再转发、扩散或过滤。
+- `ask:` `out`（选端口）、`port`（在图上点）、`learn`。
+
+<!-- 完整写法 -->
+
+- 画成交换机和端口、主机（一个端口几台就画一个集线器），进来的端口和线是黄的，转发出去的是绿的；右边是转发表，新记的一项闪一下。和源在同一个集线器上的主机也收得到（图上虚线框），目的地址对应的就是进来的端口时交换机丢弃（过滤）。`ports: 4` 交换机一共几个端口（默认到最大的端口号；扩散时没接主机的端口也算）。主机名可以写 MAC 地址（`00-e1-d5-00-23-a1`），图上只写最后几位。
+- `mode: quiz`：最后转发表里每台主机在几号端口（按 `hosts:` 的顺序，没记的写 -）。`mode: fill`：每一帧一行，点格子标出从哪些端口转发，再标这一帧有没有新记（或改）一项。
+- 错法诊断认得出：没记源地址（每帧都扩散）、扩散时连进来的端口也发、目的在同一个端口还转发。
+
+### dv：距离向量路由（RIP）
+
+<!-- 科目：计网 -->
+
+```dv
+id: dv1
+router: B
+table: N1 7 A, N2 2 C, N6 8 F
+from: C
+recv: N2 4, N3 8, N6 4
+ask: dist
+```
+
+- RIP 报文更新表（上例；直接交付写 -）；`vectors: B (5,0,8), D (16,12,6)` 配 `cost: B 6, D 3`、`router:`、`dests:` 算新表；`links: A-B, B-C 2` 一轮轮交换，`cut: B-C` 看数到 16。
+- `ask:` `dist` `hop` `rule`；`vectors:` 还有 `via`。
+
+<!-- 完整写法 -->
+
+- 按王道：收到邻居 X 的 RIP 报文，先把每一项距离加 1（`cost:` 改）、下一跳写成 X，再逐项比：原表没有 → 添加；原来的下一跳就是 X → 替换（变大了也换）；下一跳不是 X → 更短才换，否则不变；16 是不可达。画成一张表：原来的、X 发来的（加 1 以后）、更新后；`ask: rule` 是「添加 / 下一跳相同替换 / 更短替换 / 不变」四选一。
+- `vectors:` 是「C 收到 B、D、E 的向量」那种题：新表不看旧表，经每个邻居各算一遍（代价 + 向量），每个目的取最小；`dests:` 不写就是 A、B、C……，里面要有 `router:` 自己。`∞` 也能写。
+- `links:`（代价不写是 1）：一开始每台只知道邻居，之后每一步是一轮（大家同时交换、按 Bellman-Ford 算），表里小字是下一跳，变了的格子标黄；不变了就收敛（`ask: stable`）。`cut: B-C` 收敛以后断开这条链路，接着一轮轮算：邻居的旧表还绕经断链，距离一点点涨到 16（`inf:` 改）——坏消息传得慢。`watch: A` 问哪台路由器（默认第一台）。
+- `mode: quiz`：更新后 / 新表里各目的的距离（按表的顺序）；`links:` 写最后稳定时 `watch:` 到各路由器的距离。`mode: fill`：RIP 和新表填每个目的的距离、下一跳；`links:` 填 `watch:` 每一轮到各路由器的距离（`rows: 4` 只填前几轮）。
+- 错法诊断认得出：忘了加 1、下一跳相同时只比大小、一律换成邻居的；新表忘了加代价、全走最近的邻居；以为交换一次就全知道了、以为断链马上全网都知道、把代价当成跳数。
+
+### util：信道利用率
+
+<!-- 科目：计网 -->
+
+```util
+id: ut1
+proto: gbn
+window: 1000
+frame: 1000B
+rate: 100Mb/s
+delay: 50ms
+ask: u, thru
+```
+
+- `proto:` `sw` / `gbn` / `sr`；`window:` 或 `seqbits:`；`ack:` 确认帧长（`same` 等长）；`data:` 有效数据；`target: 80%` 求最小窗口、序号位数，不写 `frame:` 求最短帧长。
+- `ask:` `tframe` `cycle` `u` `thru` `wmin` `seqbits` `lmin`。
+
+<!-- 完整写法 -->
+
+- 按王道：发送时延 = 帧长 ÷ 数据率；一个周期 = 发送时延 + RTT（2 × 单程传播时延，`delay:`；或 `dist:` 配 `v:`）+ 确认帧的发送时延（给了 `ack:` 才算）；U = 窗口 × 发送时延 ÷ 周期，最大 100%；吞吐率 = U × 数据率（给了 `data:` 就是有效数据传输速率）。画成一个周期的时间线：数据帧是斜着的带子，确认是绿线（或绿带），左边实线是在发、虚线是空等。
+- `target:`：GBN / SR 求窗口至少多大（⌈target × 周期 ÷ 发送时延⌉）和帧序号至少几位（GBN 窗口 ≤ 2^n − 1，SR ≤ 2^(n−1)）；GBN / SR 没写窗口时默认 `target: 100%`。停止-等待写了 `frame:` 和 `target:` 就问能不能达到（`ask: reach`）；不写 `frame:` 就反过来求帧长至少多少比特。`seqbits: 3` 先算最大窗口（`ask: window`）。帧长是一个范围的题（128～512B）写最短的那个。
+- `mode: quiz`：只写一个数，`want:` 挑（`u` `thru` `cycle` `tframe` `wmin` `seqbits` `lmin`），不写就是：求帧长 / 序号位数时写它，有 `data:` 写有效数据传输速率，不然写利用率（百分数里的数）。`mode: fill`：每个量一行，单位写在行名里；除不尽的写到两位小数。
+- 错法诊断认得出：周期里只算单程传播时延、忘了发送时延、忘了确认帧的时延、利用率超过 100%、GBN 和 SR 的序号公式弄混。
+
+### rtt：HTTP 要几个 RTT
+
+<!-- 科目：计网 -->
+
+```rtt
+id: rt1
+objects: 8
+http: non
+parallel: 5
+ask: total
+```
+
+- `objects:` 引用几个对象；`http:` `non`（非持久，`parallel:` 并行数）、`persist`、`pipeline`；`dns: 2` 先查几次 DNS；`rtt: 20ms`（`dnsrtt:`）算总时间。
+- `ask:` `base` `obj` `total` `time`。
+
+<!-- 完整写法 -->
+
+- 按王道：不算传输时间，建 TCP 连接 1 个 RTT（第三次握手捎带 HTTP 请求），请求一个对象再收到它 1 个 RTT。非持久每个对象都要新连接（2 个 RTT），并行 M 个时 ⌈N ÷ M⌉ 批；持久非流水线每个对象 1 个 RTT；持久流水线所有对象一共 1 个 RTT。画成横着的时间条：一格一个 RTT，握手紫、基本页蓝、对象绿、DNS 黄，并行的连接一行一条；最后一步把三种方式的 RTT 数并排比一比。
+- `total` 只数和 Web 服务器之间的 RTT（不算 DNS）；`time` 要写了 `rtt:`，DNS 每次按 `dnsrtt:`（不写就和 `rtt:` 一样）。
+- `mode: quiz`：写一共几个 RTT（写了 `rtt:` 就写总时间）。`mode: fill`：每一段几个 RTT，下面再写总数。
+- 错法诊断认得出：忘了 TCP 握手、忘了基本页面那个 RTT、流水线和非流水线弄混、并行的批数没向上取整、没管并行数的上限。
+
+### subnet / tcp / window：计算机网络
+
+<!-- 科目：计网 -->
+
+```subnet
+id: n-vlsm
+title: 按主机数划分
+split: 192.168.1.0/24
+hosts: 60, 30, 10
+ask: subnet
+```
+
+- **`subnet` IP 地址和子网**，四种用法：
+  - `ip: 192.168.10.130/26`：32 位按「网络号 | 主机号」画出来，一步步写子网掩码、网络地址（主机号全 0）、广播地址（主机号全 1）、可用地址范围和个数（2^h − 2）。`ask:` 能问 `mask` `net` `bcast`（写点分十进制）、`hosts`。`mode: quiz` 配 `quiz: net / bcast / hosts / mask`。
+  - `split: 192.168.1.0/24` 配 `into: 4`（等分成几个，借几位当子网号）或 `hosts: 60, 30, 10`（按主机数，先分要求多的，每个子网取能放下「主机数 + 2」的最小的 2 的幂，地址从小往大）。画一条地址条和每个子网的表。`ask: subnet`（这个子网的网络地址）。
+  - `table: 192.168.1.0/24 -> R1, 192.168.1.128/25 -> R2, 0.0.0.0/0 -> R3` 配 `dst: 192.168.1.200`：最长前缀匹配，一项一项比，最后选前缀最长的。`ask:` 能问 `match`（这一项匹配吗）、`hop`（最后用哪一项，点出来）。`mode: quiz`：下一跳。
+  - `aggregate: 172.16.0.0/24, 172.16.1.0/24, …`：路由聚合，写成二进制找最长的共同前缀。`ask: agg`；`mode: quiz`。
+- **`tcp`**，四种用法：
+  - `ssthresh: 16`、`rounds: 20`、`events: 3dup@12, timeout@16`（第 12 轮收到 3 个重复确认，第 16 轮超时）、`variant: reno`（默认；`tahoe`：3 个重复确认也让 cwnd 回到 1）：cwnd 每个传输轮次怎么变的折线图（ssthresh 画成虚线）。慢开始每轮翻倍但不超过 ssthresh，到了 ssthresh 拥塞避免每轮加 1；3 个重复确认：ssthresh = cwnd / 2，cwnd = ssthresh（快恢复）；超时：ssthresh = cwnd / 2，cwnd = 1。`ask: cwnd`（这一轮的 cwnd）；`mode: quiz` 配 `at: 13` 问第 13 轮的 cwnd。
+  - `handshake: x=100, y=300`：三次握手的时序图，每个报文段的 SYN、ACK、seq、ack，两边的状态。`ask:` 能问 `ack`、`seq`。
+  - `close: u=500, v=800, w=900`：四次挥手（FIN 消耗一个序号，TIME-WAIT 等 2MSL）。`ask: ack`。
+  - `send: 70 100` 配 `last: 180`（各报文段的序号、最后一段到达后的确认号）或 `seq: 1000` 配 `lens: 200 300`：传数据的时序图，累积确认；`lost: 1` 第 1 个第一次丢了（B 暂存失序的，重传后一起确认）。`ask:` 能问 `len`（给了序号时：每个报文段带多少字节）、`seq`（给了长度时：第 2 个起每个的序号）、`ack`（每次的确认号）；`mode: quiz` 依次写确认号。
+- **`window` 滑动窗口**：`proto:` 选 `sw`（停止-等待）、`gbn`（后退 N 帧）、`sr`（选择重传）；`frames: 6`（发几帧，从 0 编号）、`window: 4`（发送窗口，SR 的接收窗口一样大）、`lost: 2`（这几个帧第一次发送时丢失）、`acklost: 1`（这几个帧的确认第一次丢失），可选 `delay: 2`（单程传播几个时间单位）、`timeout:`（默认 2 × delay + 2）。每个时间单位一步：画时序图（丢的线是虚线打 ✗，重传的是粉色）和发送窗口。GBN 接收方只收按序的、累积确认，超时从出错的帧起全部重传；SR 缓存失序帧、单独确认、只重传超时的。`ask:` 能问 `resend`（超时后重传哪几个，写帧号）、`total`（一共发了几帧）；`mode: quiz`：一共发了几个数据帧。
+
+<!-- 完整写法 -->
+
+- `mode: fill`：`subnet` 填网络地址、广播地址、可用地址范围和个数（划分子网、路由聚合各有一张表）；`tcp` 每一轮一列（cwnd、ssthresh）；`window` 每一帧发了几次。
+- **TCP 的轮次口径**：第 1 轮的 cwnd 就是初始值（`init:`），每过一个 RTT 是下一轮；慢开始翻倍、到 ssthresh 后加 1；超时时 ssthresh = ⌊cwnd / 2⌋（最少 2）、cwnd 回到 1；3 个重复确认（Reno）ssthresh = ⌊cwnd / 2⌋、cwnd = ssthresh（Tahoe 和超时一样）。题目的轮次从 0 数时，`init` 那一轮就是第 0 轮，自己对一下。
+- 错法诊断认得出：主机数没减 2、广播地址只把最后一段写成 255、去掉了全 0 全 1 的子网号、广播地址多算 1、没先给主机多的子网分；路由表用了第一个匹配的、按整段比；聚合前缀多数 / 少数一位、没把后面的位清 0；TCP 的 Reno 和 Tahoe 弄混、慢开始翻倍越过 ssthresh、把原来的 ssthresh 减半、超时也快恢复；GBN 和 SR 弄混、GBN 只重传超时那一帧、SR 把后面的也重传、累积确认用错；停止-等待以为确认丢了不用重传。
+
+### 排序（数据结构）：array / shellsort / sortpass
+
+<!-- 科目：数据结构 -->
+
+老的三个：`array`（一排格子的静态示意，`gap: d` 按子表着色）、`shellsort`（希尔排序回放，`mode: code` 按代码逐行走）、`sortpass`（我写一趟的结果，自动判分）。一般用 `sort`，要它们时用 `component_doc` 取写法。
+
+<!-- 完整写法 -->
+
+数组画成一排格子（下标从 1 开始；重复的数后面加 `'`，画成带下划线的那个，比如 `49'`），最多 16 个元素。排序的过程、每一趟的结果都由组件算，不用自己算好再填。
+
+```array
+array: 49 38 65 97 76 13 27 49'
+gap: 4
+split: true
+note: 同色的是同一个子表。
+```
+
+`array`：静态示意。`gap: d` 按增量给子表着色（同一子表同色），`split: true` 按子表分行，`zero: true` 画出 0 号暂存位置。
+
+```shellsort
+title: 回放：d = 4, 2, 1
+array: 49 38 65 97 76 13 27 49'
+gaps: 4, 2, 1
+```
+
+`shellsort`：可以一步步点、也可以自动播放的希尔排序演示。`gaps` 不写就用 $\lfloor n/2 \rfloor$ 每次减半。`mode: code` 按王道的 `ShellSort` 代码逐行走（高亮当前行，显示 d、i、j、A[0] 和后移次数），`mode: pass`（默认）按趟看。`goal: end` 要点到最后一步才算完成。
+
+```sortpass
+id: q-d4
+title: 第一趟：d = 4
+array: 49 38 65 97 76 13 27 49'
+gap: 4
+hint: 4 个子表各只有 2 个元素，每个子表里小的放前面。
+```
+
+`sortpass`：我自己写出结果，自动判分。`gap: d` 写一趟后的序列；`gaps: 4, 2` 写几趟之后的序列；`upto: 6` 是「按代码执行到 i = 6 为止」时的序列。不写 `q` 会自动出题面，不写 `explain` 会自动生成每个子表怎么排的解析。每一次「检查」都会记录（答错的也记）。
+
+### summary：单元结尾（必放）
+
+```summary
+text: 这一单元你发现了……下一单元会……
+```
+
+显示统计数据和「复制学习记录」按钮。页面顶部进度条上也有同样的按钮。
+
+### 其他组件
+
+- 提示框：`definition`、`theorem`、`key`（重点）、`warning`（易错）、`example`、`intuition`（直觉）、`remember`（要背）。第一行可写 `title: …`。要背的词句写 `==…==`。
+- 折叠：`hint`、`solution`、`proof`。
+- 记忆卡 `card`：`front:`、`back:`，点一下翻面。
+
+### rref / matmul：线代的演示组件
+
+<!-- 科目：线代 -->
+
+行化简用 `elim`（能问、能填表、能自己做）；`rref` 是旧的演示，还能用。`matmul` 是矩阵乘法演示（新课件用 `matrix` 的 `product`）。
+
+<!-- 完整写法 -->
+
+- `rref`：写 `matrix: [[…]]`、`augmented: true`、可选 `vars: x, y, z`、`mode: ref`。用精确分数逐步演示，最后判断解的情况。
+- `matmul`：写 `A: [[…]]` 和 `B: [[…]]`。点结果里的元素会高亮对应的行和列。
+- 旧组件 `transform2d`、`vectors` 仍然可用，但新课件优先用 `scene`。
+
+### cloze：英语填空（一句或一段里几个空）
+
+<!-- 科目：英语 -->
+
+```cloze
+id: c-past
+title: 过去完成时
+q: 用括号里动词的正确形式填空。
+text: By the time we arrived, the film {{had started}} (start).
+  She {{has lived|has been living}} here since 2010.
+explain: 「到达」之前已经开始：过去的过去用过去完成时。
+```
+
+- 空写成 `{{答案}}`，几种写法都对时 `{{a|b}}`。大小写、弯引号、多余空格、缩写（`don't` = `do not`）都不算错；`case: on` 时要求大小写也对。
+- 判错时只告诉我第几个空、从第几个词开始不对，不说答案；错三次以后才有「看答案」。`text:` 可以换行写成一段（续行前面空两格）。
+- **常见错答**：`{{had started|!has started=用成了现在完成时}}`。`!` 开头的是你预料到的错答，`=` 后面是针对它的一句提示：我写成这个时看到这句提示，记录里写「页面看出来：…」给老师。多想几个最典型的错法写上（时态、主谓一致、关系词……），比只判对错有用得多。
+- **选择式的空**（完形、语法选择，或者题目本来就是「从这几个里选」）：`{{[that=逗号后面不用 that|*who|whom]}}`：几个选项，`*` 标对的（几个都对就都标 `*`），`=` 后面是选了这个错项时的提示。打字的空和选择的空可以混在一段里。
+- 提示里不要写 `|`、`]`、`}}`（它们是分隔符）；中文标点、括号、冒号都可以。
+
+### errfind：英语改错（点出用错的词，再写改成什么）
+
+<!-- 科目：英语 -->
+
+```errfind
+id: e-neither
+q: 找出句中的错误并改正。
+text: Neither of the answers are correct.
+wrong: are
+fix: is
+explain: neither of 做主语，谓语用单数。
+```
+
+- `wrong:` 写 `text` 里用错的那个词（同一个词出现几次时写 `are#2`）；`fix:` 写改成什么（几种都对时 `a | b`），不写 `fix:` 就只要求点出来。
+- 我点错了词，页面只说「这个词用得没错」；点对了、改错了说「找对了，改得不对」。
+- 多了一个词的错（`which I bought it` 里的 `it`）：`fix: 删掉`，我点「删掉这个词」或写「删」都算对。
+- 常见的错法：`fix: is | !were=neither 做主语看成单数`（改成常见的错写法时的提示）；`decoys: Neither=neither 本身没错，看谓语`（常被误点的词和为什么它没错，几个用 `;` 隔开，出现几次的写 `the#2`）。
+
+### parse：句子成分标注（长难句，能套从句）
+
+<!-- 科目：英语 -->
+
+```parse
+id: p-main
+title: 拆主干
+q: 标出主语、谓语、间接宾语、直接宾语，再标出主语里的定语从句。
+answer: [S The man [RC who lives next door]] [V gave] [IO me] [DO a book].
+roles: S V IO DO RC
+explain: 先找谓语 gave，往前是主语，who 引导的定语从句修饰 the man。
+```
+
+- `answer:` 用括号写标准答案：`[成分 词…]`，可以套（从句里的成分再套一层）；句子原文就是去掉括号的部分，标点照写。我点词定起点、终点，再点成分；判分时范围和成分都要对。
+- 成分的写法：`S` 主语、`V` 谓语、`O` 宾语、`IO` 间接宾语、`DO` 直接宾语、`P` 表语、`C` 补语、`OC` 宾补、`A` 状语、`Attr` 定语、`App` 同位语、`RC` 定语从句、`SC` 主语从句、`ObC` 宾语从句、`PC` 表语从句、`AppC` 同位语从句、`AdvC` 状语从句、`NF` 非谓语、`Conj` 连接词；`roles:` 写这道题用到的（按钮就是这几个），也可以自己起名：`roles: S V O T=时间状语`。
+- 标点写在括号外面（`[DO a book].`），不判；不是这道题要问的词可以不括（`[V is not supported] by research` 里的 by research），我不标它也不算错。
+- `mode: show`：不作答，直接把句子结构画在板上（讲解时用）。
+- 一道题只拆一层最清楚：先拆主干，下一道再拆从句里面。
+- **一层层拆**：加 `steps: V | S O | RC`：第 1 步只标谓语，对了固定在句子上，第 2 步标主语、宾语，第 3 步标从句。每一步的成分在 `answer:` 里都要有；哪一步错了停在哪一步，记录里写第几步。长难句先找谓语就用它。
+- 从句套了两层以上、或者有分裂结构（`~n`）时画成一层层缩进的层次图；`view:`、分裂结构、`ask: join` 的写法见完整写法。
+
+<!-- 完整写法 -->
+
+- **层次图**：从句套了两层以上、或者有分裂结构时，句子画成一层层缩进的块（主干在最外面，每个从句、插入语一块，左上角写是什么从句）；点块的标签折起来只剩「…」，主干连成一句读。作答的题我标对一个从句，下面的层次图长出一块。`view: layers` 只套一层也这样画，`view: line` 照旧画成一行括号。
+- 成分还有 `Par` 插入语、`Emp` 被强调的部分。
+- **分裂结构**：被隔开、本来连着的两段，成分名后面写同一个 `~n`：`[S~1 The rumor] [V spread] [AppC~1 that he had resigned]`，层次图上两段之间画一条弧。加 `ask: join`：成分标对以后（`mode: show` 时一上来）我先点一段、再点和它连着的那一段；连错只说「这两段不是一家」，三次不对能看答案。
+
+### parallel：平行结构（并列的几项上下对齐）
+
+<!-- 科目：英语 -->
+
+```parallel
+id: pl-odd
+title: 哪一项不平行
+text: She likes [reading novels], [writing letters], and [to swim].
+ask: odd
+answer: 3
+fix: swimming
+decoys: swim | to swimming
+explain: 并列的三项要同一种形式：前两项是 doing，第三项也写 swimming。
+```
+
+- `text:` 里用方括号括出并列的每一项（至少两项，不套）。页面把公共的开头（She likes）放在左边，每一项另起一行上下排齐、开头的词加粗，并列连词标出来。
+- 不写 `ask:` 只展示。`ask: starts`：句子先是普通的一行，我点每一项的第一个词，点对了那一项跳到对齐的位置上。`ask: odd`：我点出不平行的那一项（`answer:` 第几项），再从改法里选（`fix:` 是对的，`decoys:` 是错的，`|` 隔开）。
+- 判错只说哪里不对，不说答案；三次不对能看答案。
+
+### shift：句子变换（主动变被动、强调句、倒装还原……）
+
+<!-- 科目：英语 -->
+
+```shift
+id: sh-pass
+title: 主动变被动
+from: [S The committee] [V approved] [O the plan] [A yesterday].
+to: [O=S The plan] [V was approved] [S=A by the committee] [A yesterday].
+mode: do
+decoys: V = approved | has approved
+```
+
+- `from:` 原句、`to:` 变换以后，都用 `[成分 词…]` 括出成分（不套）；两行按成分名一一对上，同名的第二个写 `A#2`；成分变了写 `[O=S The plan]`（和原句的 O 配对，这里是主语）。新加的词（`It was` `that`、there）写在括号外面，页面认成新加的、去掉的；句首的大小写、标点不算词变了。
+- `mode: show`（默认）：点「下一步」，一个成分带着颜色挪到新位置，原处留一个淡的影子；挪完标出哪些词变了（原来是什么）、新加和去掉的词。课堂里 `figure set step=2` / `figure play step 0 4 4s`（step 是挪了几个）。
+- `mode: do`：我自己排顺序，再选变了的词的形式（`decoys:`）。
+
+<!-- 完整写法 -->
+
+- `mode: do` 细说：我把上面的成分点下来（或者拖到某个空位上）排顺序，放好的能拖着对调、点一下拿回去；放错只说第几个位置不对。顺序对了以后，`decoys:` 里写了的成分（一行一个：`V = 错的 | 错的`）再让我选它在新句子里的形式；没写 `decoys:` 的不问。
+
+### chunk：意群断句（长难句、翻译）
+
+<!-- 科目：英语 -->
+
+```chunk
+id: k-idea
+title: 切成意群
+text: The man who lives next door, / gave me a book / that I had wanted | for years.
+translate: on
+explain: 主语带着定语从句是一个意群；谓语和宾语一个；后面的定语从句一个。
+```
+
+- 在 `text:` 里用 `/` 标出要切的地方，`|` 标切不切都行的地方。我在词和词之间点一下切开、再点合上；判错时只说「X 后面还要切一刀」「Y Z 是一个意群，不用切」。
+- `translate: on`：切对以后（或看了答案），每个意群下面一个框写译文，交给你看（页面不判）。
+
+### link：连线（点一个词，再点它连着的那个词）
+
+<!-- 科目：英语 -->
+
+```link
+id: lk-who
+title: 连到先行词
+q: 点关系词，再点它修饰的那个名词。
+text: My brother, who lives in Beijing, is a doctor.
+pairs: who -> brother; !who -> Beijing=就近的名词不一定是先行词
+explain: who 引导的从句修饰前面的 my brother。
+```
+
+- 关系词 → 先行词、非谓语 → 逻辑主语、谓语 → 主语的中心词、代词 → 指代的名词……都用它。我点一个词、再点另一个，页面画一条带箭头的弧线；点线起点的那个词能去掉。
+- `pairs:` 一条写 `词 -> 它连着的词`，几条用 `;` 隔开，出现几次的词写 `the#2`；一个词只连出一条。`!词 -> 连错的词=提示` 是常见的连错（我这样连时看到提示，记录里写给你）。判错时只说哪一条不对、还差几条，不说答案。
+
+### translate：翻译（页面按要点判）
+
+<!-- 科目：英语 -->
+
+```translate
+id: tr-1830
+title: 翻译
+src: By 1830 the former Spanish and Portuguese colonies had become independent nations.
+points:
+- by 1830 = 到…为止 | 截至
+- had become = 已经 | 已
+- independent nations = 独立
+- !开始变成 = had become 是「已经成为」，不是「开始变成」
+order: by 1830 < had become
+answer: 到 1830 年为止，以前西班牙和葡萄牙的殖民地已经成为独立的国家。
+```
+
+- `points:` 一行一个要点：`- 英文那几个词 = 中文里要有的说法 | 另一种说法`；`…` 表示中间可以有别的字（`到…为止`）。页面去掉空格、标点后查译文里有没有。没译出来时只告诉学生是哪几个**英文词**的意思没译出来，不给中文。
+- `- !错的说法 = 提示`：常见的误译（学生这样译时看到提示，记录里写给你）。`order: A < B`：要点 A 的意思在中文里要在 B 前面（状语前置这类）。
+- 要点都在就算对，`answer:` 的参考译文这时给学生看；错三次能看参考译文。通不通顺、像不像中文页面不判：作答原文照样发给你，你接着说。要点挑决定意思的那两三处（时态、关系、修饰对象），不要把整句拆成十几个词。
+
+### gloss：生词（点一下看意思）
+
+<!-- 科目：英语 -->
+
+```gloss
+breakthrough = 突破
+as well as = 和……一样；也
+predict = 预言
+```
+
+- 写在段里任何位置，一行一个「英文词 = 中文意思」。页面在**这一段**的英文里找到这些词（单个词也认 -s / -ed / -ing），画一道虚线；学生点一下，旁边出意思，不调用你。段里只显示一行小字「生词 3 个」。
+- 学生点开过哪个词，跟着下一条消息告诉你（「[动作] 点开了生词…」）；点过的词记成证据（`kind: gloss`），页面不自己收进「要记的」。
+- 有了 gloss，题面里不用再写「生词：cost 价格」：先让学生自己读，不认识再点。只写学生可能不认识的词，不写 the、is 这种。
+
+### drill：句型操练（一题一题做，页面判分）
+
+<!-- 科目：英语 -->
+
+```drill
+id: d-passive
+title: 主动变被动
+q: 把句子改成被动语态。
+count: 3
+- They built this bridge in 1990. => This bridge was built in 1990.
+- People say that he is rich. => He is said to be rich. | It is said that he is rich.
+- Someone has stolen my bike. => My bike has been stolen.
+- They will hold the meeting tomorrow. => The meeting will be held tomorrow.
+```
+
+- 一行一题：`- 原句 => 答案`，几种都对时 `a | b`。`count:` 这次做几题（默认全做），题目默认打乱（`shuffle: off` 照原样）。
+- 整句作答：句末标点可写可不写，大小写、缩写同上。错三次可以看答案，做完一题点「下一题」，最后告诉我一次就对了几题。
+- 常见错答写在答案后面：`- They built it. => It was built. | !It built.=少了 be 动词`。
+- 我写的和答案都不一样、又不是你列的错答时（可能只是换了说法、语序），页面会问一次 Claude 复核（几秒，一两千 token）：它说对就算对，记录里写「Claude 复核：…」。答案照样尽量列全，复核只是兜底。
+
+---
+

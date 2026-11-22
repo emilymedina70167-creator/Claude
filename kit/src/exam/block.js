@@ -1,4 +1,4 @@
-// 每块的考情（docs/exam-plan.md 第三节）：一块挂的考点和大纲要求、统计（页面算的）、画像里的「怎么考」和坑、代表题、
+// 每块的考情：一块挂的考点和大纲要求、统计（页面算的）、画像里的「怎么考」和坑、代表题、
 // 其余能用的真题、我做过哪几道。舞台课每一轮的「这一块在考试里」（context.js）、备课、考情页都用它。
 // 纯函数，有测试（tests/exam-block.test.js）。
 import { syllabusOfBlock, blockSyllabus } from './mapping.js';

@@ -1,4 +1,4 @@
-// 守卫（kit/src/memory/guard.js，docs/guard-plan.md）：Claude 写的话不改，只判断收不收、挂不挂提醒、要不要暂存
+// 守卫（kit/src/memory/guard.js）：Claude 写的话不改，只判断收不收、挂不挂提醒、要不要暂存
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { guardCandidate, buildCorpus, findQuotes, normText, containment, turnRefs, compRefs, authorOf } from '../kit/src/memory/guard.js';

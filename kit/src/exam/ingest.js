@@ -1,4 +1,4 @@
-// 真题、解析册、大纲的转写格式和切法（docs/exam-plan.md 第二节；格式写在 docs/superpowers/specs/2026-11-12-exam-1-design.md 2.5）。
+// 真题、解析册、大纲的转写格式和切法。
 // 转写由 Claude Code 的转写助手照这个格式写，tools/exam.mjs 用这里的函数切成一道一道、拼成一卷。
 // 和教材的「=== 第 N 页」同一个风格，但不加进教材的条目类型（加了所有书的转写提示词都会变）。
 // 纯函数，有测试（tests/exam-ingest.test.js）。

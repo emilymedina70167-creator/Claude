@@ -1,4 +1,4 @@
-// 树（平衡二叉树）的规则（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1 节）：从现在的样子算正确的下一步、
+// 树（平衡二叉树）的规则：从现在的样子算正确的下一步、
 // 判一下像哪种错、挑战用的判断式、写给老师的事实、手势表，和 engines/balanced.js 的平衡二叉树引擎对拍。
 // 纯函数，有测试（tests/stage-tree-rules.test.js）；在 types/index.js 里登记。
 //
@@ -228,7 +228,7 @@ function checkRotate(o, act) {
   return { legal: true, right: false, misread: misread(), why, next: now() };
 }
 
-// 不是正确的那一下：像哪种错（docs/superpowers/plans/2026-11-06-stage-base.md 第 5 个任务的表；认不出来的给 null）
+// 不是正确的那一下：像哪种错
 function misreadOf(o, p, at, dir, kind) {
   const z = p.root, K = p.kind, zN = nameOf(o, z);
   const fin = K[0] === 'L' ? 'right' : 'left'; // 在根那里那一下：左边高右旋，右边高左旋
@@ -390,7 +390,7 @@ function changed(before, after) {
   }).map((n) => n.key);
 }
 
-// —— 手势表（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）——
+// —— 手势表——
 
 /** 一个动作 → 学生那一行镜头指令（结点用 #编号：跟着结点走，值重复也指得清） */
 export function actSrc(o, act) {

@@ -7,8 +7,8 @@ import { parseShift, shiftFieldProblems } from '../kit/src/enshift.js';
 import { parseFields } from '../kit/src/parse.js';
 import { docsForSubject, componentDoc } from '../kit/src/subject.js';
 
-const manual = readFileSync('CLAUDE-PROJECT.md', 'utf8');
-const third = manual.slice(manual.indexOf('## 三、组件参考'), manual.indexOf('\n## 四、'));
+const manual = readFileSync('kit/components.md', 'utf8');
+const third = manual.slice(manual.indexOf('## 组件参考'));
 const blocksIn = (text) => [...text.matchAll(/```(parse|parallel|shift)\n([\s\S]*?)```/g)].map((m) => ({ kind: m[1], src: m[2], fields: parseFields(m[2]).fields }));
 const demo = blocksIn(readFileSync('kit/examples/en2-demo.html', 'utf8'));
 // board check 里的探题（写 key:）是另一种写法，不在这里核

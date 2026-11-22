@@ -1,4 +1,4 @@
-// 双人打标签（docs/exam-plan.md 第二节第 4 步）：每道题交给两个互不知道的助手各打一遍（同一份说明、同一张词表、
+// 双人打标签：每道题交给两个互不知道的助手各打一遍（同一份说明、同一张词表、
 // 这门课的考点树和课程地图），比主考点：一致的直接收，不一致的交第三个助手看两份定。一批的主考点一致率 ≥ 90% 才算合格。
 // tools/exam.mjs 的 tagprep / tagmerge / tagapply 用这里的函数。纯函数，有测试（tests/exam-tagging.test.js）。
 import { HOW, TYPES } from './taxonomy.js';

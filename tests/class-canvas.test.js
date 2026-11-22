@@ -1,4 +1,4 @@
-// 版面（kit/src/class/canvas.js，docs/board-plan.md 第 4 节）：Claude 说结构（几栏、每段第几栏），页面按内容排
+// 版面（kit/src/class/canvas.js）：Claude 说结构（几栏、每段第几栏），页面按内容排
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCols, parseCol, bandsOf, layoutText, colsText } from '../kit/src/class/canvas.js';

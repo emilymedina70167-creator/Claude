@@ -1,4 +1,4 @@
-// 离考研多少天、「这一周」、课前热身、积压几次清完（docs/journey-plan.md）：都是页面按记录算的，不调用 Claude
+// 离考研多少天、「这一周」、课前热身、积压几次清完：都是页面按记录算的，不调用 Claude
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

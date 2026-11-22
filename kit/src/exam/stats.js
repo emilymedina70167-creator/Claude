@@ -1,4 +1,4 @@
-// 考情的统计（docs/exam-plan.md 第三节）：从带标签的真题里**算出来**，不让 Claude 凭记忆说、不让它在一大堆文字里数。
+// 考情的统计：从带标签的真题里**算出来**，不让 Claude 凭记忆说、不让它在一大堆文字里数。
 // 一道题的分：主考点算全分，次考点各算一半。留作模考的卷也算进统计（只是题面不出现）。纯函数，有测试（tests/exam-stats.test.js）。
 import { blockSyllabus, mapHoles } from './mapping.js';
 import { usable } from './reserve.js';
@@ -92,7 +92,7 @@ export function statsCache({ course, questions = [], syllabus = [], curriculum =
 }
 
 /**
- * 卷面样本（docs/superpowers/specs/2026-11-14-round10-measure-design.md 6.1）：{ 年份: [[块, 分值, 题型]] }。
+ * 卷面样本：{ 年份: [[块, 分值, 题型]] }。
  * 主考点的块拿全分；有次考点挂在别的块时，主块一半、别的块平分另一半（和统计的「次考点算一半」同一个意思）。
  * 没挂块的考点不出现（测量那边按「还没进学习台」补齐）。只有块、分值、题型：留作模考的卷也进，题面、答案一概不带
  */

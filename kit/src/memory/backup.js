@@ -1,5 +1,5 @@
-// 导出备份（docs/desk-plan.md 3.4）：整个记忆库（可选带不带证据、各节课的黑板）存成一个 JSON 文件，用 downloads 能力让我保存。
-// 恢复：学习台首页「从备份恢复」，页面自己写回（restorePlan；学习台自己管自己，不经过外部 Claude，docs/autonomy-plan.md）。
+// 导出备份：整个记忆库（可选带不带证据、各节课的黑板）存成一个 JSON 文件，用 downloads 能力让我保存。
+// 恢复：学习台首页「从备份恢复」，页面自己写回（restorePlan；学习台自己管自己，不经过外部 Claude）。
 // 文件里每一条也是 ArtifactData batch 要的样子（collection、doc_id、data），开发那边修数据时照 restoreBatches 切成一批批写回。
 // 纯函数，有测试（tests/memory-report.test.js）。
 import { MEMORY_COLLECTIONS } from './schema.js';

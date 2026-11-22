@@ -1,4 +1,4 @@
-// 留作模考的卷（kit/src/exam/reserve.js）：一个字都不出现在课堂、备课（docs/exam-plan.md 1.2、第七节）
+// 留作模考的卷（kit/src/exam/reserve.js）：一个字都不出现在课堂、备课
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { latestPaperYear, reserveYears, markYears, usable, scrubChunks, scrubBooks, readReserve } from '../kit/src/exam/reserve.js';

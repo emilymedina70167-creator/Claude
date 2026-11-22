@@ -48,7 +48,7 @@ test('老师做到的挑战：不叫老师，写给老师「不是学生做到�
   assert.equal(t, '你这一轮让挑战 g1「让 AB 是 O」成立了（不是学生做到的）');
 });
 
-// —— 裁判的结论、做完了、长度上限（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 5 节）——
+// —— 裁判的结论、做完了、长度上限——
 const enc = new TextEncoder();
 const rot = (k, verdict) => ({ kind: 'try', act: { type: 'rotate', open: 'rotate', src: `rotate t#${k} right`, verdict } });
 
@@ -177,7 +177,7 @@ test('长度上限：试了 30 下，[学生] 一块不超过 3 KB；没有错�
   assert.doesNotMatch(eventsText([...dials, eventOf({ type: 'say', text: '长'.repeat(1000) })]), /之前又试了 0 下/);
 });
 
-// —— 按要紧程度压（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 4 节）——
+// —— 按要紧程度压——
 const bytes = (t) => enc.encode(t).length;
 const SAMPLES = JSON.parse(readFileSync(new URL('./fixtures/stage-tries-e2.json', import.meta.url), 'utf8'));
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -441,7 +441,7 @@ test('拨数的路：学生先点的几样以后第一次变的那一句落在�
   assert.match(t, /学生拨了 k：1 → 2 → 3 → 4（停在 4）。学生先点的 2 个里/);
 });
 
-// —— 学生手上没事了才叫老师（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）——
+// —— 学生手上没事了才叫老师——
 test('hasWork：还挂着要答的一问、没做到的挑战、交给了学生还没做完的东西；ask next（连「给个提示」）不算', async () => {
   const { hasWork } = await import('../kit/src/stage/events.js');
   const { Scene } = await import('../kit/src/stage/scene.js');

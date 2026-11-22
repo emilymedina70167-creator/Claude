@@ -1,4 +1,4 @@
-// 外部主 Claude 的课（第十五轮，docs/superpowers/specs/2026-11-17-external-teacher-*.md）：
+// 外部主 Claude 的课（第十五轮）：
 // 外部每一轮写一条 sessions/{编号}/ext_in/{序号}（和页面里老师的回复同一种写法），页面画上板、写 done；
 // 学生这边的现状页面写成 sessions/{编号}/ext_out/{序号} 给它读。这里是不碰 DOM 的那一半。纯函数，tests/class-ext.test.js。
 

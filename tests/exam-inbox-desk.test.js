@@ -1,6 +1,6 @@
 // 首页的考试收件箱（exam/examdesk.js 的 createExamInbox）：进度看得见、出错不再吞掉、不合规矩的写明哪一份为什么。
 // 2026-11-15 真的学习台里 37 份只并进了第一份（第一份写完回执、还没删原件，首页就进了课堂；错误被吞了，学生什么都看不到），
-// 见 docs/superpowers/specs/2026-11-15-root-rulings.md。数据库是内存里的替身，题是现造的（tests/fixtures/exam）。
+// 。数据库是内存里的替身，题是现造的（tests/fixtures/exam）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -1,4 +1,4 @@
-// 课堂助手（第九轮，docs/superpowers/specs/2026-11-13-aide-design.md）的两类集合：学生卡、课前档案。
+// 课堂助手（第九轮）的两类集合：学生卡、课前档案。
 // 都是从原始记忆派生出来的一层（随时能照错题、弱点、证据……重写），不是事实的来源，所以不进记忆库的 COLLECTIONS
 // （那边首页整类订阅、自检写指纹、恢复按规矩查……派生的东西不该进那一套）。照考试资料的做法另立、按需读（aide/load.js）。
 // 纯函数，有测试（tests/aide-schema.test.js）。不 import memory/schema.js：那边的 canWrite 要 import 这边。

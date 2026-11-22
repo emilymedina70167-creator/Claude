@@ -1,4 +1,4 @@
-// 舞台的场景（docs/stage-plan.md）：舞台上有什么、在哪、什么颜色、连着谁、贴着什么字、拨数是几、在等学生做什么——
+// 舞台的场景：舞台上有什么、在哪、什么颜色、连着谁、贴着什么字、拨数是几、在等学生做什么——
 // 全是数据，不碰 DOM。纯函数 / 纯数据，有测试（tests/stage-scene.test.js）。
 //
 // 一行镜头指令先 check（写错了当场挡下，告诉老师哪里错，别的行照演），再 apply（改场景）；
@@ -35,7 +35,7 @@ export const OBJECT_GAP = 70; // 两样东西上下摆开隔多远
 const LABEL_ROOM = 30; // 一行贴在东西上面的字，除了它自己的高还要留多少（离上面的东西、离它贴的东西各一段）
 /**
  * 预写最多套几层（@g1 是第 1 层，@g1 里写出的 goal g2 的 @g2 是第 2 层……）：再多就是事先排好的一整段课，
- * 要等老师看着学生写（硬性规定：教学不预制，docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.1）
+ * 要等老师看着学生写（硬性规定：教学不预制）
  */
 export const PREWRITE_DEPTH = 3;
 // 话里的 {名字}：光秃秃的一个名字（checkRich 查它是不是拨数、舞台上的东西）
@@ -202,7 +202,7 @@ export function sweepLine(name, { lo, hi }, id, list) {
   return `${head}：${[...runs.filter((r) => r.b !== most).map((r) => `${at(r)} ${r.b}`), `别的${spaced(most)}`].join('；')}`;
 }
 
-// —— 存档点（keep / back，docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 7 节）：只管一样东西 ——
+// —— 存档点（keep / back）：只管一样东西 ——
 /** 一样东西最多存几个名字（同名的换掉；页面替老师存的 after= 也算一个） */
 export const KEEP_MAX = 6;
 /**
@@ -2441,7 +2441,7 @@ export class Scene {
     }
     return out;
   }
-  // —— 扫一遍拨数（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.3）——
+  // —— 扫一遍拨数——
   /** 照依赖图（liveOrder 那几条边）直接、间接跟着拨数 name 算的东西（按舞台上的先后） */
   dependents(name) {
     const nodes = this.liveNodes();

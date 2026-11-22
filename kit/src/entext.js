@@ -61,7 +61,7 @@ export function textHint(r, { what = '答案' } = {}) {
   return `从第 ${r.at} 个词开始不对`;
 }
 
-// —— 常见错答（docs/english-plan.md 第 2 批）：「had started | !has started=用成了现在完成时」——
+// —— 常见错答：「had started | !has started=用成了现在完成时」——
 // 对的几种写法照旧用 | 隔开；! 开头的是常见的错答，= 后面是针对它的一句提示（学生看到，记录里也写给老师：页面看出来像是哪种错法）
 
 /** 一个答案的写法 → { alts（对的）, wrongs: [{ text, why }]（常见错答）}。opts 用来查「错答和对的一样」 */
@@ -170,7 +170,7 @@ export const phraseHasPunct = (text) => /[,;:.!?—–()"“”]/.test(String(te
 const wkey = (w) => String(w).toLowerCase().replace(/’/g, "'");
 
 /**
- * board mark 标英语句子里的词（docs/english-plan.md 第 1 批）：sel 是 { kind: word, k } / { kind: words, a, b } / { kind: phrase, text, n }，
+ * board mark 标英语句子里的词：sel 是 { kind: word, k } / { kind: words, a, b } / { kind: phrase, text, n }，
  * words 是那句英文按顺序的词（字符串）。返回 { from, to }（从 0 数，含两头）或 { error }
  */
 export function wordSpan(sel, words) {
@@ -471,7 +471,7 @@ export function parseDrill(lines) {
   return items;
 }
 
-// —— 分步拆句 parse 的 steps:（docs/english-plan.md 第 4 批）：「V | S O | RC」——
+// —— 分步拆句 parse 的 steps:：「V | S O | RC」——
 
 /**
  * 「V | S O | RC」→ [[V], [S, O], [RC]]：一步标哪几种成分。每一步的成分在答案里都要有；
@@ -609,7 +609,7 @@ export function parseRegrade(text) {
   } catch { return null; }
 }
 
-/* ---------------- 翻译按要点判（docs/english-plan.md 第 7 批） ----------------
+/* ---------------- 翻译按要点判 ----------------
  * 翻译判不了通不通顺，但判得了「该译出来的意思译出来没有」：老师写下这句的几个要点（英文那几个词 = 中文里要有的说法，几种说法用 | 隔开），
  * 页面查学生的译文里有没有。没译出来时只说是哪几个英文词（不给中文答案）；!错的说法 = 提示：常见的误译；order：要点在中文里的先后。
  * 通顺、地道交给课堂 Claude 看（作答照常发给它）。

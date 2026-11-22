@@ -1,4 +1,4 @@
-// 生词本（docs/english-plan.md 第 7 批）：课上点开看过意思的词（gloss 组件，证据里 kind: gloss），下课写报告时页面收进记忆点（recall），
+// 生词本：课上点开看过意思的词（gloss 组件，证据里 kind: gloss），下课写报告时页面收进记忆点（recall），
 // 和别的要背的一样按 1 → 3 → 7 → 14 → 30 天在首页「要记的」里想一遍。纯函数，有测试（tests/english-gloss.test.js）。
 // 不调用 Claude；同一个词已经在记的不再加；一节课最多 VOCAB_PER_SESSION 个（点得太多多半是在随手点，不全收）。
 import { toDate } from './schema.js';

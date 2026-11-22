@@ -1,4 +1,4 @@
-// 教学守则（lessons）：失误归纳成守则，不再一条条往上堆（docs/teach-plan.md 第 1 节）。
+// 教学守则（lessons）：失误归纳成守则，不再一条条往上堆。
 // 上课时又犯一条守则记 again，新的失误才记 slip；下课时把还没归纳的失误并进守则；一科最多 LESSONS_MAX 条；
 // 摘要只带守则和还没归纳的失误。
 import { test } from 'node:test';

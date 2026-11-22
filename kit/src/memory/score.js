@@ -1,4 +1,4 @@
-// 410 分的进度（docs/score-plan.md）：不猜考多少分，只数「已经攒下的分」。全是页面按掌握记录算的，
+// 410 分的进度：不猜考多少分，只数「已经攒下的分」。全是页面按掌握记录算的，
 // 不调用 Claude，也不进发给课堂 Claude 的说明（不影响回复的快慢）。纯函数，有测试（tests/memory-score.test.js）。
 //
 // 怎么算（每一层都写着依据，改数就改这一个文件）：
@@ -147,7 +147,7 @@ export function scoreMap(curriculum = [], split = null, { weights = null } = {})
 }
 
 /** 按某一天（不给就是现在）的掌握，每一块攒了几分：{ 块编号: { got, state, tier } } */
-// 有真题的块，真题级（exam/bar.js）没过最多攒到七成：只会教材题、不会真题的块，在考场上不算稳拿（docs/exam-plan.md 第五节）
+// 有真题的块，真题级（exam/bar.js）没过最多攒到七成：只会教材题、不会真题的块，在考场上不算稳拿
 export const EXAM_CAP = 0.7;
 // examBlocks：有真题入库的块（首页缓存的 blockPerYear 里 > 0 的）；真题级过没过、哪天过的读 mem.exam_bar
 function gotAt(mem, map, date = null, examBlocks = null) {

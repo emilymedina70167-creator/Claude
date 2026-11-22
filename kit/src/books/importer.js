@@ -1,4 +1,4 @@
-// 资料入库的流程（docs/textbook-plan.md）：一个文件进来 → 一页一页（PDF 的页、截图、讲义里带图的幻灯片）先存原页图，再几页一次交给 Claude 看图转写，
+// 资料入库的流程：一个文件进来 → 一页一页（PDF 的页、截图、讲义里带图的幻灯片）先存原页图，再几页一次交给 Claude 看图转写，
 // 每页的结果存在 books/{编号}/pages/{页码}；全部（或停下时已经转好的）按顺序拼成条目写进 books/{编号}/chunks。文稿（.docx）直接切条，不调用 Claude。
 // 转写一半停了、关了页面：页的状态在数据库里，下次点「接着转」从没转的页开始（原页图在 assets 里，不用再选文件）。
 // 改过文字、点过「已核对」的条目重新拼的时候保留（编号按页，重转别的页编号不变）。
@@ -21,7 +21,7 @@ const PAGE_WIDTH = 1200; // 存进学习台的原页图：核对够清楚，300 
 // 转写是认字、不是讲课，课堂讲课照旧只用 Opus 5.5（classroom.js 的 TEACH）。modelTier 是平台给的退路档，
 // 实际是哪个模型转的记在每一页的 by 和书的 cost.model 上，教材页显示出来
 // 学习台里不再调用 Claude 转写（2026-11-04 我定的）：页面里的 Haiku 觉得整页照抄教材涉及版权、不肯转，Opus 又太费额度。
-// 现在导入只存原页图（不调用），书上标「等转写」；转写在 Claude Code 那边做（tools/books.mjs，docs/textbook-plan.md「在 Claude Code 里转」）：
+// 现在导入只存原页图（不调用），书上标「等转写」；转写在 Claude Code 那边做（tools/books.mjs）：
 // 它读原页图、把每页的结果写回 books/{书}/pages/{页}，再在书上写 rebuild（时间），页面看到了自己拼条目（rebuild 是纯代码，不调用）。
 // 页面里转写的代码留着：TRANSCRIBE_HERE 改回 true 就是原来那样
 export const TRANSCRIBE_HERE = false;

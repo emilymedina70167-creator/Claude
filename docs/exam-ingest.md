@@ -1,6 +1,6 @@
 # 真题入库手册（Claude Code 照这个做）
 
-总计划 `docs/exam-plan.md` 第二节；转写格式在 `docs/superpowers/specs/2026-11-12-exam-1-design.md` 2.5；工具 `tools/exam.mjs`（文件开头有每个子命令的用法）。我说「入库 408 的 2015–2026」时照下面一步步做。**真题、解析的 PDF 不进这个公开的开发仓库，也不存成学习台的书**（存成书会被当成教材带进课堂）：我在学习台「管理 → 考试」里传（见第 0 节）。
+转写格式在文末；工具 `tools/exam.mjs`（文件开头有每个子命令的用法）。我说「入库 408 的 2015–2026」时照下面一步步做。**真题、解析的 PDF 不进这个公开的开发仓库，也不存成学习台的书**（存成书会被当成教材带进课堂）：我在学习台「管理 → 考试」里传（见第 0 节）。
 
 ## 0. 资料在哪
 
@@ -10,7 +10,7 @@
 
 - 读学习台的 `meta/errors`、`meta/health`（照 CLAUDE.md）。
 - `ArtifactData list` 存到本地（`.superpowers/exam/`，私人数据不进 git）：`curriculum`、`syllabus`、`exam/target`、`papers`（有的话）。
-- 结构表（`kit/src/exam/structure.js`）那一科还是 `checked: false` 时：先拿一年的真卷核一遍题数、每题几分、合计，对了改成 `checked: true`，对不上照真卷改表，记进这一轮的 rulings。
+- 结构表（`kit/src/exam/structure.js`）那一科还是 `checked: false` 时：先拿一年的真卷核一遍题数、每题几分、合计，对了改成 `checked: true`，对不上照真卷改表，告诉我改了什么。
 
 ## 1. 大纲 → 考点树
 
@@ -40,6 +40,51 @@
 3. `node tools/exam.mjs apply 目录 --out 收件箱目录`：照 `batches.json` 一批批 `ArtifactData batch` 写进 `exam_inbox`。
 4. 我打开学习台时页面并进去；回执在 `exam_inbox_log/{同号}`，`ok: false` 的照 `problems` 改了重来。
 
-## 5. 尺子 1（入库质量）写进进度
+## 5. 入库质量
 
-每批写进 `docs/exam-plan.md` 的进度：结构表核过几年、答案核对等级的分布（engine / exact / double / book / none 各几道，`check` 会打印）、双人打标签的一致率、我抽查的 20 道对了几道。
+每批做完汇报给我：结构表核过几年、答案核对等级的分布（engine / exact / double / book / none 各几道，`check` 会打印）、双人打标签的一致率、我抽查的 20 道对了几道。
+
+## 附：转写格式（真题、解析、大纲）
+
+
+转写的人（Claude Code 的转写助手）照这个写；`ingest.js` 照这个读。和教材的 `=== 第 N 页` 同一个风格，不加进教材的 `KINDS`。
+
+**真题卷**（一卷一个文件）：
+
+```
+=== 第 3 页
+--- 题 23 | 单选 | 2
+已知……（题面，公式写 LaTeX）
+A. ……
+B. ……
+C. ……
+D. ……
+--- 题 41 | 综合 | 10
+（题面，可以跨页：下一页开头不写新的「--- 题」就接在上一题后面）
+--- 篇 T1 | 阅读
+（英语的一篇文章原文；后面的题写「--- 题 21 | 阅读 | 2 | 篇 T1」）
+```
+
+**解析册**（一卷一个文件）：
+
+```
+--- 答 23
+答案：C
+（解析原文）
+--- 答 41
+（综合题没有字母答案：「答案：」那一行可以没有，整段都是解析）
+```
+
+**大纲**（一门课一个文件，`--course DS --year 2026`）：
+
+```
+# 一、线性表
+## （一）线性表的基本概念
+## （二）线性表的实现
+### 1. 顺序存储
+- 掌握：……（大纲原文的一句；开头是「了解 / 理解 / 掌握 / 会用」之一时记进 level）
+```
+
+`#` 一层是 `G-DS-1`，`##` 是 `G-DS-1.1`，`###` 是 `G-DS-1.1.1`；`-` 开头的行是上一节点的大纲原文（`text`），第一句的要求词记成 `level`。
+
+`splitPaper(text)` → `{ questions: [{ n, type, points, stem, options, pages, passage }], passages: [{ key, kind, text, pages }], problems: [] }`；`type` 写中文（单选、多选、填空、解答、综合、完形、阅读、新题型、翻译、作文、分析），`TYPES` 里有中文到键的对照。`splitAnswers(text)` → `Map<n, { answer, analysis }>`。`buildPaper({ subject, year, questions, passages, answers, source })` → `{ paper, questions, passages, problems }`：编号、`space`、`course`（408 用 `courseHint`）、`year`、`answer`、`analysis`、`verified: { how: 'book' }`（只照书；引擎验算第 2 批加），再跑 `checkPaper`。有 `problems` 的卷 `tools/exam.mjs check` 不放行。

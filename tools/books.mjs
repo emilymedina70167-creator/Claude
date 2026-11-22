@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 在 Claude Code 里转教材（docs/textbook-plan.md「在 Claude Code 里转」）。学习台里只存原页图、不调用 Claude；这边：
+// 在 Claude Code 里转教材。学习台里只存原页图、不调用 Claude；这边：
 //   1. ArtifactData list 把书和页存到本地（out_dir）：books/B3.json、books/B3/pages/*.json
 //   2. node tools/books.mjs plan  --dump 目录 --book B3 [--pages 64-81,55] [--per 4] --work 工作目录
 //      → 每批一个 bNNN.prompt.txt（转写的规矩，和学习台里原来用的同一份 transcribePrompt）、bNNN.json（页码 → 原页图的 asset id）

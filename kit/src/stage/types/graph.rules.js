@@ -1,4 +1,4 @@
-// 图的规则（接口见 rules.js、docs/stage-types.md；主线第二轮 D）。纯函数，有测试（tests/stage-graph-rules.test.js）。
+// 图的规则（接口见 rules.js；主线第二轮 D）。纯函数，有测试（tests/stage-graph-rules.test.js）。
 //
 // 图交给学生动手：点一条边选进 / 拿掉（open g choose）、点一个结点编访问号（open g visit）、点一个结点写旁边的数（open g tag）。
 // 页面不判对错（没有 next / judges / doneBy）：Kruskal 该先选哪条、BFS 下一个访问谁，是老师看着判的事。这里只交

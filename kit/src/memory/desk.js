@@ -1,10 +1,10 @@
-// 学习台（mode: desk）：一个长期存在的 artifact，它的数据库就是记忆库（docs/learner-memory-spec.md）。
+// 学习台（mode: desk）：一个长期存在的 artifact，它的数据库就是记忆库。
 // 第 1 批：记忆库本身。对话里的 Claude 用 ArtifactData 读写这些集合；页面打开时：
 // - 按 last + tier 算复现组的到期日（不手填），首页「今天」列出过期和今天到期的
 // - 自检（check.js）：编号、字段、证据、只增不改、改了记 log；结果写回 meta/memcheck，对话里的 Claude 写完读它
 // 第 2 批：在学习台里上课。首页「开新课」开一节（sessions/{编号}，资料包抄一份进去），地址后面带 #编号 就进这节课：
 // 课堂照旧是 class/classroom.js，数据放在 sessions/{编号}/ 下面，证据、观察进记忆库，每一轮带着记忆摘要。
-// docs/desk-plan.md 第 1 批（记录能力）：下课时页面算课后报告（report.js）写进 sessions/{编号}/report/main；首页「补记」
+// 记录：下课时页面算课后报告（report.js）写进 sessions/{编号}/report/main；首页「补记」
 // 学习台外面做的；「备份和用量」导出整个记忆库（backup.js）、看 assets 用了多少。
 // 课程地图、弱点表、以前的课的页面（desk-plan 第 3 批）后面做。
 import { sheetMd } from './sheet.js';
@@ -252,7 +252,7 @@ export async function renderDesk(root, meta) {
   let examMeta = null;
   // 首页那一行（paintExamInbox）：收件箱还在并、有没并进去的才出现（整份不收的从回执里现取，刷新以后、别的设备并的也列）。
   // 2026-11-15 第一份开始并 3 秒以后就进了课堂（推断），37 份只并进了第一份，学生什么都看不到；现在课堂里也接着并（enterClass 的 startClassInbox），
-  // 见 docs/superpowers/specs/2026-11-15-root-rulings.md
+  //
   // 先声明再挂：真数据库的订阅要是同步回调，第一次重画就碰上还没声明的变量
   let examInboxSig = '';
   const examInbox = createExamInbox({ db, curriculum: () => data.curriculum, onChange: () => paintExamInbox() });
@@ -540,7 +540,7 @@ export async function renderDesk(root, meta) {
   let healthBusy = false;
   let lastHealth = '';
   db.doc('meta/health').onSnapshot((s) => { healthDoc = s.exists ? s.data() : null; paintHealth(); }, () => {});
-  // 测速（speed.js，docs/talk-plan.md 第 0 批）：结果写 meta/speed，开发那边读回来定一问一答每一轮能带多少
+  // 测速（speed.js）：结果写 meta/speed，开发那边读回来定一问一答每一轮能带多少
   let speedDoc = null;
   db.doc('meta/speed').get().then((s) => { speedDoc = s.exists ? s.data() : null; }, () => {}).finally(() => {
     mountSpeed($('.dk-speed .dk-body'), { getAI: deskAI, put: (c, id, d) => put(c, id, d).then(() => { speedDoc = d; }), saved: () => speedDoc, padSource: COMPONENT_DOCS });

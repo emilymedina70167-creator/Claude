@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 真题入库（docs/exam-plan.md 第二节；转写格式见 docs/superpowers/specs/2026-11-12-exam-1-design.md 2.5）。
+// 真题入库。
 // 真题和解析的 PDF 只放在我的私有仓库里，不存成学习台的书（存成书会被当成教材带进课堂）。这边：
 //   1. 转写：照教材那一套画页、裁白边（tools/books.mjs render），转写助手看图照真题的格式写成「真题.txt」「解析.txt」，大纲写成「大纲.txt」
 //   2. node tools/exam.mjs split --subject 408 --year 2019 --paper 真题.txt --answers 解析.txt --out 目录 [--source 私有仓库里的路径]

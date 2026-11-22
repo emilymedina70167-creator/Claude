@@ -1,4 +1,4 @@
-// 守卫（docs/guard-plan.md）：每一条要写进记忆库的内容（错题、弱点、观察、失误、守则、复现组、要记的、位置、复盘……）
+// 守卫：每一条要写进记忆库的内容（错题、弱点、观察、失误、守则、复现组、要记的、位置、复盘……）
 // 写进去之前过六道检查。Claude 写的话一个字不改，只判断它能不能收、收下要不要挂提醒、要不要先暂存。纯函数，有测试
 // （tests/memory-guard.test.js），真数据的量法在 tools/guard-audit.mjs。
 //
@@ -76,7 +76,7 @@ export function buildCorpus({ turns = [], evidence = [] } = {}) {
     if (!t) continue;
     // 老师那一轮里的 memo 块、计划块不算「记录」：它们就是要核的东西本身（memo 里编的原话，在 memo 里当然找得到）
     const said = String(t.text || '').replace(/(`{3,})\s*board\s+(memo|plan)\b[\s\S]*?(\1|$)/g, '');
-    // shown：一问一答的课里学生在活板上看到的那一轮的字（docs/talk-impl.md C.3）。老师写的是活板的源码（{x?}、let 行），
+    // shown：一问一答的课里学生在活板上看到的那一轮的字。老师写的是活板的源码（{x?}、let 行），
     // 学生看到、引的是画出来的字，核原话要在这里找得到
     const txt = [said, t.shown, t.say, ...(Array.isArray(t.actions) ? t.actions.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))) : [])].filter(Boolean).join('\n');
     const n = normText(txt);

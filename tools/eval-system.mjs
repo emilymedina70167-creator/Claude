@@ -10,7 +10,7 @@ import { SUBJECTS } from '../kit/src/subject.js';
 const out = process.argv[2];
 if (!out) { console.error('用法：node tools/eval-system.mjs 输出目录'); process.exit(2); }
 mkdirSync(out, { recursive: true });
-const DOCS = componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
+const DOCS = componentDocs(readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8'));
 for (const subject of SUBJECTS) {
   const text = buildSystem({ componentDocs: DOCS, pack: {}, board: [], subject });
   writeFileSync(join(out, `system-${subject}.md`), text);

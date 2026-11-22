@@ -1,4 +1,4 @@
-// 记忆底座的最后一轮（docs/superpowers/plans/2026-11-16-memory-base.md 任务 10）：独立审读查出来的，
+// 记忆底座的最后一轮：独立审读查出来的，
 // 有记忆摘要时旧的规则、守则、关于学生、失误还能绕回模型提示词的几个口子，和几处说明里的假话。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

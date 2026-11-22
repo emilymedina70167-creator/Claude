@@ -330,7 +330,7 @@ test('撤一步不算「试」的次数（不会撤几下就凑出「试了好�
   assert.equal(tryCount(ev), 1);
 });
 
-// —— 同一处的三种按法、✕、摘叶子 / 删、拖一段（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.1、2.4、2.6 节）——
+// —— 同一处的三种按法、✕、摘叶子 / 删、拖一段——
 
 test('每一下只认成一种：同一处开着几种按法时照 choosePress 定（null 是还在等，none 是作罢）；只有一种照旧按下就拖', () => {
   assert.deepEqual(PRESS_OF, { tap: 'tap', write: 'tap', span: 'slide', line: 'slide', 'drop-on': 'hold', 'drop-at': 'hold' });

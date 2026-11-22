@@ -13,7 +13,7 @@ test('说明里提到学生不用「他」「她」', () => {
   for (const t of [STAGE_TEACH, STAGE_DOC, ...Object.values(TOPICS).map((x) => x.topic + x.material)]) assert.doesNotMatch(t, /[他她]/);
 });
 
-test('说明不长（每一轮都带）：每门课的教法 + 这门课的说明 ≤ 24 KB（说明长短不影响出第一个字的快慢，docs/talk-plan.md 量过；这里防的是写成长篇）', () => {
+test('说明不长（每一轮都带）：每门课的教法 + 这门课的说明 ≤ 24 KB（说明长短不影响出第一个字的快慢；这里防的是写成长篇）', () => {
   // 量的是真发出去的那一份：学习台里每一节都有块，照块的科目带说明（stageDoc(科目)）；全带的那份只给测试照抄例子，不再限长
   const over = Object.keys(SUBJECT_TYPES).map((s) => [s, bytes(STAGE_TEACH + stageDoc(s))]).filter(([, n]) => n > 24 * 1024);
   assert.deepEqual(over.map(([s, n]) => `${s} ${n} 字节`), []);
@@ -104,7 +104,7 @@ test('样子页带科目：三节课都是数据结构，第一轮带树那一�
   assert.ok(firstMessage({ topic: '自己写的题目' }).includes(STAGE_DOC), '推不出科目：全带');
 });
 
-// 第二轮（docs/superpowers/specs/2026-11-08-stage-base-2-design.md）加的写法：每门课真发出去的那一份里都找得到。
+// 第二轮加的写法：每门课真发出去的那一份里都找得到。
 // 查的字要别处没有（on= 在 button= 里就有、put 在 input= 里就有、compare / merge / move 这种光秃秃的词查了等于没查）
 test('这一轮的新写法都在说明里：共用的每门课都有，树的在数据结构、矩阵的在线代、句子的在英语', () => {
   const doc = (s) => STAGE_TEACH + stageDoc(s);
@@ -143,7 +143,7 @@ test('按科目只带用得上的东西：英语课不带一排格子（只列�
 });
 
 
-// 缺口单「说明写得不清楚」那一节（docs/stage-gaps.md）：助手照说明写错过、要试好几次才对的 10 条，说明里逐条写明
+// 缺口单「说明写得不清楚」那一节：助手照说明写错过、要试好几次才对的 10 条，说明里逐条写明
 test('说明不清楚的 10 条都写明了', () => {
   const C = STAGE_COMMON;
   const lineOf = (doc, re) => doc.split('\n').find((l) => re.test(l)) || '';
@@ -342,7 +342,7 @@ test('说明里写的两条开法：同一项再开一次是换掉它（照新�
   assert.deepEqual(s.reactions.get('g1'), ['open t rotate wrong=mark undo=on', 'goal g2 "转平" when="t avl"', 'say "失衡了。"']);
 });
 
-// —— [跟着变的] 按东西写（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 4 节）——
+// —— [跟着变的] 按东西写——
 test('跟着变的按东西写：一张矩阵一半以上的格变了写整张；只变了一格照旧一格一行；太长了后面的只写名字', () => {
   const grids = new Map([['Dd', [['0', '0'], ['0', '0']]]]);
   const derived = [{ id: 'Dd', changed: [{ ref: 'Dd.1,1', from: '2', to: '0' }, { ref: 'Dd.2,2', from: '-2', to: '0' }] }];
