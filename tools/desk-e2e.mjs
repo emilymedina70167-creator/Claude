@@ -857,7 +857,7 @@ const SUITES = {
   // 黑板课每一轮带「这一块在考试里」（2026-11-15 的「根」）：进课堂时按门课读一次考试资料（不等它），说明里多这一节——
   // 数是页面算的、留作模考的卷不在里面；核题号的函数挂上；开课的抢跑照样接得上（考试资料读到以后才抢）
   // 这节课要拿下的事（第十二轮，class/aims.js）：黑板课开课时文档上有空的 aims；模拟老师「测试:目标」写 board aims 两件、两道各挂一件的题；
-  // 板上方那一条出现（0/2）；答对一道变 1/2（选择题点一下算带着做到）；点开看得到两件事和状态、不显示编号；证据上带 aim；
+  // 板上方那一条出现（0/2）；答对一道变 1/2（三个选项的选择题一次对算带着做到）；点开看得到两件事和状态、不显示编号；证据上带 aim；
   // 刷新以后还在；「测试:目标改」换掉一件（算另一件事）、加一件；点下课，框里列着每件事的状态；报告里有这一节
   async aims(browser) {
     const t = await seeded(browser);
@@ -1378,7 +1378,6 @@ const SUITES = {
     await t.waitFor(() => t.page.$('.ck-card .mi-cell'), { timeout: 8000, what: '第一道' });
     const cells = await t.page.$$('.ck-card .mi-cell');
     for (let i = 0; i < 8; i++) await cells[i].fill(String([1, 0, 0, 1, 1, 0, 0, 1][i]));
-    await t.page.click('.ck-sure-btn[data-sure="sure"]');
     await sleep(500);
     await t.page.click('.ck-submit');
     await t.waitFor(() => t.page.$('.ck-teach'), { timeout: 8000, what: '补讲' });
@@ -1422,7 +1421,6 @@ const SUITES = {
     await t.page.click('.ck-line[data-n="2"]');
     const tab = await t.page.$('.ck-card .ck-tab[data-tab="type"]'); if (tab) await tab.click();
     await t.page.fill('.ck-card .ck-text', 'AB 和 BA 不一定相等');
-    await t.page.click('.ck-sure-btn[data-sure="sure"]');
     await sleep(500);
     await t.page.click('.ck-submit');
     await t.waitFor(() => t.page.$('.ck-done'), { timeout: 20000, what: '复测做完' });
