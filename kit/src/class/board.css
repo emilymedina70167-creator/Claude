@@ -376,3 +376,15 @@ body.class-docked .class-more:not(.in-bar) { right: calc(var(--cb-r, 20px) + 8px
 .class-sheet { margin-top: 22px; padding: 14px 0 4px 18px; border-left: 3px solid rgb(var(--yellow-rgb) / 0.55); }
 .class-sheet-h { margin: 0 0 10px; font: 400 26px/1.2 var(--hand); color: var(--yellow); }
 .class-sheet p, .class-sheet li { color: var(--chalk); }
+
+/* 点词查义（wordtap.js）：点板上的英文词，贴着它出意思 */
+.wt-pop {
+  position: fixed; z-index: 60; padding: 10px 14px; border-radius: 14px; min-width: 140px;
+  background: rgb(var(--board-3-rgb) / 0.98); box-shadow: 0 10px 30px rgb(var(--shade-rgb) / 0.45), inset 0 0 0 1px rgb(var(--chalk-rgb) / 0.18);
+  color: var(--chalk); font: 16px/1.45 var(--sans); animation: talkIn .18s ease both;
+}
+.wt-row + .wt-row { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgb(var(--chalk-rgb) / 0.12); }
+.wt-head { font-weight: 600; }
+.wt-of { margin-left: 8px; font-weight: 400; font-size: 14px; color: rgb(var(--chalk-rgb) / 0.6); }
+.wt-of::before { content: '← '; }
+.wt-body { font-size: 15px; }

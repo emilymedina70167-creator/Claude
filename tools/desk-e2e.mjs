@@ -41,7 +41,7 @@ const files = { '/desk.html': PAGE, '/la-kit.js': KIT };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.wasm': 'application/wasm' };
 const server = createServer((q, r) => {
   const path = decodeURIComponent(q.url.split('?')[0]);
-  const f = files[path] || (path.startsWith('/pdf/') ? join(ROOT, 'kit/dist', path) : null);
+  const f = files[path] || ((path.startsWith('/pdf/') || path.startsWith('/dict/')) ? join(ROOT, 'kit/dist', path) : null);
   if (!f || !existsSync(f)) { r.writeHead(404); r.end(); return; }
   r.writeHead(200, { 'content-type': TYPES[extname(f)] || 'application/octet-stream' });
   r.end(readFileSync(f));
@@ -1514,6 +1514,48 @@ const SUITES = {
     return t;
   },
 
+  // 黑板的视力（class/boardsight.js）和点词查义（wordtap.js）：英语的外部课，板上漏出没画出来的写法，
+  // meta/now 里写「版面」那一节；点一个英文词出意思（dict/en.json），查过的词记一条 gloss、跟着 ext_out 告诉主讲
+  async sightdict(browser) {
+    const t = await seeded(browser);
+    const F4 = '````';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-8`;
+    const para = 'Paid media, as well as owned media, accounted for most of the readers. 一半是 \\frac{1}{2}';
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'EN-L1.1.1', title: '长难句（外部）', space: 'en', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: `读一句。\n\n${F4}board new id=b1 title="一句"\n${para}\n${F4}\n`, model: 'claude-opus-5-5', at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.evaluate(() => /accounted for/.test(document.body.innerText)), { timeout: 20000, what: '外部写的那一句画上板' });
+    const db = async () => t.db();
+    const now = await t.waitFor(async () => { const n = (await db())[`sessions/${sid}/meta/now`]; return /版面/.test(n?.text || '') ? n : null; }, { timeout: 10000, what: 'meta/now 里有「版面」那一节' });
+    check(/\\frac/.test(now.text), `版面那一节没说漏出来的 \\frac：${now.text.slice(0, 300)}`);
+    // 点「well」：出 as well as 和 well 的意思
+    const spot = await t.page.evaluate(() => {
+      const walker = document.createTreeWalker(document.querySelector('.class-board') || document.body, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const i = n.data.indexOf('well');
+        if (i < 0) continue;
+        const r = document.createRange(); r.setStart(n, i + 1); r.setEnd(n, i + 3);
+        const b = r.getBoundingClientRect();
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+      }
+      return null;
+    });
+    check(spot, '板上找不到 well 这个词');
+    await t.page.mouse.click(spot.x, spot.y);
+    await t.waitFor(() => t.page.evaluate(() => /as well as/.test(document.querySelector('.wt-pop')?.innerText || '')), { timeout: 10000, what: '点 well 弹出 as well as 的意思' });
+    if (opt.shots) await t.page.screenshot({ path: join(opt.shots, 'sightdict-pop.png') });
+    const ev = await t.waitFor(async () => (await t.docs('evidence')).find((e) => e.session === sid && e.type === 'gloss'), { timeout: 10000, what: '查过的词记一条 gloss' });
+    check(/as well as/.test(JSON.stringify(ev)), `gloss 记的不是 as well as：${JSON.stringify(ev).slice(0, 200)}`);
+    // 点空白处收起
+    await t.page.mouse.click(10, 300);
+    await t.waitFor(async () => !(await t.page.$('.wt-pop')), { timeout: 3000, what: '点别处收起弹框' });
+    const out = await t.waitFor(async () => Object.entries(await db()).find(([k, v]) => k.startsWith(`sessions/${sid}/ext_out/`) && /查词典/.test(v.text || ''))?.[1], { timeout: 10000, what: '查词典那一条写进 ext_out' });
+    check(/as well as/.test(out.text), `ext_out 里没写查的是哪个词：${out.text.slice(0, 200)}`);
+    return t;
+  },
 
   // 外部主讲的操控权（dev_requests/dr-ext-control）：截图入口关着（R11）、执行完当场回报和 meta/now（R3）、
   // board claude 答错时叫页面里的 Claude、越权的不执行、停掉助手（R1）、预案收 wrong match=（R6）、ext_jobs 后台活和 from=（R2）、
