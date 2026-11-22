@@ -57,6 +57,9 @@ import { lessonSheet, sheetMd } from '../memory/sheet.js';
 import { blockSwitch, closingExtras, knowNotes } from '../memory/memo.js';
 import { saidNow, summaryOn } from '../memory/summary.js';
 import { settleBoard, snapLong } from './boardeye.js';
+import { measureBoard, boardSightIssues, boardSightText, sightSig } from './boardsight.js';
+import { isEN } from '../subject.js';
+import { attachWordTap } from '../wordtap.js';
 import { createBoardEye, eyeNote } from './boardeye.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass, readChunks, searchChunks, readHistory } from '../books/textbook.js';
@@ -176,6 +179,8 @@ export async function renderClass(root, meta, desk = null) {
   session.uploadImage = readOnly ? null : (blob) => uploadImage(blob);
   // 每道题在学生屏幕上的时间（timing.js，dr-batch4 第 3、4 条）：作答的 ms / msTotal、stuck= 按它算
   const timing = readOnly ? null : watchTiming(root).timer;
+  // 点词查义（wordtap.js）：英语课的板上点英文词出意思，页面自己查词典，不调用 Claude
+  attachWordTap(root, { enabled: () => isEN(session.subject) });
   session.timing = timing;
   // 自由段 html 的状态（lab.state）：存 html_state/{组件 id}（学习台里换到 sessions/{编号}/ 下面），再画时放回
   session.htmlState = {
@@ -1584,6 +1589,16 @@ export async function renderClass(root, meta, desk = null) {
     for (const r of extState.helpers.values()) out.push(`助手 ${r.id}：${r.when === 'now' ? '马上叫' : `on=${r.on.join('|')}${r.target ? ` target=${r.target}` : ''}`}，叫过 ${r.fired || 0}/${r.turns} 次${r.off ? '，收起了' : extState.helperOff ? '，学生停掉了助手' : ''}`);
     return out;
   }
+  // 黑板的视力（boardsight.js）：量学生现在屏幕上的当前板和常驻栏。学生翻回去看旧板时当前板不在屏幕上，量不到，沿用上一次的
+  let lastSight = [];
+  function sightNow() {
+    if (readOnly) return [];
+    const sec = pages.get(bv.cur)?.sec;
+    if (!sec || bv.view !== bv.cur) return lastSight;
+    const pins = root.querySelector('.class-pins');
+    try { lastSight = boardSightIssues(measureBoard([sec, pins && !pins.hidden ? pins : null])); } catch { /* 量不到就当没有，不影响上课 */ }
+    return lastSight;
+  }
   function boardState() {
     const list = [...segs.values()].sort((a, b) => a.seq - b.seq).map((seg) => {
       const blocks = seg.sec && !seg.failed ? [...seg.sec.querySelectorAll('.block[data-bid]')].map((b) => ({
@@ -1613,6 +1628,7 @@ export async function renderClass(root, meta, desk = null) {
       // 这节课要拿下的事和页面现算的状态（不提这回事的课没有这个键：说明里就没有那一节）
       ...(aims ? { aims: aimsNow() } : {}),
       canvas: canvasState(),
+      sight: boardSightText(sightNow()) || undefined,
       vars: lessonVars.length ? lessonVars : undefined,
       nextMark: tools.nextMark,
       pages: [...pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title, talk: p.talk, kind: p.kind })),
@@ -1844,6 +1860,10 @@ export async function renderClass(root, meta, desk = null) {
     const lines = history.filter((t) => t && t.role === 'system' && !t.discarded && t.seq > extState.lastSys && /^(note|lint|error)$/.test(t.kind || 'note'))
       .map((t) => String(t.text || '').replace(/^\[系统\]\s*/, '').trim()).filter(Boolean);
     extState.lastSys = turnSeq;
+    // 版面量出来的问题（boardsight.js）：和上一份 ext_out 说过的不一样才写（现状一直在 meta/now）
+    const sight = sightNow();
+    const sig = sightSig(sight);
+    if (sig !== (extState.sightTold || '')) { extState.sightTold = sig; if (sight.length) lines.push(boardSightText(sight)); }
     return lines;
   }
   // 页面正在做别的（写 ext_out、助教、上一条 ext_in）：等它空下来再做，不跳过——exclusive 碰上 busy 会直接不做
@@ -1991,6 +2011,7 @@ export async function renderClass(root, meta, desk = null) {
         const shots = extState.snap ? await extShot() : [];
         await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: [...bad.notes, ...(out?.notes || [])], error, shots, memo, shotNote: shots.length || extState.snapNote ? extState.snapNote : '' }) }).catch(() => {});
         extNow();
+        extSightLater(d.id);
         writeSince(); // 这一条执行完：meta/since 从这里重新攒
         if (extState.close) { extState.close = false; await extClose(); }
       }
@@ -1998,6 +2019,16 @@ export async function renderClass(root, meta, desk = null) {
     // 跑的时候又来了的、跑的时候学生又做了的：接着处理
     if (extState.again) { const next = extState.again; extState.again = null; extRun(next); }
     if (queue.triggered) schedule(false);
+  }
+  // 这一条执行完、板画好以后量一遍版面，写回这条 ext_in 的 sight（result 照旧当场写，不等它）；干净的板不写
+  async function extSightLater(id) {
+    const sec = pages.get(bv.cur)?.sec;
+    if (!sec || readOnly) return;
+    try { await settleBoard(sec, { max: 3000 }); } catch { /* 等不到就照现在的量 */ }
+    const sight = sightNow();
+    if (!sight.length) return;
+    await db.doc(`ext_in/${id}`).update({ sight: sight.map((x) => x.text) }).catch(() => {});
+    extNow({ now: true });
   }
   async function extClose() {
     checks?.close(); // 检验开着：照「先停下」存着、没定下来的题补写证据，下课照常
