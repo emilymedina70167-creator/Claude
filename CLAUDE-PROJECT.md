@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-22c**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-22d**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -3133,7 +3133,7 @@ predict = 预言
 ```
 
 - 写在段里任何位置，一行一个「英文词 = 中文意思」。页面在**这一段**的英文里找到这些词（单个词也认 -s / -ed / -ing），画一道虚线；学生点一下，旁边出意思，不调用你。段里只显示一行小字「生词 3 个」。
-- 学生点开过哪个词，跟着下一条消息告诉你（「[动作] 点开了生词…」）；下课时页面把这些词收进「要记的」，隔天让学生自己想。
+- 学生点开过哪个词，跟着下一条消息告诉你（「[动作] 点开了生词…」）；点过的词记成证据（`kind: gloss`），页面不自己收进「要记的」。
 - 有了 gloss，题面里不用再写「生词：cost 价格」：先让学生自己读，不认识再点。只写学生可能不认识的词，不写 the、is 这种。
 
 ### drill：句型操练（一题一题做，页面判分）

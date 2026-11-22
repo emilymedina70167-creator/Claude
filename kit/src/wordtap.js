@@ -1,5 +1,5 @@
 // 点词查义（设计四）碰 DOM 的那一半：英语课的板上，点一个英文词，旁边出它的意思（词典 dict/en.json，第一次点时才取）。
-// 不调用 Claude；查过的词记一条动作 gloss（带 dict: true），和老师写的 gloss 一样跟着下一条告诉老师、下课收进「要记的」。
+// 不调用 Claude；查过的词记一条动作 gloss（带 dict: true），和老师写的 gloss 一样跟着下一条告诉老师；只记证据，收不收进「要记的」由主讲定。
 // 老师写了 gloss 的词照旧用老师的意思（那是这一句里的意思），点了是在作答的英文组件、输入框、按钮、公式不管。
 import { session } from './session.js';
 import { escapeHtml } from './blocks/common.js';
