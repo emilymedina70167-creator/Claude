@@ -136,12 +136,13 @@ test('今天复现：到期的按「从没复现 > 上次没过 > 过期久」�
   assert.deepEqual(reviewIdsOf(null), []);
 });
 
-test('启动语：说明书地址、学到哪、上一节、到期的复现组、等外部做的事', () => {
+test('启动语：学习台地址、接口卡在哪、学到哪、上一节、到期的复现组、等外部做的事', () => {
   const m = M();
   m.pending = [{ id: 'pd-1', kind: 'error', label: '错题', target: 'L2-08', status: 'open', data: { cause: '换括号' } }];
   const t = handoffText(m, { kitUrl: 'https://claude.ai/artifact/KIT', today: TODAY });
-  assert.match(t, /学习台：https:\/\/claude\.ai\/artifact\/KIT。说明书、组件写法、记忆、每节课都在它里面/);
-  assert.match(t, /path: "CLAUDE-PROJECT.md"/);
+  assert.match(t, /学习台：https:\/\/claude\.ai\/artifact\/KIT。记忆、每节课都在它的数据库里/);
+  assert.match(t, /接口[^\n]*在 meta\/interface/);
+  assert.ok(!t.includes('CLAUDE-PROJECT.md'), '说明书不再发布，启动语里不指它');
   assert.match(t, /学到 L2\.2\.2；下一节：先收 L2-07/);
   assert.match(t, /上一节：c-20261027-1/);
   assert.match(t, /有一节课堂还没下课：c-20261028-1/);

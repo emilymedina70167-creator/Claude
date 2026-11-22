@@ -326,7 +326,7 @@ export function reviewPack(mem = {}, rids, { packs = [], sheets = [], today = to
 /* ---------------- 复制给外部 Claude 的启动语 ---------------- */
 
 /**
- * 贴进任何一个对话就能接手：说明书在哪、学习台在哪、现在学到哪、上节课怎么样、有什么等着外部做。
+ * 贴进任何一个对话就能接手：接口卡在哪、学习台在哪、现在学到哪、上节课怎么样、有什么等着外部做。
  * kitUrl：组件库地址；deskUrl：学习台地址（页面不一定知道，没有就让外部问我）
  */
 // head：给学习台里的班主任（第十一轮 B1）——不写给外部开发的那几行（地址、怎么用 ArtifactData、「你只做开发」）
@@ -348,12 +348,12 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
   if (open.length) todo.push(`还有 ${open.length} 张改动单没写进去（pending，status: open）：学习台首页打开时会自己写进去。`);
   return [
     head ? `【${SPACES[space]?.label || ''}】` : `【学习台 · 接手 · ${SPACES[space]?.label || ''}】`,
-    head ? '' : `- 学习台：${deskUrl || kitUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。说明书、组件写法、记忆、每节课都在它里面：先用 Artifact 工具 action: "read"、path: "CLAUDE-PROJECT.md" 读说明书，记忆用 ArtifactData 读。`,
+    head ? '' : `- 学习台：${deskUrl || kitUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。记忆、每节课都在它的数据库里（ArtifactData 读写）；接口（开一节、一轮写在哪、自由段、lab 桥、作答从哪读回来、下课）在 meta/interface。`,
     `- 这一科：${SPACES[space]?.label || space}（只列这一科的；学习台还有${Object.keys(SPACES).filter((k) => k !== space).map((k) => SPACES[k].label).join('、')}）。`,
     `- 今天 ${today}。${pos ? `学到 ${pos.block || '？'}；下一节：${cut(pos.next, 120)}${list(pos.debts).length ? `；欠账：${list(pos.debts).map((x) => cut(x, 60)).join('；')}` : ''}。` : '还没有 position。'}`,
     last ? `- 上一节：${last.kind === 'class' ? '' : `${{ talk: '一问一答', live: '实时黑板' }[last.kind] || '自学单元'} `}${last.id}（${last.block || '没写块'}）${last.line ? `，${last.line}` : ''}${last.summary ? `；小结开头：${last.summary}` : ''}。课后报告在 sessions/${last.id}/report/main。` : '- 还没有下过课。',
     ...opens.map((r) => (r.kind === 'live'
-      ? `- 实时黑板 ${r.id}「${cut(r.title, 40)}」还开着：接着写就往 sessions/${r.id}/steps 写，黑板现状在 sessions/${r.id}/meta/now（说明书第五节）。`
+      ? `- 实时黑板 ${r.id}「${cut(r.title, 40)}」还开着：接着写就往 sessions/${r.id}/steps 写，黑板现状在 sessions/${r.id}/meta/now。`
       : r.kind === 'unit' ? `- 自学单元 ${r.id}「${cut(r.title, 40)}」我还没学完。` : `- 有一节${r.kind === 'talk' ? '一问一答的课' : r.kind === 'stage' ? '舞台课' : '课堂'}还没下课：${r.id}。`)),
     due.length ? `- 到期的复现组：${due.map((d) => `${d.id}${d.days < 0 ? `（过期 ${-d.days} 天）` : ''}`).join('、')}（学习台首页能直接开复现课）。` : '',
     pack ? `- 已经备好的下一节：${cut(pack.unit || '', 60)}${pack.block ? `（${pack.block}）` : ''}。` : '',

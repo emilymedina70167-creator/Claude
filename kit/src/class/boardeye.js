@@ -1,6 +1,7 @@
 // 老师的眼睛（黑板课，第十三轮，docs/superpowers/specs/2026-11-16-mirror-design.md 6.2）：页面把当前这块板拍成图，
 // 跟着每一轮发给老师。以前老师是闭着眼写的：写一段标记文字，页面排出来什么样它从没见过——例句和译文被并成一行、
 // 一行蓝字被框切掉，它都不知道；看不见画面的人不会去设计，只会写字。舞台课给老师看截图以后画面好了一大截（stage/snap.js）。
+import { framesForSnap } from '../htmlsnap.js';
 // 拍法照舞台：html2canvas-pro 照计算后的样式画，不压在回话的路上——板静下来就在后台先拍好，要发的时候没再变就直接用。
 // 板比一屏长：照学生一屏一屏看到的切，最多 maxTiles 张（再长的写明后面没拍）。平台一次最多 4 张图，学生附的图优先。
 
@@ -41,7 +42,8 @@ async function defaultRender(el, { viewH, maxTiles, maxEdge }) {
   const w = el.offsetWidth;
   const plan = tilesOf({ w, h: el.scrollHeight }, { viewH, maxTiles, maxEdge });
   const total = plan.tiles.reduce((s, t) => s + t.h, 0);
-  const canvas = await html2canvas(el, { scale: plan.scale, backgroundColor: background(), logging: false, useCORS: true, width: w, height: total, windowWidth: document.documentElement.clientWidth });
+  const onclone = await framesForSnap(el);
+  const canvas = await html2canvas(el, { scale: plan.scale, backgroundColor: background(), logging: false, useCORS: true, width: w, height: total, windowWidth: document.documentElement.clientWidth, ...(onclone ? { onclone } : {}) });
   const blobs = [];
   for (const t of plan.tiles) {
     const c = document.createElement('canvas');
@@ -151,8 +153,10 @@ export async function snapLong(el, { maxH = 4800, maxEdge = 1280 } = {}) {
   const w = el.offsetWidth, h = el.scrollHeight;
   const plan = longTiles({ w, h }, { maxH, maxEdge });
   const blobs = [];
+  // 自由段（隔离框）html2canvas 看不进去：框里各自拍好，复制出来的页面里换成图
+  const onclone = await framesForSnap(el);
   for (const p of plan.parts) {
-    const canvas = await html2canvas(el, { scale: plan.scale, backgroundColor: background(), logging: false, useCORS: true, width: w, height: p.h, y: el.getBoundingClientRect().top + window.scrollY + p.y, windowWidth: document.documentElement.clientWidth });
+    const canvas = await html2canvas(el, { scale: plan.scale, backgroundColor: background(), logging: false, useCORS: true, width: w, height: p.h, y: el.getBoundingClientRect().top + window.scrollY + p.y, windowWidth: document.documentElement.clientWidth, ...(onclone ? { onclone } : {}) });
     blobs.push(await toBlob(canvas));
   }
   return { blobs, note: plan.note };

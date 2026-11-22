@@ -7,8 +7,6 @@ export function markDraft(el, read) {
   el._draft = read;
 }
 
-const MAX = 600;
-
 function hiddenWithin(el, block) {
   for (let x = el; x && x !== block.parentElement; x = x.parentElement) if (x.hidden) return true;
   return false;
@@ -26,7 +24,7 @@ export function draftsIn(block) {
     try { text = String(el._draft() ?? '').trim(); } catch { text = ''; }
     if (!text) continue;
     const n = el.closest('.st-item')?.querySelector('.st-n')?.textContent?.trim();
-    out.push({ el, label: n ? `第 ${n} 步` : '', text: text.length > MAX ? text.slice(0, MAX) + '…' : text });
+    out.push({ el, label: n ? `第 ${n} 步` : '', text });
   }
   return out;
 }

@@ -15,7 +15,6 @@ import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { chromium } from './playwright.mjs';
 import { extClass, sessionFromFile } from './ext-class.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -62,6 +61,8 @@ const file = join(tmp, `${(s?.id || 'ext').replace(/\W+/g, '-')}.class.json`);
 writeFileSync(file, JSON.stringify(spec, null, 2));
 
 // 这份组件库是哪一版：和学习台发布的对得上，跑出来的才和学生看到的一样
+// 开浏览器的那一半才取 Playwright：--lint 写着不开浏览器，没装 Playwright 的地方（CI 的 test）也要跑得了
+const { chromium } = await import('./playwright.mjs');
 const browser = await chromium.launch();
 let version = '?';
 try {

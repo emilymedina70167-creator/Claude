@@ -10,7 +10,6 @@ export const ASK_KINDS = {
   example: { label: '举个例子', say: '能举个具体的例子吗？' },
 };
 const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,64}$/;
-export const WHY_MAX = 300;
 
 /**
  * board why target=ex-1 的块：一行一条「位置: 为什么」。位置：step=2（steps 的第 2 步）、term=mid（公式里 \hl{mid} 那一项）、
@@ -32,7 +31,7 @@ export function parseWhy(rest, body = '') {
     const m = line.match(/^([^:：]+)[:：]\s*(.+)$/);
     const where = m ? parseWhere(m[1]) : null;
     if (!m || !where) { errors.push(`「${line.slice(0, 40)}」：要写成「step=2: 为什么」「term=mid: …」或「all: …」`); continue; }
-    items.push({ where, text: m[2].trim().slice(0, WHY_MAX) });
+    items.push({ where, text: m[2].trim() });
   }
   if (!items.length) return { error: errors[0] || 'why 里一条也没写' };
   return { op: 'why', target, items, ...(errors.length ? { errors } : {}) };

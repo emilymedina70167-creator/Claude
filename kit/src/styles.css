@@ -3063,3 +3063,12 @@ button.sh-chunk { cursor: pointer; touch-action: none; }
 .sh-form-opts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .sh-opt { min-height: 44px; font-size: 17px; }
 .sh-opt.is-wrong { text-decoration: line-through; opacity: .55; }
+
+/* 自由段 html（blocks/html.js）：主讲写的整页小网页，隔离框高跟着内容，不画框线 */
+.block-htmlseg { position: relative; }
+.block-htmlseg .hs-frame { display: block; width: 100%; height: 0; border: 0; background: transparent; color-scheme: normal; }
+.block-htmlseg .hs-anchor { position: absolute; pointer-events: none; }
+/* 写错的组件原地一行小字（段照样画） */
+.block-error-line { font-size: 14px; padding: 6px 10px; }
+/* 开着板书时 Pencil 写在自由段上面（导成「[板书]」发给主讲）：框不接笔；关着板书时框里的代码自己收笔和手指 */
+body.ink-on .block-htmlseg .hs-frame { pointer-events: none; }

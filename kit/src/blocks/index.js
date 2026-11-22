@@ -34,6 +34,7 @@ import { sim } from './sim.js';
 import { parallel } from './parallel.js';
 import { shift } from './shift.js';
 import { previewBlock } from '../check/preview.js';
+import { htmlBlock } from './html.js';
 import { stepperBlock } from '../stepper.js';
 import { ENGINES } from '../engines/registry.js';
 import { elimEngine } from '../engines/elim.js';
@@ -58,6 +59,8 @@ export const blocks = {
   stage,
   // 外部设计的交互：一小段 JS 调 la.*（blocks/widget.js）
   widget: widgetBlock,
+  // 自由段：主讲自己写的整页 HTML / CSS / SVG / JS，跑在隔离框里，经 lab 桥记作答、借计算（blocks/html.js、htmlseg.js）
+  html: htmlBlock,
   // 解答题：按步骤判（blocks/solve.js，dr-batch4）
   solve,
   // 检验题（二类组件，check/）：单独写在板上只画预览，放进 board check 才能作答
