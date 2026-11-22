@@ -1,4 +1,4 @@
-// 学习台第 1 批（docs/desk-plan.md 第 3 节）：课后报告、补记和草稿的证据、导出备份、每轮花了多少。
+// 学习台第 1 批：课后报告、补记和草稿的证据、导出备份、每轮花了多少。
 // 课堂里实际走一遍（下课后报告写进 sessions/{编号}/report/main、首页补记、导出）在真浏览器里另外验（desk-demo.html?dev）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

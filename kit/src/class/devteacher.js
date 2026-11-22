@@ -184,7 +184,7 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     };
   }
 
-  // 英语第 7 批（docs/english-plan.md）：要背的写进内容（==…==、remember 框）、讲着讲着框一大块（mark part=）、生词（gloss）、翻译按要点判（translate）
+  // 英语第 7 批：要背的写进内容（==…==、remember 框）、讲着讲着框一大块（mark part=）、生词（gloss）、翻译按要点判（translate）
   if (!isSystem && /测试\s*[:：]?\s*要背/.test(said)) {
     const n = nextSeq(turns, memo);
     const body = [
@@ -202,7 +202,7 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     };
   }
 
-  // 预案（docs/board-plan.md）：出一道题，只预写答对了接什么（揭开藏着的下一题）；答错、想不出来照常叫老师当场写。
+  // 预案：出一道题，只预写答对了接什么（揭开藏着的下一题）；答错、想不出来照常叫老师当场写。
   // 答对时页面当场接，不再调用模拟老师（开发面板的调用记录不涨）；答错时调用记录涨一次
   if (!isSystem && /测试\s*[:：]?\s*预案/.test(said)) {
     const n = nextSeq(turns, memo);
@@ -221,7 +221,7 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     };
   }
 
-  // 拍子（docs/board-plan.md）：说一句、写一段、再说一句、圈一下……页面一拍一拍地播，学生点「下一拍」
+  // 拍子：说一句、写一段、再说一句、圈一下……页面一拍一拍地播，学生点「下一拍」
   if (!isSystem && /测试\s*[:：]?\s*拍子/.test(said)) {
     const n = nextSeq(turns, memo);
     return {
@@ -355,7 +355,7 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
         pic + String.raw`我们接着上次停下的地方：$A\mathbf x$ 本身也是一个向量，所以 $A$ 还能再作用一次。`,
         board(`new id=b${n} title="Ax 落在哪条线上"`, firstBody()),
         board('pin id=k1 title="这节课的记号"', NOTATION),
-        // 教学计划（学生看不到）：真的老师开课时写一份，下一轮页面放进说明（docs/learning-plan.md 第 5 节）
+        // 教学计划（学生看不到）：真的老师开课时写一份，下一轮页面放进说明
         board('plan', '目标：学生自己看出 Ax 总在 α 那条线上\n猜：（模拟）可能把 βᵀx 当成向量\n证实：第 1 步选什么'),
         String.raw`先拖一拖图里灰色的 $\mathbf x$，看黄色的 $A\mathbf x$ 停在哪，再回答第 1 步。`,
       ),
@@ -446,7 +446,7 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
   }
 
   // 教具演示：板书标注、会动的矩阵、页面验算
-  // 标注（docs/mark-plan.md）：照 2026-11-03 真课那块板（一般现在时什么时候加 -s）。「测试:标注旧」是那节课里 Claude 的标法
+  // 标注：照 2026-11-03 真课那块板（一般现在时什么时候加 -s）。「测试:标注旧」是那节课里 Claude 的标法
   // （把文字塞进公式起名字、一项一个圈），对照用；「测试:标注」是现在该怎么标
   if (!isSystem && /测试\s*[:：]?\s*标注/.test(said)) {
     const n = nextSeq(turns, memo);
@@ -1030,7 +1030,7 @@ const suffixOf = (id) => (/^b(\d+)$/.exec(id)?.[1] ?? id);
 
 // —— 输入 ——
 
-// —— 一问一答（kind: talk，docs/talk-impl.md D.1）的剧本：不调用 Claude，写活板的行 ——
+// —— 一问一答（kind: talk）的剧本：不调用 Claude，写活板的行 ——
 // 第一轮：一个页面置换的过程（能拨着看第几步）+ 一个空；学生答对以后 set 改页框数（上面的空跟着重新打开）+ 一个选择；
 // 再一轮：自己拨页框数的目标（goal）。答错了给一句提示、不往前走；「测试:写错」故意写一行看不懂的（页面退回去、要它整轮重写）
 const TALK_MARK = '这是一问一答的课的完整说明';

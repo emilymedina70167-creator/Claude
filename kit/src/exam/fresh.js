@@ -1,4 +1,4 @@
-// 过时（docs/exam-plan.md 第三节、第六节）：画像、映射各自记着上游的指纹，上游一变就知道过时了，交给教研室重写、体检记一笔，
+// 过时：画像、映射各自记着上游的指纹，上游一变就知道过时了，交给教研室重写、体检记一笔，
 // 不靠人记得去改。纯函数，有测试（tests/exam-block.test.js）。
 import { mapSig } from './mapping.js';
 import { usable } from './reserve.js';

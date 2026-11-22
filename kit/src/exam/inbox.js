@@ -1,4 +1,4 @@
-// 考试资料的收件箱（docs/exam-plan.md 1.2 的 exam_inbox）：开发那边用 tools/exam.mjs 切好、写进 exam_inbox，
+// 考试资料的收件箱：开发那边用 tools/exam.mjs 切好、写进 exam_inbox，
 // 页面照规矩查过再并进 papers / questions / passages / syllabus（examdesk.js 挂在首页）。
 // 一条记录一种东西：一卷（paper）、一门课的考点树（syllabus）、一批标签（tags）。**整条要么全收、要么全不收**：
 // 一卷里有一题不对就整卷不收（半卷进库，统计就错了），回执写哪一题哪里不对。

@@ -427,7 +427,7 @@ test('秩和自由变量：rank 是整张（增广的是 r(A | b)）、rankA 是
   assert.equal(predicateOf(c, 'C', 'rank')(['2']), null, '还空着照旧判不了');
 });
 
-// —— 页面算的写出来（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.2）——
+// —— 页面算的写出来——
 
 test('读回和矛盾行：增广矩阵每一行读回成方程，0 = −3 标出矛盾；vars= 换未知数；现状里写 r(A)、r(A | b) 和解的样子', () => {
   const s = make('matrix M = 1 2 -1 | 1 / 0 1 1 | 2 / 0 0 0 | -3');

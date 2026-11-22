@@ -92,11 +92,11 @@ test('每个演示：第 0 步没有问题；填表的表每一行格子数和�
   }
 });
 
-// 说明（CLAUDE-PROJECT.md）里的每个演示组件例子：课件作者照抄的就是它们，必须一字不改就能用——
+// 说明（kit/components.md）里的每个演示组件例子：课件作者照抄的就是它们，必须一字不改就能用——
 // 解析得了、走得完、ask: 写的种类都问得到、mode / given / rows / cols 都对
 test('说明里的演示组件例子：照抄就能用（ask 的种类都有、填表的字段都对）', async () => {
   const { resolveAsks, commonSpec, trackFields } = await import('../kit/src/stepperspec.js');
-  const md = withoutChecks(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
+  const md = withoutChecks(readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8'));
   const found = [];
   for (const m of md.matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) found.push([m[2], m[3]]);
   assert.ok(found.length >= 12, `说明里只找到 ${found.length} 个演示组件的例子`);
@@ -140,7 +140,7 @@ test('quiz 的答案、填表的标准答案：照着填都判对（示例页 + 
   const { checkFill, normCell } = await import('../kit/src/stepperspec.js');
   const { readdirSync } = await import('node:fs');
   const all = [...blocks];
-  const pages = ['CLAUDE-PROJECT.md', ...readdirSync('kit/examples').filter((f) => f.endsWith('.html')).map((f) => `kit/examples/${f}`)];
+  const pages = ['kit/components.md', ...readdirSync('kit/examples').filter((f) => f.endsWith('.html')).map((f) => `kit/examples/${f}`)];
   for (const f of pages) for (const m of withoutChecks(readFileSync(f, 'utf8')).matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) all.push([m[2], m[3]]);
   let quizzes = 0, tables = 0;
   for (const [name, src] of all) {
@@ -172,7 +172,7 @@ test('quiz 的答案、填表的标准答案：照着填都判对（示例页 + 
 test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都写到了', async () => {
   const { componentDocs } = await import('../kit/build-docs.js');
   const { docSections } = await import('../kit/src/subject.js');
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   const secs = docSections(componentDocs(md));
   const textOf = (name) => { const s = secs.find((x) => x.names.includes(name)); return s ? [...s.body, ...(s.detail || [])].join('\n') : null; };
   const missing = [], gaps = [];
@@ -186,7 +186,7 @@ test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都
     if (e.table && !/mode: fill|`fill`/.test(t)) gaps.push(`${name} 有填表，说明里没写 mode: fill`);
     if (e.variants && !/错法/.test(t)) gaps.push(`${name} 认得出错法，说明里没写「错法诊断认得出……」`);
   }
-  assert.deepEqual(missing, [], `这些组件在 CLAUDE-PROJECT.md 第三节没有说明（小节标题里要有组件名）：${missing.join('、')}`);
+  assert.deepEqual(missing, [], `这些组件在 kit/components.md没有说明（小节标题里要有组件名）：${missing.join('、')}`);
   assert.deepEqual(gaps, []);
 });
 
@@ -195,7 +195,7 @@ test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都
 test('quiz、fill 的题面看得到输入（画着开始的样子，或者文字里写了）', async () => {
   const { readdirSync } = await import('node:fs');
   const all = [...blocks];
-  const pages = ['CLAUDE-PROJECT.md', ...readdirSync('kit/examples').filter((f) => f.endsWith('.html')).map((f) => `kit/examples/${f}`)];
+  const pages = ['kit/components.md', ...readdirSync('kit/examples').filter((f) => f.endsWith('.html')).map((f) => `kit/examples/${f}`)];
   for (const f of pages) for (const m of withoutChecks(readFileSync(f, 'utf8')).matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) all.push([m[2], m[3]]);
   const norm = (x) => String(x ?? '').replace(/<[^>]*>|[\s,，、$\\{}]/g, '').toLowerCase();
   const SKIP = new Set(['id', 'title', 'q', 'note', 'ask', 'mode', 'quiz', 'want', 'algo', 'show', 'given', 'rows', 'cols', 'start', 'speed', 'hint', 'link']);

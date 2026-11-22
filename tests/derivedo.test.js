@@ -1,4 +1,4 @@
-// derive 的学生版（mode: do）：学生一行行往下写，页面逐行判（docs/learning-plan.md 第 6 节）
+// derive 的学生版（mode: do）：学生一行行往下写，页面逐行判
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

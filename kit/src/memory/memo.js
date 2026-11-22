@@ -1,4 +1,4 @@
-// 课堂里的 Claude 改记忆（docs/desk-plan.md 第 4 节）。纯函数，不碰 DOM、不碰数据库，有测试（tests/memory-memo.test.js）。
+// 课堂里的 Claude 改记忆。纯函数，不碰 DOM、不碰数据库，有测试（tests/memory-memo.test.js）。
 //
 // 写法：不用工具（每调一次工具平台就多跑一整轮），写在它这一轮的输出里，和黑板指令一样：
 //   ````board memo
@@ -7,13 +7,13 @@
 //   slip text="一次出了两道题" lesson="一块板一件事"
 //   lesson id=T-3 again="b7 又一次没讲就出题"
 //   ````
-// 一行一条。学习台自己管自己（docs/autonomy-plan.md）：课堂里的 Claude 就是学习台的管理者。页面读懂后按档处理：
+// 一行一条。学习台自己管自己：课堂里的 Claude 就是学习台的管理者。页面读懂后按档处理：
 //   直接写（direct）：偏好（profile）、失误（slips）、教学守则（lessons）、观察 / 提议 / 待办（observations）、
 //                     错题（errors）、弱点（weaknesses）、复现组（reviews）、下一节从哪接（position）、规则（rules）——
 //                     写完我想看就在下课那行小字、「管理」里看，不对就撤销（2026-11-03：我是来学习的，不要一条条确认）
 //   不收：掌握（mastery）——页面按证据算了直接写（我的红线：课堂不能宣布掌握）
 //   confirm 档留着兼容以前留下、还开着的改动单
-// 不冗杂（docs/autonomy-plan.md 第 4 节）：新弱点、复现组、偏好、规则和已有的几乎一样就不收（similarity），每一类有条数上限（CAPS），
+// 不冗杂：新弱点、复现组、偏好、规则和已有的几乎一样就不收（similarity），每一类有条数上限（CAPS），
 // 到了上限新的不收、下课整理时先合并（status=merged into=…）。
 // 每一条先变成一张改动单（pending）。直接写的马上执行；我确认才写的等我在页面上点「确认」（能先改再确认）或「不要」。
 // 写进去以后 UNDO_DAYS 天内能撤销：状态类按改动单记下的旧值退回去（退回也记 log），历史类追加一条作废的更正，原条不动。
@@ -63,7 +63,7 @@ export const LESSONS_MAX = 20;
 // 规则的分类（和学生的项目指令一样）
 export const RULE_CATS = ['红线', '掌握', '检验', '来源', '讲解', '细则', '教法', '黑板'];
 // 每一类到多少条下课就顺带整理一次（并掉说的是同一件事的）。2026-11-14 起不再拿它挡新的：有用的都存，挑哪些给老师看由 digest.js 按这节课挑
-// 2026-11-03 量的真数据：弱点 数学 20 / 408 11 / 英语 3，复现组 12 / 6 / 2，偏好 27，规则 68（docs/autonomy-plan.md）
+// 2026-11-03 量的真数据：弱点 数学 20 / 408 11 / 英语 3，复现组 12 / 6 / 2，偏好 27，规则 68
 export const CAPS = { weaknesses: 20, reviews: 12, profile: 30, rules: 70, lessons: LESSONS_MAX };
 // 一节课里每一种「一般记几条就够」（2026-11-03 我说：别一丁点小事都记、别反复累加；11/2 那节课记了 27 条观察，多是把作答复述一遍）。
 // 2026-11-14 起不再按它挡：挡复述、挡重复的是「和已有的、这节课已记的说的是同一件事不收」；这个数只是给说明和整理用的参考
@@ -233,7 +233,7 @@ export function slipsToFold(mem = {}, space = '', { max = 40 } = {}) {
   return neutralText(`【还没归纳进守则的教学失误（${left.length} 条${left.length > max ? `，这里列最近的 ${max} 条` : ''}）】\n${rows.join('\n')}`);
 }
 
-// 每一科每上几节课，下课整理时顺带合并一次重复的记忆（不另外调用 Claude，docs/autonomy-plan.md 第 4 节）
+// 每一科每上几节课，下课整理时顺带合并一次重复的记忆（不另外调用 Claude）
 export const TIDY_EVERY = 5;
 
 /**

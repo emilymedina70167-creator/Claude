@@ -1,4 +1,4 @@
-// 黑板课每一轮带「这一块在考试里」（docs/superpowers/specs/2026-11-15-root-design.md 第 2 节）：
+// 黑板课每一轮带「这一块在考试里」：
 // buildSystem 的 exam、让出来的预算、一问一答和舞台课不变；黑板课这一路（class/examroom.js）的题号、留作模考的卷
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -133,7 +133,7 @@ test('抢跑接得上：考试资料、板、记忆都没变时前后两次这�
 });
 
 // —— 预算：真的组件说明、装满的记忆、最大的考情一起带 ——
-const DOCS = componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
+const DOCS = componentDocs(readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8'));
 test('四门 408 的课：带满 16 KiB 的考情，整份不超上限；不带记忆时留给资料包的不少于 96 KiB − 考情', () => {
   const full = '考'.repeat(Math.floor(EXAM_BUDGET / 3));
   const pack = { main: { unit: 'u', textbook: '教材原文。'.repeat(300 * 1024 / 15) } };

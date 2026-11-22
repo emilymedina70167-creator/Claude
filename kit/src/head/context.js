@@ -1,4 +1,4 @@
-// 班主任（首页「班主任」那一页，#chat）：第十四轮起就是学习台里的项目 Claude（docs/superpowers/specs/2026-11-17-project-claude-design.md）。
+// 班主任（首页「班主任」那一页，#chat）：第十四轮起就是学习台里的项目 Claude。
 // 每一轮的说明是 project/system.js 拼的那一份：事实、学生写的项目指令、它自己的笔记本、学习台里有什么、工具。
 // 开发写的身份、做法、要求、简报那几段都不再给它（底线：不替它做任何事）。纯函数。
 import { projectSystem } from '../project/system.js';

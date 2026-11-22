@@ -78,7 +78,7 @@ test('句型操练：一行一题，=> 后面是答案', () => {
   assert.throws(() => parseDrill(['nothing']), /一行一题/);
 });
 
-test('常见错答 !x=说明、选择式的空、errfind 的 decoys（docs/english-plan.md 第 2、3 批）', async () => {
+test('常见错答 !x=说明、选择式的空、errfind 的 decoys', async () => {
   const { parseCloze, parseAnswer, diagnose, parseChoices, parseDecoys, parseDrill } = await import('../kit/src/entext.js');
   const { actionText } = await import('../kit/src/class/prompt.js');
   const a = parseAnswer('had started | !has started=用成了现在完成时 | !started');
@@ -107,7 +107,7 @@ test('常见错答 !x=说明、选择式的空、errfind 的 decoys（docs/engli
   assert.match(t, /页面看出来：第 1 空写成「that」/);
 });
 
-test('分步拆句 steps:、意群断句 chunk（docs/english-plan.md 第 4 批）', async () => {
+test('分步拆句 steps:、意群断句 chunk', async () => {
   const { parseSteps, parseBrackets, parseChunk, judgeChunks, chunkHint, chunksOf } = await import('../kit/src/entext.js');
   const { actionText } = await import('../kit/src/class/prompt.js');
   const ans = parseBrackets('[S The man [RC who lives next door]] [V gave] [IO me] [DO a book].');
@@ -128,7 +128,7 @@ test('分步拆句 steps:、意群断句 chunk（docs/english-plan.md 第 4 批�
   assert.match(actionText({ source: 'record', type: 'parse', block: 'p2', value: '[S The man]', ok: false, attempts: 1, detail: '第 2 步（主语）', check: '1 处范围不对' }), /第 2 步（主语）：1 处范围不对/);
 });
 
-test('连线 link、phrase 带标点（docs/english-plan.md 第 6 批）', async () => {
+test('连线 link、phrase 带标点', async () => {
   const { parseLink, judgeLinks, linkHint, wordsIn, wordSpan } = await import('../kit/src/entext.js');
   const s = parseLink('My brother, who lives in Beijing, is a doctor.', 'who -> brother; !who -> Beijing=就近的名词不一定是先行词');
   assert.deepEqual(s.pairs, [{ from: 3, to: 1 }]);

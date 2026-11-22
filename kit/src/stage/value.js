@@ -1,4 +1,4 @@
-// 舞台上跟着算的量（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 4 节）：任何一个值都能写成 {式子}——
+// 舞台上跟着算的量：任何一个值都能写成 {式子}——
 // 一格、整个矩阵、平面上的向量、一排格子里的数、图的边权；依赖的东西（拨数、矩阵、一格、向量）变了，页面当场重算。
 // 纯函数，不碰 DOM，有测试（tests/stage-value.test.js）。
 //
@@ -393,7 +393,7 @@ export function liveOrder(nodes) {
   return order;
 }
 
-// —— 同类项（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 2.3：学生把一张矩阵拖到另一张上并同类项）——
+// —— 同类项——
 // 只认「数 × 同一个矩阵（或同一串乘积）」：-2 A、-A、(1/2) A、3 A B、2A。别的写法（A + B、A'、A^2、2 (A + B)）页面看不出，
 // 是 null——不说「不是同类项」（A^2 和 A A 是一回事，页面不按值猜，免得说错）
 const FACTOR_RE = /^[A-Za-z_]\w*$/;

@@ -228,9 +228,9 @@ test('irq：给了屏蔽字读处理次序；写错报原因', () => {
 
 // —— 说明草稿和示例页里的例子：照抄就能用（解析得了、ask 的种类都问得到、没有用不上的字段；第 0 步不问；填表的表形状对） ——
 const ENGINES = { ea: EA, opcode: OP, layout: LY, irq: IQ };
-test('手册（CLAUDE-PROJECT.md）和 co2-demo.html 里的例子都能用', () => {
+test('手册（kit/components.md）和 co2-demo.html 里的例子都能用', () => {
   const found = [];
-  for (const f of ['../CLAUDE-PROJECT.md', '../kit/examples/co2-demo.html']) {
+  for (const f of ['../kit/components.md', '../kit/examples/co2-demo.html']) {
     const md = readFileSync(new URL(f, import.meta.url), 'utf8');
     for (const m of md.matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) found.push([m[2], m[3]]);
   }
@@ -263,7 +263,7 @@ test('手册（CLAUDE-PROJECT.md）和 co2-demo.html 里的例子都能用', () 
 });
 
 test('手册里这四节：精简版不超过 500 字节，写了 mode: quiz、mode: fill 和错法诊断', () => {
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   for (const name of Object.keys(ENGINES)) {
     const at = md.indexOf(`### ${name}：`);
     assert.ok(at >= 0, `没有 ${name} 这一节`);

@@ -1,4 +1,4 @@
-// 课后数据处理（docs/data-plan.md）：删课、试出来的选择题、知识点归类、按课算掌握、页面自己的结论重算、弱点出现次数、这节课的三行
+// 课后数据处理：删课、试出来的选择题、知识点归类、按课算掌握、页面自己的结论重算、弱点出现次数、这节课的三行
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

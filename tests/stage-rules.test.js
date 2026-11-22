@@ -1,4 +1,4 @@
-// 规则接口和裁判（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1、2 节）。
+// 规则接口和裁判。
 // 假种类 counter 在这里注册；每个测试文件是独立进程，不用注销。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

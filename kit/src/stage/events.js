@@ -1,4 +1,4 @@
-// 活的舞台上学生做的事（docs/stage-plan.md E 段）：哪些要马上叫老师、哪些攒着；攒下来的怎么写给老师看。纯函数，有测试（tests/stage-events.test.js）。
+// 活的舞台上学生做的事：哪些要马上叫老师、哪些攒着；攒下来的怎么写给老师看。纯函数，有测试（tests/stage-events.test.js）。
 //
 // 学生在舞台上随时能动（拨格子、拖、点开看怎么算），这些是「试」：一下一下都告诉老师太碎、也太慢（每叫一次老师就是一整轮），
 // 所以攒着，等到有要老师接的事——答了老师问的、做到了挑战、打字、点「给个提示」、试了好多下还没做到、很久没动——
@@ -14,7 +14,7 @@ export const TRY_MAX = 8;
 export const QUIET_MS = 45000;
 /**
  * 发给老师的 [学生] 一块最多多少字节（UTF-8，连那一行标题）：学生在老师想的时候试了好多下，按要紧程度压（capTries），不整段发过去。
- * 2 KB 压掉的正是老师要的那几下（错法），提到 3 KB（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 4 节）
+ * 2 KB 压掉的正是老师要的那几下（错法），提到 3 KB
  */
 export const STUDENT_MAX = 3072;
 const HEAD = '[学生]\n';
@@ -43,7 +43,7 @@ export function handMissed(errors, scene) {
 }
 
 /**
- * 学生手上还有什么事（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）：做到挑战、做完、答对一问以后，有事就攒着，
+ * 学生手上还有什么事：做到挑战、做完、答对一问以后，有事就攒着，
  * 没事了才叫老师。空的就是没事了。有事是：
  *   - 还挂着要学生答的一问（tap / pick / drag / value / say）；ask next（连「给个提示」）不算：点它就是叫老师
  *     （预写刚挂出来的 ask next 是学生要按的那一下，算不算由课堂循环看它是不是刚挂的：loop.js 的 settle）；

@@ -1,4 +1,4 @@
-// 考情一节装得下（docs/exam-plan.md 第七节）：四门课十五年的全量假数据，任何一块的舞台说明里一定有档案、这一块的考点、
+// 考情一节装得下：四门课十五年的全量假数据，任何一块的舞台说明里一定有档案、这一块的考点、
 // 统计（和页面算的一样）、至少两道代表题、学生的情况、用法；整份不超 STAGE_SYSTEM_MAX；教材原文至少留 32 KiB；留着的卷一个字都没有
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

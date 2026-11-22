@@ -1,4 +1,4 @@
-// 矩阵（消元）的规则（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1 节）：从现在的样子算消成阶梯形的下一步、
+// 矩阵（消元）的规则：从现在的样子算消成阶梯形的下一步、
 // 判一下像哪种错、挑战用的判断式、写给老师的事实、手势表，和 engines/elim.js 对拍。
 // 纯函数，有测试（tests/stage-matrix-rules.test.js）；在 types/index.js 里登记。
 //
@@ -220,7 +220,7 @@ function messText(md, G1, col) {
   return `把已经消好的那一列又弄乱了：第 ${col + 1} 列${moved.length ? `的 ${moved.join('、')}` : '的主元被换走了'}`;
 }
 
-// 不是可接受的下一步：像哪种错（docs/superpowers/plans/2026-11-06-stage-base.md 第 6 个任务的表；认不出来的给 null）
+// 不是可接受的下一步：像哪种错
 function misreadOf(md, pl, op, G1) {
   const after = plan(withGrid(md, G1));
   if (reach(after) < reach(pl)) return messText(md, G1, after.c);
@@ -309,7 +309,7 @@ function statusFact(o, md, pl) {
   return `还不是阶梯形：${where}主元 ${cellVal(md, r, c)} 下面还有 ${nz.filter((i) => i > r).map((i) => cellVal(md, i, c)).join('、')} 要消成 0`;
 }
 
-// —— 页面算得出的（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.2）：读回的方程、解的样子、from=M0 猜行变换 ——
+// —— 页面算得出的：读回的方程、解的样子、from=M0 猜行变换 ——
 // 舞台现状（matrix.js 的 describe）每一轮写、扫拨数（scene.js 的 sweep）每个值写一次；学生写满一行时和 M0 比。不判对错，只说算出来的
 
 const eqQ = (a, b) => a.n === b.n && a.d === b.d;
@@ -534,7 +534,7 @@ function facts(before, after, act, scene) {
   return out;
 }
 
-// —— 手势表（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）——
+// —— 手势表——
 
 // 一步写成舞台上的写法（matrix.js 的 parseOps、elim.js 的 parseOps 都读得懂）：r3 - 2r1、r2 + (1/2)r1、r1 <-> r3、-3r2、r2 / 2、(-1/2)r2、2r2 - 3r1
 const coefSrc = (q) => (isOne(q) ? '' : q.integer ? `${q}` : `(${q})`);

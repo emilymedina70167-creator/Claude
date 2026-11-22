@@ -1,4 +1,4 @@
-// 在学习台里上课（docs/learner-memory-spec.md 第 2 批）里不碰 DOM 的部分，有测试：
+// 在学习台里上课里不碰 DOM 的部分，有测试：
 // - 每节课一个 session：编号、这节课的数据放在 sessions/{编号}/ 下面（scopeDb），课堂的代码照旧写 steps、class_turns……
 // - 证据：作答、动作、学生说的话、附的图都写进 evidence（和 answers / events 是同一条写入路径，学习台里不再另写 answers / events）
 // - 课堂里的 Claude 能写的只有 observations 和 slips（记录的样子在这里，写之前 assertWrite 拦一道）
@@ -12,7 +12,7 @@ import { COLLECTIONS, MEMORY_COLLECTIONS, assertWrite, toDate } from './schema.j
 export const SESSION_SCOPED = ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit', 'said', 'ext_in', 'ext_out', 'stage_logs', 'check', 'ink', 'html_state'];
 // 一节课是哪一种：课堂（课堂里的 Claude 讲，页面开）、实时黑板（对话里的 Claude 一块板一块板写，它开）、自学单元（一次写完的课件）
 // 练习（drill）：页面自己挑题、判分，不调用 Claude（drills.js、drillrun.js）
-// 一问一答（talk）：也是课堂里的 Claude 讲，只是写在活板上、一问一答地推进（docs/talk-impl.md）；除了画面，别的和课堂一样
+// 一问一答（talk）：也是课堂里的 Claude 讲，只是写在活板上、一问一答地推进；除了画面，别的和课堂一样
 export const SESSION_KINDS = { class: '课堂', ext: '外部的课', talk: '一问一答', stage: '舞台', live: '实时黑板', unit: '自学单元', drill: '练习', check: '检验' };
 export const kindOf = (doc) => (SESSION_KINDS[doc?.kind] ? doc.kind : 'class');
 /** 课堂里的 Claude 讲的课（课堂、一问一答）：复盘、以前的课、小结收尾、整理、挂着没下课这些都按「上课」算 */

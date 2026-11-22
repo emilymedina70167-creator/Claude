@@ -45,8 +45,8 @@ test('按考纲：这一批盖住的每一行至少两张', () => {
 });
 
 test('手册写到了新写法，例子照抄就能用', () => {
-  const manual = readFileSync('CLAUDE-PROJECT.md', 'utf8');
+  const manual = readFileSync('kit/components.md', 'utf8');
   for (const w of ['param: a', 'c1 / (a+2)', 'decomp v, b1, b2', 'coords(v, b1, b2)', '### store：', 'show:', 'insert: head', '### deque：', 'kind:', 'options:', '`binsert`', 'blocksearch', 'find: binary', '### slist：']) assert.ok(manual.includes(w), `手册里没写 ${w}`);
-  const third = manual.slice(manual.indexOf('## 三、组件参考'), manual.indexOf('\n## 四、'));
+  const third = manual.slice(manual.indexOf('## 组件参考'));
   for (const b of blocksIn(third).filter((x) => ['store', 'deque', 'slist', 'blocksearch'].includes(x.kind))) assert.doesNotThrow(() => check(b), `手册 ${b.kind}`);
 });

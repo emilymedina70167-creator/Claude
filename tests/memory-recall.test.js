@@ -1,4 +1,4 @@
-// 记忆点（docs/review-plan.md）：要背的东西一条一条排期，每天自己想一遍（recall.js）；课堂里的 Claude 用 memo 的 recall 记。
+// 记忆点：要背的东西一条一条排期，每天自己想一遍（recall.js）；课堂里的 Claude 用 memo 的 recall 记。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

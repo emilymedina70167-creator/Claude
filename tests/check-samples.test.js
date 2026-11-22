@@ -143,10 +143,10 @@ test('记忆库的检验题库认全部题型（和 PROBE_TYPES 一样）：408�
   assert.deepEqual([...COLLECTIONS.probes.enums.type].sort(), [...PROBE_TYPES].sort());
 });
 
-// 手册（CLAUDE-PROJECT.md 第三节「408 的检验题」「英语的检验题」）里的 board check 例子：外部照抄的就是它们，执行前的检查要干净
+// 手册（kit/components.md「408 的检验题」「英语的检验题」）里的 board check 例子：外部照抄的就是它们，执行前的检查要干净
 test('手册里 408、英语的 board check 例子：照抄就能过执行前的检查', async () => {
   const { readFileSync } = await import('node:fs');
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   const found = [...md.matchAll(/^````board (check id=k(?:408|en)\b[^\n]*)\n([\s\S]*?)^````\s*$/gm)];
   assert.equal(found.length, 2, '手册里找不到 k408、ken 两个例子');
   const types = new Set();
@@ -164,8 +164,7 @@ test('手册：一类组件的名字不会拉进检验题那两节；点 tradeof
   const { componentDocs } = await import('../kit/build-docs.js');
   const { componentDoc } = await import('../kit/src/subject.js');
   const { systemDocs } = await import('../kit/src/class/prompt.js');
-  const { splitProject } = await import('../kit/build-split.js');
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   const docs = componentDocs(md);
   const C408 = '**引擎交的量**', CEN = '片段按整词比';
   for (const n of ['trace', 'code', 'predict', 'construct']) assert.ok(!(componentDoc(docs, n, '数据结构') || '').includes(C408), n);
@@ -174,8 +173,4 @@ test('手册：一类组件的名字不会拉进检验题那两节；点 tradeof
   assert.ok(!systemDocs(docs, '英语', ['parse', 'translate', 'errfind']).docs.includes(CEN));
   assert.ok(componentDoc(docs, 'tradeoff', '数据结构').includes(C408));
   assert.ok(componentDoc(docs, 'rewrite', '英语').includes(CEN));
-  const { files, main } = splitProject(md);
-  assert.ok(files['components/tradeoff.md'].includes(C408) && !files['components/trace.md'].includes(C408));
-  assert.ok(files['components/rewrite.md'].includes(CEN) && !files['components/parse.md'].includes(CEN));
-  assert.ok(!/^### tradeoff/m.test(main), '408 那一节不留进主说明（标题里的 calc 不是公式里的 \\calc）');
 });

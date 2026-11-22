@@ -1,4 +1,4 @@
-// 一排格子的规则（接口见 rules.js、docs/stage-types.md；主线第二轮 A）。纯函数，有测试（tests/stage-array-rules.test.js）。
+// 一排格子的规则（接口见 rules.js；主线第二轮 A）。纯函数，有测试（tests/stage-array-rules.test.js）。
 //
 // 页面在一排格子上不判对错（没有 next / judges / doneBy）：排序的每一趟对不对是老师看着判的事。这里只交
 //   - 手势表：按住一张拖（open a move：放到另一张上对调、放到两张之间插进去、放到空格子上挪进去）、点一格写数（open a edit）；

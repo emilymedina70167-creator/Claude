@@ -1,4 +1,4 @@
-// 要拿下的事（docs/superpowers/specs/2026-11-15-root-design.md 6.2）：每节课 2～5 件，老师写 board aims，
+// 要拿下的事：每节课 2～5 件，老师写 board aims，
 // 板上的题用 aim=a1 挂到某一件上，每件的状态由页面按作答算，进课后报告。这里测不碰界面的那一半。
 import test from 'node:test';
 import assert from 'node:assert/strict';

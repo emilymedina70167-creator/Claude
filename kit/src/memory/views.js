@@ -1,4 +1,4 @@
-// 学习台给我看的页面（docs/desk-plan.md 第 3、4 批）里不碰 DOM 的部分，有测试（tests/memory-views.test.js）。
+// 学习台给我看的页面里不碰 DOM 的部分，有测试（tests/memory-views.test.js）。
 // 页面都只读、不调用 Claude：课程地图、弱点表、错题本、以前的课、某一块的作答时间线、学习统计；
 // 还有两样拼文字的：复现课的资料包（页面自己拼，不用外部备课）、复制给外部 Claude 的启动语。
 import { REVIEW_TIERS, toDate, addDays, daysBetween, reviewDue, dueList } from './schema.js';
@@ -365,7 +365,7 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
 export const TIER_LABEL = (tier) => (REVIEW_TIERS.includes(Number(tier)) ? `${tier} 天档` : '');
 export { OUTCOME_TEXT, daysBetween };
 
-/* ---------------- 给对话里的 Claude 的开场简报（docs/memory-plan.md）---------------- */
+/* ---------------- 给对话里的 Claude 的开场简报---------------- */
 
 // 页面写进 meta/brief（数学）、meta/brief-cs、meta/brief-en：对话里的 Claude 开场 get 一份，就知道现在学到哪、
 // 有什么等它做，和这一科记忆库里每一样东西的编号（一条一行，要全文再按编号读），不用一类一类 list 十几次

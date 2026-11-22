@@ -1,21 +1,21 @@
-// 学习台的记忆库（docs/learner-memory-spec.md）：分哪几类、每一类谁能写、编号怎么起、复现到期怎么算、log 怎么记。
+// 学习台的记忆库：分哪几类、每一类谁能写、编号怎么起、复现到期怎么算、log 怎么记。
 // 纯函数，不碰 DOM，有测试（tests/memory.test.js）。页面写数据库前用 canWrite 拦一道（课堂里的 Claude 只能写观察和自己的失误），
 // 自检（check.js）照这里的字段和规则查对话里的 Claude 写进来的东西。
 //
 // 四种角色：chat（对话里的 Claude，用 ArtifactData 写）、class（课堂里的 Claude）、page（页面自己的代码）、
-// me（我自己：在页面上点了「确认」、自己改、撤销。docs/desk-plan.md 第 4 节）。
-// 学习台自己管自己（docs/autonomy-plan.md）：外部 Claude 只做开发，课堂里的 Claude 管记忆。改记忆分档（memo.js）：
+// me（我自己：在页面上点了「确认」、自己改、撤销）。
+// 学习台自己管自己：外部 Claude 只做开发，课堂里的 Claude 管记忆。改记忆分档（memo.js）：
 // 直接写（偏好、失误、守则、观察、待办、错题、弱点、复现组、位置）用 class，写完我能撤销；规则要我确认，
 // 我点「确认」时以 me 的身份写进去（log 里 by 还是 class，note 写我哪天确认的）；掌握由页面按证据算、我确认，课堂不能写。
 // chat 留着：以前的 log 里有 by: chat，开发那边修数据也用它。
 // 两种性质：history（只增不改：写错了追加一条更正）、state（可以改，每次改都在 log 里记一条）；meta 是页面自己的。
 
-// lab：云端教研室事后补写的（docs/lab-plan.md）。它不直接写数据库（回答由页面并进来，用 class 的权限），只出现在 log 的 by、记录的 by 上
+// lab：云端教研室事后补写的。它不直接写数据库（回答由页面并进来，用 class 的权限），只出现在 log 的 by、记录的 by 上
 // head：班主任（第十一轮 B1，学习台首页上的总 Claude）：看着我的话当场写，和课堂里的 Claude 一样经 memo、过守卫、能撤销
 // ext：外部主 Claude 直接写学习台（第十五轮）
 export const ROLES = ['chat', 'class', 'page', 'me', 'lab', 'head', 'ext'];
 export const ROLE_TEXT = { chat: '开发那边（以前的对话里的 Claude）', class: '课堂里的 Claude', page: '页面', me: '我（在页面上点的）', lab: '云端教研室（事后补写的）', head: '班主任（学习台首页上的 Claude）' };
-// 写进去以后多久之内还能撤销（docs/desk-plan.md 4.3；我还没定，先和自检提醒保留的天数一样）
+// 写进去以后多久之内还能撤销
 export const UNDO_DAYS = 7;
 
 import { EXAM_COLLECTIONS, canWriteExam } from '../exam/schema.js';
@@ -55,7 +55,7 @@ export const COLLECTIONS = {
     tracked: [],
   },
   summary: {
-    // 记忆摘要（第十三轮，docs/superpowers/specs/2026-11-16-mirror-design.md）：照 claude.ai 项目的做法，老师对学生的了解是
+    // 记忆摘要（第十三轮）：照 claude.ai 项目的做法，老师对学生的了解是
     // 一份会重写的摘要（shared 三科共用、math / cs / en 每科一份），当背景给老师。有了它，规则、守则、要求、关于我不再一条条发给老师。
     // 课后由页面后台的 Claude 整份重写（page）；课上老师当场记的新笔记（class）；我自己改、退回（me）；第一版是开发写的（chat）。
     // 以前的版本留在这一条自己的 history 里（最近 8 版），所以不走 log（tracked 是空的）
@@ -68,7 +68,7 @@ export const COLLECTIONS = {
     tracked: [],
   },
   asks: {
-    // 我的要求（第十一轮，docs/superpowers/specs/2026-11-14-round11-design.md 6.1）：我说过要老师以后照做的（要求、纠正、期望）。
+    // 我的要求（第十一轮）：我说过要老师以后照做的（要求、纠正、期望）。
     // 「关于我」是事实，这一类是规矩：要照做、要查守没守、要给我看。原话（quotes）由页面从证据里抄，删课也不丢。
     // 话的账（said.js，作者 said）、课堂里的老师（memo 的 ask）、班主任、我都写；页面替它们写（page）
     label: '我的要求', kind: 'state', writers: ['chat', 'class', 'page', 'me'],
@@ -162,7 +162,7 @@ export const COLLECTIONS = {
   },
   // 教学守则：两个 Claude 的教学失误归纳出来的「下次照着做」（失误本身是历史，只增不改；守则是可以改写的状态）。
   // 课堂里每犯一次新错记一条失误，下课时并进守则：同一件事又犯就把原来那条改写得更能照着做、记上又犯几次（hits），
-  // 意思重复的合并（被并掉的 retired + into）。课堂只带守则和还没归纳的失误，失误不会越积越多（docs/teach-plan.md）
+  // 意思重复的合并（被并掉的 retired + into）。课堂只带守则和还没归纳的失误，失误不会越积越多
   lessons: {
     label: '教学守则', kind: 'state', writers: ['chat', 'class', 'me'],
     id: { re: /^T-[A-Za-z0-9_-]+$/, eg: 'T-3（页面自动编号）' },
@@ -182,7 +182,7 @@ export const COLLECTIONS = {
     refs: { block: 'curriculum' },
     tracked: [],
   },
-  // 记忆点（docs/review-plan.md）：要反复想起来才记得牢的一条（定义、结论、表里的一格、句型……），一条一条排期（recall.js）。
+  // 记忆点：要反复想起来才记得牢的一条（定义、结论、表里的一格、句型……），一条一条排期（recall.js）。
   // 课堂里的 Claude 用 memo 的 recall 写（默写没写出的、讲过要背的），我能自己加、停掉；每天想一遍的结果页面写（档位跟着变）
   recall: {
     label: '记忆点', kind: 'state', writers: ['chat', 'class', 'page', 'me'],
@@ -194,7 +194,7 @@ export const COLLECTIONS = {
     refs: { block: 'curriculum', session: 'sessions' },
     tracked: ['tier', 'last', 'status'],
   },
-  // 题库（docs/learning-plan.md 第 3 节）：以前课上页面判得了分的组件，抄一份给练习用（drills.js）。页面写（下课写报告时抄），
+  // 题库：以前课上页面判得了分的组件，抄一份给练习用（drills.js）。页面写（下课写报告时抄），
   // 对话里的 Claude 备课时也能写；我能把坏了的、不想再练的标作废（status: void）。课堂里的 Claude 每一轮不带它
   drills: {
     label: '题库', kind: 'state', writers: ['page', 'chat', 'me'],
@@ -203,7 +203,7 @@ export const COLLECTIONS = {
     enums: { status: ['active', 'void'], space: ['math', 'cs', 'en'] },
     tracked: [],
   },
-  // 改动单（docs/desk-plan.md 4.1）：课堂里的 Claude 每一条要改记忆的（memo 块），和我在页面上自己改的，都先记一条。
+  // 改动单：课堂里的 Claude 每一条要改记忆的（memo 块），和我在页面上自己改的，都先记一条。
   // 直接写的那档马上执行（status: done）；我确认才写的那档等我点（open → done / rejected）；撤销了是 undone。
   // 记着改了哪一类哪一条（coll、target）、改成什么（data / patch）、为什么（reason、basis），撤销按它回退
   pending: {
@@ -215,7 +215,7 @@ export const COLLECTIONS = {
     refs: { session: 'sessions' },
     tracked: ['status'],
   },
-  // 考试档案（docs/exam-plan.md 1.2）：目标院校、专业、考哪几门、目标分、考试日期、留作模考的年份。只有一条 target。
+  // 考试档案：目标院校、专业、考哪几门、目标分、考试日期、留作模考的年份。只有一条 target。
   // 页面第一次打开时写一份默认（exam/target.js），我在「管理 → 考试」改；开发那边修数据也能写
   exam: {
     label: '考试档案', kind: 'state', writers: ['chat', 'me', 'page'],
@@ -225,7 +225,7 @@ export const COLLECTIONS = {
     dates: ['date'],
     tracked: ['school', 'dept', 'major', 'majorCode', 'degree', 'date', 'goal', 'split', 'reserve'],
   },
-  // 笔记本（第十四轮，docs/superpowers/specs/2026-11-17-project-claude-design.md 6.3）：项目 Claude 自己的长期记忆，
+  // 笔记本（第十四轮）：项目 Claude 自己的长期记忆，
   // 一个文件一条（编号是路径的 base64url，project/notebook.js 的 noteId）。写什么、怎么分由它定；页面只存、留版本（每条自己的 history）
   notebook: {
     label: '笔记本', kind: 'state', writers: ['chat', 'class', 'head', 'page', 'me'],
@@ -269,7 +269,7 @@ export const COLLECTIONS = {
     refs: { block: 'curriculum' },
     tracked: [],
   },
-  // 真题级（docs/exam-plan.md 第五节）：每块一条，页面按证据算的缓存（做过哪几道真题、对没对、过没过、踩过哪些坑）
+  // 真题级：每块一条，页面按证据算的缓存（做过哪几道真题、对没对、过没过、踩过哪些坑）
   exam_bar: {
     label: '真题级', kind: 'state', writers: ['page'],
     id: { re: /^(?:[A-Z]{2}-)?L\d+(?:\.\d+){0,2}$/, eg: '课程地图里块的编号：L2.2.1、DS-L6.4.1' },

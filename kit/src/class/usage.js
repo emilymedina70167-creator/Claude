@@ -1,4 +1,4 @@
-// 这节课调用 Claude 花了多少（docs/desk-plan.md 第 7 节「省额度」第 1 条）。纯函数，有测试（tests/class-usage.test.js）。
+// 这节课调用 Claude 花了多少。纯函数，有测试（tests/class-usage.test.js）。
 // 页面调用 Claude 不记得上一轮：每调用一次，整份说明（角色、组件手册、记忆摘要、资料包、黑板现状、对话）都要重发一遍。
 // 平台不回报 token 数，所以记的是发出去的字节数（fitTurns 算好的那份），换算成「约多少千 token」给人看。
 // 每一次调用记在那一轮的 class_turns 上：cost = { bytes, why, tools }。

@@ -1,4 +1,4 @@
-// 舞台主线第一轮：整条分支最后一审找到的（docs/superpowers/specs/2026-11-11-stage-mainline-1-rulings.md「最后一审」）。
+// 舞台主线第一轮：整条分支最后一审找到的。
 // 多数是「重放」的事：刷新、撤一步、再看一遍、作废一轮都照 log 重放，每一行带 lenient + replay。新加的当场报不能让旧课翻不开，
 // 新加的收拾（同名重造收字）重放时也要照做，不然刷新前后不一样
 import { test } from 'node:test';

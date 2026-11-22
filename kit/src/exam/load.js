@@ -1,4 +1,4 @@
-// 按门课读考试资料（docs/exam-plan.md 1.1）：开课、备课时只取这一门课的考点、画像、真题、篇章和这一科的卷，
+// 按门课读考试资料：开课、备课时只取这一门课的考点、画像、真题、篇章和这一科的卷，
 // 不订阅、不读整类（四门课十五年上千道题）。读不到的那一类就是空的、记在 failed 里，开课不为它多等（desk.js 不 await）。
 // courseOfBlock 是纯函数（tests/exam-load.test.js）。
 import { EXAM_COURSES, subjectOfCourse } from './schema.js';

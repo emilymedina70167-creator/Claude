@@ -1,4 +1,4 @@
-// 在学习台里上课（docs/learner-memory-spec.md 第 2 批）：记忆摘要、证据、每节课的数据分开、课堂 Claude 能写什么、memory_read。
+// 在学习台里上课：记忆摘要、证据、每节课的数据分开、课堂 Claude 能写什么、memory_read。
 // 课堂里实际走一遍（开新课、讲课、作答、刷新、下课）在真浏览器里另外验（Playwright，desk-demo.html?dev + 「测试:记忆」）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,8 +21,8 @@ const { buildSystem, SYSTEM_MAX, MEMORY_BUDGET, DESK_DOC, memoryRules, DEFAULT_R
 const { parseCommand, parseOutput } = await import('../kit/src/class/protocol.js');
 const { componentDocs } = await import('../kit/build-docs.js');
 const { readFileSync } = await import('node:fs');
-// 组件手册：构建时从 CLAUDE-PROJECT.md 第三节截出来（docs.js 是构建时的虚拟模块，测试里直接截）
-const COMPONENT_DOCS = componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
+// 组件手册：构建时从 kit/components.md截出来（docs.js 是构建时的虚拟模块，测试里直接截）
+const COMPONENT_DOCS = componentDocs(readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8'));
 
 const TODAY = '2026-10-27';
 const M = () => sampleMemory(TODAY);

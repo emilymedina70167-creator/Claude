@@ -123,7 +123,7 @@ export function createSink(store, { evidence = null, onEvidence = null } = {}) {
   };
 }
 
-// 本地记录 → 数据库里一条作答（字段见 docs/live-board-spec.md 1.4）
+// 本地记录 → 数据库里一条作答（字段）
 export function toAnswer(e, images = []) {
   const kind = String(e.type || 'answer').replace(/-try$/, '');
   const { type, answer, work, feedback, question, last, guess, stage, el, ...rest } = e;

@@ -1,4 +1,4 @@
-// 第十一轮 A2：「学生的要求」每次调用都在记忆那一节最前面、全文（docs/superpowers/specs/2026-11-14-round11-design.md 6.3、6.4）
+// 第十一轮 A2：「学生的要求」每次调用都在记忆那一节最前面、全文
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

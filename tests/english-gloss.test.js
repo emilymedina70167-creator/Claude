@@ -1,4 +1,4 @@
-// 英语组件第 7 批（docs/english-plan.md）：要背的写进内容（==…==、\bei、remember 框、mark part=）、生词（gloss、点过的词进记忆点）、翻译按要点判
+// 英语组件第 7 批：要背的写进内容（==…==、\bei、remember 框、mark part=）、生词（gloss、点过的词进记忆点）、翻译按要点判
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

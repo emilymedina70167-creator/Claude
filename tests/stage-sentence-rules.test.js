@@ -528,7 +528,7 @@ test('谓语几个：照 key 数，key 的段整个落在范围里才算；key �
   assert.equal(measureLine(t, t.objects.get('s2')), '页面数不了：s2 没写 key');
 });
 
-// —— 学生的括号（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.2）——
+// —— 学生的括号——
 const TWO_V = 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who [V lives] next door]] [V is] a doctor."';
 const stuMark = (s, line) => s.apply(parseScript(line)[0], { by: 'student', open: 'mark' });
 
@@ -590,7 +590,7 @@ test('学生括号：key 一个谓语都没标时不说谓语几个（key 说不
   assert.doesNotMatch(s.stateText(), /谓语 0 个/);
 });
 
-// —— 拉一条线：links= 和 refer（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 2.2）——
+// —— 拉一条线：links= 和 refer——
 // that 指的是 books（定语从句 that I bought yesterday 修饰 books：are new 的是书），就近的 shelf 是常见的错连
 const BOOKS_S = 'sentence s = "The books on the shelf that I bought yesterday are new."';
 const BOOKS = `${BOOKS_S} links="that -> books; !that -> shelf=就近连了名词"`;
@@ -855,7 +855,7 @@ test('changed：挪了的词（ask pick 交了以后和真变了的比）——�
   assert.deepEqual(R.changed(mk.before, mk.o, mk.fx), []);
 });
 
-// —— 学生做的自己收掉（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.4 节）——
+// —— 学生做的自己收掉——
 test('收掉自己拉的：点 ✕ 那一下写给老师「学生收掉了自己拉的 s.3 V（…；这一道 key 里没有 / 有，是 …）」，页面不判', async () => {
   const { closeAct } = await import('../kit/src/stage/gestures.js');
   const { actText } = await import('../kit/src/stage/stage.js');

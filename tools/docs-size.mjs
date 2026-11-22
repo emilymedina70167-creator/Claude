@@ -9,7 +9,7 @@ import { buildSystem, SYSTEM_MAX } from '../kit/src/class/prompt.js';
 
 const LIMIT = 40 * 1024;
 const KiB = (n) => (n / 1024).toFixed(1).padStart(5);
-const md = fs.readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+const md = fs.readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
 const docs = componentDocs(md);
 const want = process.argv[2] && SUBJECTS.includes(process.argv[2]) ? [process.argv[2]] : null;
 const top = Number(process.argv[want ? 3 : 2]) || 8;

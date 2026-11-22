@@ -1,4 +1,4 @@
-// 第十四轮的画面（docs/superpowers/specs/2026-11-17-project-claude-design.md 6.1、6.3）：
+// 第十四轮的画面：
 // 「管理 → 项目指令」学生自己写的那一份（每一轮原样给项目 Claude）；「管理 → 笔记本」项目 Claude 自己的笔记，学生看、改、退回、恢复；
 // 导航的「笔记」页：它标了 show 的文件照课件画出来，能作答（证据记 session: 'note'）。
 // 纯函数在 instructions.js（tests/project-instructions.test.js）。

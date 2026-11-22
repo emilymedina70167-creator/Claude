@@ -1,7 +1,7 @@
-// 课堂里的 Claude 唯一的组件手册：构建时从 CLAUDE-PROJECT.md 第三节「组件参考」截出来，打包进 la-kit.js。
+// 页面里的 Claude 用的组件手册：构建时从 kit/components.md 的「## 组件参考」截出来，打包进 la-kit.js。
 // 只做轻度精简：去掉连续空行、行尾空格、课堂里用不上的小节。代码示例和表格全部保留——
 // 它看不到别的文档，示例就是它照着写的依据。
-const START = /^##\s*三\s*[、.．]\s*组件参考/;
+const START = /^##\s*(?:[一二三四五六七八九十]+\s*[、.．]\s*)?组件参考/;
 // 课堂里用不上的组件：context 是给 guided 课件里「问 Claude」的背景资料（课堂有资料包），
 // summary 是 guided 单元结尾的统计（课堂由「下课」收尾），留着反而会让它照「必放」去写
 export const DROP = ['context', 'summary'];
@@ -37,7 +37,7 @@ function markCode(lines) {
 export function docVersion(markdown) {
   const head = String(markdown ?? '').split(/\r?\n/).slice(0, 30).join('\n');
   const m = /版本[：:]\s*(\d{4}-\d{2}-\d{2}[a-z]*)/.exec(head);
-  if (!m) throw new Error('CLAUDE-PROJECT.md 开头找不到「版本：YYYY-MM-DD」，没法给 la-kit.js 标版本');
+  if (!m) throw new Error('kit/components.md 开头找不到「版本：YYYY-MM-DD」，没法给 la-kit.js 标版本');
   return m[1];
 }
 
@@ -45,7 +45,7 @@ export function componentDocs(markdown, { drop = DROP } = {}) {
   const lines = String(markdown ?? '').replace(/\r\n?/g, '\n').split('\n');
   const inCode = markCode(lines);
   const start = lines.findIndex((l, i) => !inCode[i] && START.test(l));
-  if (start < 0) throw new Error('CLAUDE-PROJECT.md 里找不到「## 三、组件参考」，没法生成课堂模式的组件说明');
+  if (start < 0) throw new Error('kit/components.md 里找不到「## 组件参考」，没法生成课堂模式的组件说明');
   let end = lines.length;
   for (let i = start + 1; i < lines.length; i++) {
     if (!inCode[i] && /^##\s/.test(lines[i])) { end = i; break; }

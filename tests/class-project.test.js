@@ -1,4 +1,4 @@
-// 课堂的老师就是项目 Claude（第十四轮，docs/superpowers/specs/2026-11-17-project-claude-design.md 6.4）：
+// 课堂的老师就是项目 Claude（第十四轮）：
 // 学习台里上课时，每一轮的说明是项目 Claude 的那一份（学生的指令、它的笔记本、学习台里有什么、工具）加上课堂的几段（组件和黑板、这节课的资料、考情、黑板现状）。
 // 开发写的根本规则、「你对学生的了解」、规定形式的句子不再发。
 import { test } from 'node:test';

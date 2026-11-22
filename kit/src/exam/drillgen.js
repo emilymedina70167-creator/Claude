@@ -1,4 +1,4 @@
-// 真题做成练一练的题（docs/exam-plan.md 第二节第 5 步、4.3）：页面判得了分的真题生成一段黑板组件，进题库 drills（src: exam，带题号 exam）。
+// 真题做成练一练的题：页面判得了分的真题生成一段黑板组件，进题库 drills（src: exam，带题号 exam）。
 // 单选 → quiz；有验算式的填空 → answer（变量写成 let、答案写式子，不手写数）；只有数值答案的填空 → quiz 的填空；
 // 标了引擎的过程题 → 那个演示组件 mode: fill（字段原样交给它）。证明、写代码、翻译、作文、阅读的主观题不做；留着的卷不做。
 // tools/exam.mjs drills 生成以后先在两种 iPad 尺寸下画一遍，有写法错误的不收。纯函数，有测试（tests/exam-drillgen.test.js）。

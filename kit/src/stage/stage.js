@@ -1,4 +1,4 @@
-// 舞台的画面（docs/stage-plan.md）：照着场景（scene.js）演。一整块屏幕是一个场景，东西不往上滚；镜头移到讲的地方；
+// 舞台的画面：照着场景（scene.js）演。一整块屏幕是一个场景，东西不往上滚；镜头移到讲的地方；
 // 老师一行一个动作，这里一个一个演（能边写边演：写完一行演一行）；学生在场景里点、拖、拨、打字，就是回答。
 //
 // 每一行：先在场景上 check（写错了挡下、记进 errors，别的行照演）→ 场景 apply → 有专门动作的演专门的动作
@@ -1260,7 +1260,7 @@ export class Stage {
   /** 画法量到了自己的真实大小、写回场景（题卡每一行折了几行……）：这一轮对齐完再排一遍 */
   relayout() { this.layoutDirty = true; }
 
-  // —— 活的舞台（docs/stage-plan.md E 段）——
+  // —— 活的舞台——
   /** 还没做到的挑战 */
   pendingGoals() { return [...this.scene.goals.values()].filter((g) => !g.met && !g.watch); } // watch 学生不知道，不算
   /**

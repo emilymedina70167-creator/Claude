@@ -1,4 +1,4 @@
-// 第十一轮 A1：「我的要求」asks 一类（docs/superpowers/specs/2026-11-14-round11-design.md 6.1）
+// 第十一轮 A1：「我的要求」asks 一类
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { COLLECTIONS, canWrite } from '../kit/src/memory/schema.js';

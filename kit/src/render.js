@@ -70,9 +70,9 @@ function forgive(text, store) {
       if (cmd === 'chalk' && !MARK_COLORS.includes(name)) return body;
       return raw(`<span data-${cmd === 'chalk' ? 'lkc' : 'lkmark'}="${escapeHtml(name)}">${md.renderInline(body)}</span>`);
     });
-    // 要背的（docs/english-plan.md 第 7 批）：==……== 和写在公式外面的 \bei{……} 画成粉色荧光笔的底（在字底下，不压字）
+    // 要背的：==……== 和写在公式外面的 \bei{……} 画成粉色荧光笔的底（在字底下，不压字）
     t = t.replace(/\\bei\{([^{}\n]{1,300})\}/g, (m, body) => raw(`<mark class="lk-bei">${md.renderInline(body)}</mark>`));
-    // =={yellow}……==：换一种颜色的荧光笔（关键说明、结论；docs/mark-plan.md），不写颜色就是要背的粉色
+    // =={yellow}……==：换一种颜色的荧光笔（关键说明、结论），不写颜色就是要背的粉色
     t = t.replace(/(^|[^=])==(?:\{(yellow|pink|blue|green|red|黄|粉|蓝|绿|红)\})?(?=[^\s=])([^=\n]{1,300}?)(?<=[^\s=])==(?!=)/g, (m, pre, c, body) => {
       const color = HL_COLORS[c] || 'pink';
       return `${pre}${raw(`<mark class="${color === 'pink' ? 'lk-bei' : `hl-mark hl-${color}`}">${md.renderInline(body)}</mark>`)}`;

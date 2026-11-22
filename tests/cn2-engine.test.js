@@ -260,8 +260,8 @@ function checkBlock(name, src) {
   assert.deepEqual(tracked.unknown(), [], `${where}：有用不上的字段`);
 }
 
-test('手册（CLAUDE-PROJECT.md）和示例页里的例子：照抄就能用', () => {
-  const doc = blocksOf('CLAUDE-PROJECT.md');
+test('手册（kit/components.md）和示例页里的例子：照抄就能用', () => {
+  const doc = blocksOf('kit/components.md');
   assert.deepEqual([...new Set(doc.map(([n]) => n))].sort(), Object.keys(ENGINES).sort(), '每个组件说明里都有例子');
   for (const [name, src] of doc) checkBlock(name, src);
   const page = blocksOf('kit/examples/cn2-demo.html');
@@ -270,7 +270,7 @@ test('手册（CLAUDE-PROJECT.md）和示例页里的例子：照抄就能用', 
 });
 
 test('手册里这五节：精简版不超过 500 字节，标题带组件名，写了 mode: quiz、mode: fill 和错法诊断', () => {
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   const parts = md.split(/^### /m).slice(1).filter((p) => /^(csma|switch|dv|util|rtt)：/.test(p));
   assert.deepEqual(parts.map((p) => p.split('：')[0]).sort(), Object.keys(ENGINES).sort());
   for (const part of parts) {

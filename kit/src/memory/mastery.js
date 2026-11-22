@@ -1,4 +1,4 @@
-// 掌握：页面按证据算，出改动单，我点「确认」才写（docs/learning-plan.md 2.2）。纯函数，有测试（tests/memory-mastery.test.js）。
+// 掌握：页面按证据算，出改动单，我点「确认」才写。纯函数，有测试（tests/memory-mastery.test.js）。
 //
 // 为什么页面算：掌握原来只有对话里的 Claude 能写，而上课、练习都在学习台里，很少回对话，课程地图的颜色就停住不动了。
 // 课堂里的 Claude 照旧不能宣布掌握（红线 6）：这里不调用 Claude，只数证据；写进去要我确认（改动单 by: page，tier: confirm）。

@@ -40,9 +40,9 @@ function checkBlock(name, src, { strict }) {
   assert.deepEqual(tracked.unknown(), [], `${where}：有用不上的字段`);
 }
 
-test('手册（CLAUDE-PROJECT.md）和示例页里的例子：照抄就能用', () => {
+test('手册（kit/components.md）和示例页里的例子：照抄就能用', () => {
   // 手册里别的 sort 例子归 engines-common 管，这里只严查这四个组件
-  const doc = blocksOf('CLAUDE-PROJECT.md').filter(([name]) => name !== 'sort');
+  const doc = blocksOf('kit/components.md').filter(([name]) => name !== 'sort');
   assert.ok(doc.length >= 4, `手册里只找到 ${doc.length} 个例子`);
   for (const [name, src] of doc) checkBlock(name, src, { strict: true });
   const page = blocksOf('kit/examples/ds-linear-demo.html');
@@ -51,7 +51,7 @@ test('手册（CLAUDE-PROJECT.md）和示例页里的例子：照抄就能用', 
 });
 
 test('手册里这几节的精简版每节不超过 500 字节', () => {
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   const parts = md.split(/^### /m).filter((x) => /^(stack|cqueue|compress|extsort)：/.test(x));
   assert.equal(parts.length, 4);
   for (const part of parts) {

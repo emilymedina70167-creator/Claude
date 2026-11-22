@@ -1,5 +1,5 @@
-// 学习台第 2 批（docs/desk-plan.md 第 4 节）：课堂里的 Claude 用 memo 块改记忆，分档、改动单、确认 / 不要 / 撤销、我自己改。
-// 学习台自己管自己（docs/autonomy-plan.md）：错题、弱点、复现组、位置改成直接写，规则要确认，掌握不收。
+// 学习台第 2 批：课堂里的 Claude 用 memo 块改记忆，分档、改动单、确认 / 不要 / 撤销、我自己改。
+// 学习台自己管自己：错题、弱点、复现组、位置改成直接写，规则要确认，掌握不收。
 // 课堂里实际走一遍在真浏览器里另外验（desk-demo.html?dev + 「测试:整理」）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,4 @@
-// 测速（memory/speed.js，docs/talk-plan.md 第 0 批）：条件、垫长、拼出来的对话、汇总
+// 测速（memory/speed.js）：条件、垫长、拼出来的对话、汇总
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { benchConds, shuffled, padText, benchMessages, inputBytes, benchSummary, summaryText, SPEED_MODEL } from '../kit/src/memory/speed.js';

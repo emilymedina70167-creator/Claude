@@ -217,7 +217,7 @@ export function locate(root, spec, { scene, name = '这里' } = {}) {
   return { error: `不认识的标注位置「${s.kind}」` };
 }
 
-// —— 段里的第几部分（docs/english-plan.md 第 7 批）：一个段落、一张表、一个列表、一个框、一个组件各算一部分，标题不算。
+// —— 段里的第几部分：一个段落、一张表、一个列表、一个框、一个组件各算一部分，标题不算。
 // 要背的一大块用一个框圈住（2026-11-03：「没必要每个都圈，直接全部一个大圈」）；框画在字外面，不压字
 const PART_SKIP = 'h1, h2, h3, h4, script, style, .block-gloss';
 export function segParts(root) {
@@ -236,7 +236,7 @@ function partGeom(root, s, name) {
   return { geoms: [{ box: union(parts.slice(s.a - 1, s.b).map((e) => rect(e.getBoundingClientRect()))) }] };
 }
 
-// —— 英语句子里的词（docs/english-plan.md 第 1 批）：在画好的文字里找词，组件不用另外标记，普通段里的英文也能圈 ——
+// —— 英语句子里的词：在画好的文字里找词，组件不用另外标记，普通段里的英文也能圈 ——
 // 数词的范围：target 是英语组件时，是那句英文（cloze 的文字、errfind / parse 的句子、drill 的题、chunk 的句子）；target 是一段时，是整段的英文（去掉标题）
 const SENTENCE = '.en-text, .en-words:not(.pz-ans), .pz-sent, .dr-q, .ck-sent, .lk-sent';
 // 不算词的地方：公式、成分标注的括号和名字、反馈（揭晓的答案）、标注层自己、输入框

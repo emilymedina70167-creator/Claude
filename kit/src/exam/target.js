@@ -1,4 +1,4 @@
-// 考试档案 exam/target（docs/exam-plan.md 1.2）：目标院校、专业、考哪几门、总分目标和四科分配、考试日期、留作模考的年份。
+// 考试档案 exam/target：目标院校、专业、考哪几门、总分目标和四科分配、考试日期、留作模考的年份。
 // 410 分的进度（memory/score.js）、距考研天数（memory/journey.js 的调用处）都读它；没有档案时用 DEFAULT_TARGET（和以前写死的数一样）。
 // 首页第一次读到「记忆库里没有档案」时以 page 写一份默认（只写一次），我在「管理 → 考试」改（exam/examview.js）。
 // 纯函数，有测试（tests/exam-target.test.js）。

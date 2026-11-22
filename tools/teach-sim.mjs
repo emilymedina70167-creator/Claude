@@ -1,4 +1,4 @@
-// 教学尺子（evals/teaching/，docs/learning-plan.md 第 4 节）：一节模拟课的「页面」。
+// 教学尺子（evals/teaching/）：一节模拟课的「页面」。
 // 老师（子代理，扮课堂里的 Claude）和学生（子代理，带一个设定好的误解）不直接对话，都经过这个脚本：
 // 老师的输出用真的 protocol.js 读、按真的规矩上黑板；学生看到的是去掉答案的板面；学生的作答由这里判分，
 // 用真的 actionText 写成课堂里同样的 [作答] / [动作] 行，连同真的「黑板现状」（和教学计划）发回给老师。
@@ -17,7 +17,7 @@
 // over 以后再调用 teacher / student 都报错。
 // 学生的 JSON 可带 "note"：这一轮记在笔记本 notebook.md 里的话，课后测验时学生只能看这个。
 //
-// 预案（board react，docs/board-plan.md）：学生作答落在老师预写的情况里时，页面自己接、不调用老师——
+// 预案（board react）：学生作答落在老师预写的情况里时，页面自己接、不调用老师——
 // student 命令打印「页面按预案接了」，这时**不跑老师**，学生接着看 view.md 再答一轮；接过的几轮跟着下一次发给老师。
 //
 // 学生的 JSON：{ "say": "对老师说的话（可空）", "acts": [{ "comp": "组件 id", "value": "答案或选项的文字" } | { "comp": "…", "giveup": true }],
@@ -112,7 +112,7 @@ function studentComp(f, progress = 0, st = null) {
     if (f.lang === 'answer' || f.lang === 'practice') {
       return `【作答题 ${id}】${field(f.body, 'title')}\n  ${field(f.body, 'q')}\n  （写出答案）`;
     }
-    // 英语组件（docs/english-plan.md 第 5 批）：学生看到的和页面上一样，答案去掉
+    // 英语组件：学生看到的和页面上一样，答案去掉
     if (f.lang === 'cloze') {
       const { parts } = parseCloze(field(f.body, 'text').replace(/\n\s+/g, ' '));
       const sent = parts.map((p) => (p.text !== undefined ? p.text : `（${p.blank + 1}）${p.choices ? `[${p.choices.map((c) => c.text).join(' / ')}]` : '____'}`)).join('');
@@ -448,7 +448,7 @@ function viewText(st, talk) {
 // 下课时的最后一行：跑课的脚本认这两句。到时间、写满 40 轮是「到时间了」，学生说下课、空转停下是「下课了」
 const overLine = (st) => (!st.over ? '' : st.overWhy === 'student' || st.overWhy === 'idle' ? '\n下课了' : '\n到时间了');
 
-const docs = () => componentDocs(read(new URL('../CLAUDE-PROJECT.md', import.meta.url)));
+const docs = () => componentDocs(read(new URL('../kit/components.md', import.meta.url)));
 
 if (cmd === 'init') {
   const sc = JSON.parse(read(arg));

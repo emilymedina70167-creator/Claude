@@ -194,8 +194,8 @@ test('B 树的错法：上限算成 m、分裂时上移错了', () => {
 });
 
 // 说明草稿里的例子：照抄就能用（解析得了、ask 的种类都问得到、没有用不上的字段）
-test('手册（CLAUDE-PROJECT.md）里平衡树的例子照抄就能用', () => {
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+test('手册（kit/components.md）里平衡树的例子照抄就能用', () => {
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   const found = [...md.matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)].filter((m) => ENGINES[m[2]]);
   assert.ok(found.length >= 3);
   for (const [, , name, src] of found) {

@@ -231,7 +231,7 @@ test('剧本 1：第一轮打招呼 + new b1（steps ex-1 和绑定它的 scene 
   const r = await L.say('老师好');
   assert.equal(r.kind, 'first');
   const bs = boards(r.text);
-  // plan 是老师自己的教学计划（学生看不到，docs/learning-plan.md 第 5 节）
+  // plan 是老师自己的教学计划（学生看不到）
   assert.deepEqual(bs.map((b) => b.header.split(' ')[0]), ['new', 'pin', 'plan']);
   assert.match(bs[0].header, /^new id=b1 title="[^"]+"$/);
   const cs = components(bs[0].body);

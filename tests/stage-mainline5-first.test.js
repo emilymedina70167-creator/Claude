@@ -1,4 +1,4 @@
-// 主线第五轮 · 首课走查里修的（docs/superpowers/specs/2026-11-12-stage-mainline-5-design.md 第 1 节）：一条一个测试
+// 主线第五轮 · 首课走查里修的：一条一个测试
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';

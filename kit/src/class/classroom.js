@@ -5,7 +5,7 @@
 // 返回的不是 Opus 5.5 时，这一轮整段作废（不显示、不执行黑板指令、不进对话历史，工具里记的观察也不留）。
 // 数据都在这个 artifact 的数据库里：黑板段落 steps（带 page / place）、每块板 class_pages（标题、板顶的话）、
 // 作答 answers / events、课堂记录 class_turns、课后小结 class_notes、资料包 pack。
-// 在学习台里上课（desk，docs/learner-memory-spec.md 第 2 批）：这节课的数据放在 sessions/{编号}/ 下面（memory/session.js 的 scopeDb），
+// 在学习台里上课（desk）：这节课的数据放在 sessions/{编号}/ 下面（memory/session.js 的 scopeDb），
 // 作答和动作只写进 evidence（证据），观察、下课小结写进 observations，课堂 Claude 每一轮带着记忆摘要，多两个工具 slip_note、memory_read。
 import { renderLesson, mdToHtml, escapeHtml, supRuns, setLineBreaks } from '../render.js';
 import { session } from '../session.js';
@@ -76,7 +76,7 @@ import { ENGINES } from '../engines/registry.js';
 import { bandsOf, layoutText } from './canvas.js';
 import { askMessage, matchWhy, spotText, whyShownText } from './ask.js';
 import { createAskHere } from './askhere.js';
-// 一问一答的课（kind: talk，docs/talk-impl.md）：活板就是一段 steps（id 是 hb），老师每一轮写的几行接在它后面
+// 一问一答的课（kind: talk）：活板就是一段 steps（id 是 hb），老师每一轮写的几行接在它后面
 import { reportError } from '../errlog.js';
 import { projectTools } from '../project/tools.js';
 import { noteResultText } from '../project/notebook.js';
@@ -106,7 +106,7 @@ const WIDE_NO = new Set(['scene', 'graph', 'space', 'image', 'sketch', 'predict'
 const ZOOMABLE = new Set([...WIDE_NO, 'matrix', 'derive', 'code', 'trace', 'frames']);
 
 export async function renderClass(root, meta, desk = null) {
-  // 版面模式（canvas.js，docs/canvas-plan.md）：课堂 Claude 自己排板。先在开关后面试：features.js 的 canvas，或地址带 ?canvas
+  // 版面模式（canvas.js）：课堂 Claude 自己排板。先在开关后面试：features.js 的 canvas，或地址带 ?canvas
   const CANVAS = FEATURES.canvas || /[?&]canvas\b/.test(location.search);
   if (CANVAS) { root.classList.add('is-canvas'); document.body.classList.add('class-canvas'); }
   // 课堂的黑板一行就是一行（render.js 的 setLineBreaks）：老师一句一行地写，板上不并成一串。一问一答的活板照旧
@@ -280,7 +280,7 @@ export async function renderClass(root, meta, desk = null) {
   let turnMemoBad = []; // 这一轮 memo 块里读不懂的行（外部的课写进 ext_in 的 result.memo）
   let turnMemos = []; // 这一轮 memo 块里读懂的条目（执行完黑板指令、记下这一轮以后再写进记忆库）
   let turnNotes = []; // 这一轮 note 块里的笔记本操作（同上，讲完以后再写）
-  // 预案（react.js，docs/board-plan.md）：组件 id → { target, seq（哪一轮写的）, seg（组件所在的段）, by, cases }
+  // 预案（react.js）：组件 id → { target, seq（哪一轮写的）, seg（组件所在的段）, by, cases }
   const reacts = new Map();
   const trigs = new WeakMap(); // 排着的动作 → actionTrigger 算的（'later' 的是学生在看、在试，不用老师）
   let opTurn = { seq: 0, by: '' }; // 正在执行的这一轮（预案记它是哪一轮、谁写的）
@@ -294,7 +294,7 @@ export async function renderClass(root, meta, desk = null) {
   const toldChecks = new Set(); // 告诉过老师的检查提醒（同一条不每轮重说）
   let closingDraft = false; // 正在写下课小结
 
-  // 察觉卡住的开关（学生在「⋯」里可以开；记在这台设备上）。每提醒一次就是一整轮调用，默认关（docs/desk-plan.md 第 7 节）。
+  // 察觉卡住的开关（学生在「⋯」里可以开；记在这台设备上）。每提醒一次就是一整轮调用，默认关。
   // 本地试用带 ?stuck=秒数 时自动开
   const stuckKey = `la-class-stuck:${session.title}`;
   let stuckOn = (() => { if (isDev() && /[?&]stuck=\d+/.test(location.search)) return true; try { return localStorage.getItem(stuckKey) === 'on'; } catch { return false; } })();
@@ -816,7 +816,7 @@ export async function renderClass(root, meta, desk = null) {
     return true;
   }
 
-  // —— 拍子：一拍一拍地播（docs/board-plan.md 第 2 节）——
+  // —— 拍子：一拍一拍地播——
   // 一拍要指给学生看的段：这一拍写的、圈的、让动的、揭开的
   function focusOf(ops) {
     const ids = [];
@@ -2352,7 +2352,7 @@ export async function renderClass(root, meta, desk = null) {
     return { fit, system, maxBytes, level };
   }
 
-  // —— 抢跑（spec.js，docs/smart-plan.md 第 1 批）——
+  // —— 抢跑（spec.js）——
   // 一轮讲完、板上没事可做时，先按「学生点了继续」调用；开课页先按「开始上课」调用。学生真点了、整份内容一字不差才用。
   function specState() {
     const anyDraft = [...segs.values()].some((seg) => seg.sec && !seg.hidden && !seg.failed && !seg.pending && [...seg.sec.querySelectorAll('.block[data-bid]')].some((b) => draftsIn(b).length));
@@ -2930,7 +2930,7 @@ export async function renderClass(root, meta, desk = null) {
     bv.scheduleFit();
   }
 
-  // 教学计划（docs/learning-plan.md 第 5 节）：开关关着时说明里不提，也不带
+  // 教学计划：开关关着时说明里不提，也不带
   function planArg() {
     if (FEATURES.plan === false) return { planDoc: false };
     return { planDoc: true, plan: latestPlan(history) };
@@ -3272,7 +3272,7 @@ export async function renderClass(root, meta, desk = null) {
       ctl = new AbortController();
       // md、seq、point：下课时把判得了分的题抄进题库（desk.js 的 harvestSession）
       const steps = segSteps;
-      // 学习台里：先用代码算一份课后报告放进这次的输入，小结和整理单同一次写（docs/desk-plan.md 4.2，不多调用一次）
+      // 学习台里：先用代码算一份课后报告放进这次的输入，小结和整理单同一次写
       const repObj = desk?.makeReport ? await desk.makeReport({ turns: history, steps: steps() }).catch(() => null) : null;
       // 在学习台里却没算出报告（读证据出错）：整理单照样要写（复现组的结果、归纳失误、下一节从哪接），只是没有报告可对照
       const report = repObj ? reportText(repObj) : desk ? '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写组件 id 或段 id。）' : '';

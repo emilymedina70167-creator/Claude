@@ -29,7 +29,7 @@ export function memoryRules(subject, rulesText) {
   return `${defaultRules(subject)}\n\n这个学生另外定的规则（学习台记忆库里的；和上面冲突时以这里为准）：\n\n${rulesText}`;
 }
 
-// 学习台里上课时，记忆摘要后面附的说明：能写什么、不能写什么、怎么写（docs/desk-plan.md 4.1：写记忆用输出里的 memo 块，不用工具）
+// 学习台里上课时，记忆摘要后面附的说明：能写什么、不能写什么、怎么写
 export const MEMO_DOC = doc`
 - **改记忆写在这一轮的输出里**，和黑板指令一样用一个 ˋmemoˋ 块（不用工具：每调一次工具要多跑一整轮，很贵），一行一条，可以和别的 board 块写在同一轮：
 
@@ -70,7 +70,7 @@ export const CLASS_MEMO_DOC = MEMO_DOC
   // 同一类的两句：记忆点一节课几条页面不挡（memo.js 的 recall 那一支只查和已有的像不像）；每一类到了 CAPS 页面照收，只在下课整理时叫合并
   .replace('一节课最多 8 条，和已有的几乎一样的页面不收。', '和已有的几乎一样的页面不收。')
   .replace('每一类有上限，到了先合并（下课整理时页面会告诉你怎么并）。', '哪一类攒多了，下课整理时页面会叫你合并、告诉你怎么并。');
-// 有记忆摘要时的那一份（第十三轮，docs/superpowers/specs/2026-11-16-mirror-design.md 6.1）：关于学生的事只有一种写法 know，
+// 有记忆摘要时的那一份（第十三轮）：关于学生的事只有一种写法 know，
 // 记成摘要的新笔记；不再有规则、守则、要求、失误那几种（它们以前一条条攒、每轮全文带，学生随口的一句被写成了规矩）。
 // 学习的账（错题、弱点、复现组、下一节、待办、要背的）的写法照抄上面那份里对应的句子
 export const SUMMARY_MEMO_DOC = doc`
@@ -138,7 +138,7 @@ export const deskDoc = ({ tools = true, summary = false } = {}) => {
 // 课堂 Claude 要用时得调工具取（多等一整轮），反而更慢
 export const MEMORY_BUDGET = 28 * 1024;
 
-// —— 教学计划（docs/learning-plan.md 第 5 节）：老师写给自己看的几行，学生看不到。
+// —— 教学计划：老师写给自己看的几行，学生看不到。
 // 一节课几十轮、中间还会压缩对话，「我要带学生到哪、我猜卡在哪、怎么证实」很容易断。页面只把最新的一份放进下一轮的说明，
 // 对话历史里把 plan 块去掉（不重复付钱）；只在判断变了时改写，平时不写（每写一次多等几秒）。
 export const PLAN_DOC = doc`
@@ -376,7 +376,7 @@ export const EYE_DOC = doc`
 
 每一轮开头附着页面拍的图：学生现在看到的这块板，是学生屏幕上真实的样子（板比三屏长时只拍前三屏）。板长什么样由你设计：用哪些组件、分不分栏、哪里用图、哪里标重点、字多字少，都看这一处的内容定，没有固定的版式。上一轮排出来不对（字挤在一起、被框切掉、重点淹在字里、和你想的不一样），用 ˋreplaceˋ 改。`;
 
-// —— 版面（canvas.js，docs/canvas-plan.md）：开着时你自己排板 ——
+// —— 版面（canvas.js）：开着时你自己排板 ——
 // 版面开着时页面不再自动左图右文（classroom.js 的 renderSeg 不 splitFigure）：这一句不带
 const SPLIT_LINE = doc`- 横屏的 iPad 上，一段里正好有一张图（ˋsceneˋ、ˋgraphˋ、ˋspaceˋ）和别的内容时，页面会自动排成左图右文。`;
 export const CANVAS_DOC = doc`
@@ -753,7 +753,7 @@ export function packComponents(pack) {
 // 资料包点名的组件，完整写法最多放这么多（多了从后面的开始不放，课堂 Claude 照样能用 component_doc 取）
 export const DETAIL_BUDGET = 16 * 1024;
 
-// 最常用的组件：资料包点了名时，课堂说明里只带这些 + 点名的（docs/desk-plan.md 第 7 节：组件手册是每轮最大的一块）
+// 最常用的组件：资料包点了名时，课堂说明里只带这些 + 点名的
 export const CORE_COMPONENTS = ['answer', 'quiz', 'steps', 'scene', 'conjecture', 'predict', 'let', 'calc', 'hl', 'chalk', 'draft', 'stepper', 'summary'];
 
 // 组件说明：精简版，资料包点名的组件带完整写法；点了名时别的（不常用的）组件只留标题
@@ -1327,7 +1327,7 @@ export function actionsMessage(actions) {
 export const KEEP_RECENT = 20;
 export const OMITTED = '（更早的对话已省略）';
 
-// 省额度、不丢信息（docs/memory-plan.md）：每一轮整段对话都要重发一遍，而 Claude 早先写的段原文（几 KB 一段）还在黑板上。
+// 省额度、不丢信息：每一轮整段对话都要重发一遍，而 Claude 早先写的段原文（几 KB 一段）还在黑板上。
 // 所以最近 STUB_AFTER 轮以前的 Claude 输出里，new / add / replace 的长段换成一行「页面省略了原文」，说的话、指令行、
 // 标注、memo 照旧原样；要看原文用工具 board_read 按段 id 取（一次几段）。不支持工具的查看方式不省（取不回来）。
 // 省略行故意不写成 board 块的样子，免得 Claude 照着学、新写的段也只写一行。
@@ -1480,7 +1480,7 @@ export function summaryTurn(text) {
 }
 
 // —— 下课小结（存进 class_notes / observations，给以后的课和学生看）——
-// 学习台里（report：页面算好的课后报告，memory/report.js 的 reportText）：同一次调用里接着写整理单（memo 块），不多调用一次（docs/desk-plan.md 4.2）
+// 学习台里（report：页面算好的课后报告，memory/report.js 的 reportText）：同一次调用里接着写整理单（memo 块），不多调用一次
 // review：复现课的复现组（一个编号或编号的数组）；opening：新课开头复现了的几组（备课写的，只写做了的）
 const idsOf = (v) => (Array.isArray(v) ? v : v ? [v] : []).map((x) => String(x && typeof x === 'object' ? x.id : x)).filter((x) => x && x !== 'undefined');
 function reviewDoc(review, opening) {
@@ -1547,7 +1547,7 @@ ${report}
 `}`;
 }
 
-// 下课时顺带整理（docs/autonomy-plan.md 第 4 节）：每几节课一次、或者某一类到了上限。和小结、整理单同一次写，不多调用
+// 下课时顺带整理：每几节课一次、或者某一类到了上限。和小结、整理单同一次写，不多调用
 function tidyDoc({ why = '', text = '' }, { summary = false } = {}) {
   const t = `【这次顺带整理记忆（${why}）】学习台的记忆由你管，不整理就会越积越乱、每一轮都多带。看下面这一科还在用的几类，整理单最后加几行：
 - 说的是同一件事、同一个毛病的弱点：留一条（必要时改 title），另一条 ˋweakness id=… status=merged into=留下的ˋ，被并的那条挂的错题先写到留下的那条上（ˋweakness id=留下的 errors=…ˋ）；有依据证明修好了的 ˋweakness id=… status=closed basis=…ˋ；
@@ -1623,7 +1623,7 @@ export function pendingTurn(history) {
 
 // 拼这一轮的对话，保证不超过 maxBytes：先丢最早的；最近 20 条本身就太长时，逐步少留几条原文
 // stub（能用 board_read 取回）时：整段对话不省略也放得下、一轮不丢、只比省略的多 NOSTUB_EXTRA 以内，就发原文。
-// 省略是为了省额度，可它一取原文就多跑一整轮（真课一轮多等 20～60 秒）；额度够了以后速度优先（docs/smart-plan.md）
+// 省略是为了省额度，可它一取原文就多跑一整轮（真课一轮多等 20～60 秒）；额度够了以后速度优先
 export const NOSTUB_EXTRA = 40 * 1024;
 export function fitTurns({ system, history, maxBytes = 262144, stub = false } = {}) {
   if (stub) {

@@ -1,6 +1,6 @@
 // 规则接口：每种东西（o.type）交一份规则，页面通用的裁判（referee.js）只通过这里问，不认识任何具体的东西。
 // 纯函数，有测试（tests/stage-rules.test.js）。没交规则的东西照旧能用，只是不判。
-// 形状见 docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1 节：
+// 形状：
 //   next(o, scene) → { acts, why, blank? } | null  null 是做完了；acts 空着是现在算不了（blank：还有空着的格，不是做完了）
 //   check(o, act, scene, { by, open }) → { legal, right, misread, why, next }（open：学生这一下从哪一项 open 来的，可能是 null）
 //   predicates { 名字: (o, args, scene) → true | false | null }  null 是现在判不了（之后会有：乘积还空着）；
@@ -20,7 +20,7 @@
 //                                               能的话 @名字.done 照收（再做完时演），不能的照旧报「现在就已经做完了」
 //   doneBy [动作名]                              open 了这几个动作的东西，next 走到 null 才算「学生做完了」（@名字.done、叫老师）：
 //                                               树的平衡、矩阵的阶梯形只对交给了学生做的东西有意义（一棵本来就平衡、没 open 的树不是学生做完的）
-//   measures { 名字: (o, parts, scene) → 数 | null | undefined }（可选，docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.1）
+//   measures { 名字: (o, parts, scene) → 数 | null | undefined }（可选）
 //                                               页面数得出的量，写成 count(t)、height(t.50)：parts 是写了部件时的 scene.parts(…)，写整样东西是 null。
 //                                               null 是现在还数不了（矩阵还空着，之后会有）；这样东西本身数不了（句子没写 key）就抛错，错误的话给老师看；
 //                                               undefined 是这样东西本来就没有这个量（不是方阵的 det）。函数上可以挂两句话：

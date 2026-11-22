@@ -1,4 +1,4 @@
-// 学习台第 3、4 批（docs/desk-plan.md 第 5、6 节）：给我看的页面算的部分（views.js）、复现课的资料包、启动语、
+// 学习台第 3、4 批：给我看的页面算的部分（views.js）、复现课的资料包、启动语、
 // 课堂说明里按需带的组件手册、发布用的瘦身说明书。页面本身在真浏览器里另外验（desk-demo.html?dev 的 #map、#weak……）。
 import { test } from 'node:test';
 const { packText } = await import('../kit/src/class/prompt.js');
@@ -12,7 +12,6 @@ const { sampleMemory } = await import('../kit/src/memory/sample.js');
 const { addDays } = await import('../kit/src/memory/schema.js');
 const { systemDocs, buildSystem, CORE_COMPONENTS } = await import('../kit/src/class/prompt.js');
 const { componentDocs } = await import('../kit/build-docs.js');
-const { splitProject } = await import('../kit/build-split.js');
 const { docSections, sectionNames } = await import('../kit/src/subject.js');
 
 const TODAY = '2026-10-28';
@@ -142,7 +141,7 @@ test('启动语：学习台地址、接口卡在哪、学到哪、上一节、�
   const t = handoffText(m, { kitUrl: 'https://claude.ai/artifact/KIT', today: TODAY });
   assert.match(t, /学习台：https:\/\/claude\.ai\/artifact\/KIT。记忆、每节课都在它的数据库里/);
   assert.match(t, /接口[^\n]*在 meta\/interface/);
-  assert.ok(!t.includes('CLAUDE-PROJECT.md'), '说明书不再发布，启动语里不指它');
+  assert.ok(!t.includes('kit/components.md'), '说明书不再发布，启动语里不指它');
   assert.match(t, /学到 L2\.2\.2；下一节：先收 L2-07/);
   assert.match(t, /上一节：c-20261027-1/);
   assert.match(t, /有一节课堂还没下课：c-20261028-1/);
@@ -162,7 +161,7 @@ test('启动语：学习台地址、接口卡在哪、学到哪、上一节、�
   assert.match(handoffText(m, { today: TODAY }), /地址问我要/);
 });
 
-const DOCS = componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
+const DOCS = componentDocs(readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8'));
 
 test('组件手册按需带：资料包点了名时，只带常用的和点名的，别的只留标题；没有工具时照旧全带', () => {
   const all = systemDocs(DOCS, '线代', []).docs;
@@ -176,27 +175,6 @@ test('组件手册按需带：资料包点了名时，只带常用的和点名�
   // 整份说明照样在上限以内
   const s = buildSystem({ componentDocs: DOCS, pack: { main: { components: ['elim'] } }, board: [] });
   assert.match(s, /没点名的不常用组件只留了标题/);
-});
-
-test('说明书瘦身：主说明不到一半大小，别的几节原样，第三节变成一览；每个组件一份写法，一览里的文件都有', () => {
-  const src = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
-  const { main, files, index } = splitProject(src, { kitUrl: 'https://claude.ai/artifact/KIT' });
-  assert.ok(Buffer.byteLength(main) < Buffer.byteLength(src) * 0.5);
-  assert.match(main, /版本：\d{4}-\d{2}-\d{2}/);
-  for (const h of ['## 四、黑板指令', '## 五、外部的课', '## 六、页面里的 Claude', '## 七、学习台']) assert.ok(main.includes(h), h);
-  assert.equal(main.slice(main.indexOf('## 七、学习台')), src.slice(src.indexOf('## 七、学习台')));
-  assert.match(main, /### 组件一览/);
-  assert.match(main, /### let：/); // 每节课都用的留在主说明里
-  for (const x of index) assert.ok(files[x.file], x.file);
-  // 课堂里认得的组件名，一览里都有
-  const listed = new Set(index.flatMap((x) => x.names));
-  for (const sec of docSections(DOCS)) {
-    const n = sectionNames(sec.head.split(/[：:]/)[0])[0];
-    if (sec.names.length && n) assert.ok(listed.has(n), n);
-  }
-  assert.match(files['components/answer.md'], /### answer：自己算/);
-  assert.ok(!/<!-- 科目/.test(files['components/sched.md']));
-  assert.match(files['components/elim.md'], /```elim/);
 });
 
 test('开场简报：每科一份，接手要知道的 + 这一科记忆库里每样东西的目录（编号 + 一句话），规则全列（含只给对话的）', async () => {

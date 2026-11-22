@@ -5,8 +5,8 @@ import { readFileSync } from 'node:fs';
 import { parseSpace } from '../kit/src/spacespec.js';
 import { docsForSubject, componentDoc } from '../kit/src/subject.js';
 
-const manual = readFileSync('CLAUDE-PROJECT.md', 'utf8');
-const third = manual.slice(manual.indexOf('## 三、组件参考'), manual.indexOf('\n## 四、'));
+const manual = readFileSync('kit/components.md', 'utf8');
+const third = manual.slice(manual.indexOf('## 组件参考'));
 const spacesIn = (text) => [...text.matchAll(/```space\n([\s\S]*?)```/g)].map((m) => m[1]);
 const demo = spacesIn(readFileSync('kit/examples/space-demo.html', 'utf8'));
 const inManual = spacesIn(third);

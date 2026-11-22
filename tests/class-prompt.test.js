@@ -20,7 +20,7 @@ const { parseScene } = await import('../kit/src/scene.js');
 const protocolUrl = new URL('../kit/src/class/protocol.js', import.meta.url);
 const protocol = existsSync(protocolUrl) ? await import(protocolUrl.href) : null;
 
-const PROJECT = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+const PROJECT = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
 const DOCS = componentDocs(PROJECT);
 const KiB = 1024;
 const sameBytes = (s) => assert.equal(bytes(s), Buffer.byteLength(s, 'utf8'), JSON.stringify(s.slice(0, 20)));
@@ -29,7 +29,7 @@ const wellFormed = (s) => assert.equal(Buffer.from(s, 'utf8').toString('utf8'), 
 
 // —— 构建期组件说明 ——
 
-test('组件说明：从 CLAUDE-PROJECT.md 截出第三节，示例和表格都在', () => {
+test('组件说明：从 kit/components.md 截出第三节，示例和表格都在', () => {
   for (const h of ['### scene', '### steps', '### graph', '### space', '### recognize', '### predict', '### answer', '### findbug']) {
     assert.ok(DOCS.includes(h), `缺少 ${h}`);
   }
@@ -661,7 +661,7 @@ test('组件手册：页面手写板关着的时候，手册写明暂时关掉�
 
 test('说明的版本号：开头写着，构建时打进 la-kit.js', async () => {
   const { docVersion } = await import('../kit/build-docs.js');
-  assert.match(docVersion(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8')), /^\d{4}-\d{2}-\d{2}[a-z]*$/);
+  assert.match(docVersion(readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8')), /^\d{4}-\d{2}-\d{2}[a-z]*$/);
   assert.equal(docVersion('# 标题\n\n> **版本：2026-10-12b**　组件库'), '2026-10-12b');
   assert.throws(() => docVersion('# 没有版本号'), /版本/);
   // 同一天第二次发布加字母，按字符串比较也是更新的

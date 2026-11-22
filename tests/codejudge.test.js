@@ -116,7 +116,7 @@ test('check:：答案不唯一时用老师写的 C 函数判（A 是跑完的，
 test('说明里的 code 例子照抄能用', async () => {
   const { readFileSync } = await import('node:fs');
   const { parseFields } = await import('../kit/src/parse.js');
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8');
   const src = /^````code\n([\s\S]*?)^````$/m.exec(md)[1];
   const spec = parseCodeSpec(parseFields(src).fields);
   const ok = 'void Reverse(int A[], int n) {\n    for (int i = 0; i < n / 2; i++) { int t = A[i]; A[i] = A[n - 1 - i]; A[n - 1 - i] = t; }\n}';

@@ -1,5 +1,5 @@
 import { heldDrillIds } from './drills.js';
-// 学习台首页的「离考研多少天」和「这一周」（docs/journey-plan.md）。全是页面按记录算的，不调用 Claude，
+// 学习台首页的「离考研多少天」和「这一周」。全是页面按记录算的，不调用 Claude，
 // 也不进发给课堂 Claude 的说明（不影响回复的快慢）。纯函数，有测试（tests/memory-journey.test.js）。
 //
 // 情绪价值照我的口味（profile：语气平实，不夸、不铺垫）：只说真发生了的事——连着学了几天、这周学了多久、

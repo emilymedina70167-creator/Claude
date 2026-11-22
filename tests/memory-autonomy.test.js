@@ -1,4 +1,4 @@
-// 学习台自己管自己（docs/autonomy-plan.md）：课堂里的 Claude 管记忆（错题、弱点、复现组、位置直接写，规则要确认，掌握不收），
+// 学习台自己管自己：课堂里的 Claude 管记忆（错题、弱点、复现组、位置直接写，规则要确认，掌握不收），
 // 记忆不冗杂（几乎一样的不收、每类有上限、每几节课下课时顺带合并），待办进备课，从备份恢复。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

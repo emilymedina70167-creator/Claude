@@ -1,4 +1,4 @@
-// 照引擎走（主线第四轮，docs/superpowers/specs/2026-11-11-stage-mainline-4-design.md 第 2 节）。纯函数，有测试（tests/stage-follow.test.js）。
+// 照引擎走（主线第四轮）。纯函数，有测试（tests/stage-follow.test.js）。
 //
 // 页面不懂任何算法：算法的知识全在黑板那边的引擎里（kit/src/engines/）。老师写一行 follow a sort shell gaps="5 3 1"，
 // 页面让引擎把这个算法在这样东西现在的数据上跑一遍，拼出「正确的那条路」（引擎每一步之后这样东西是什么样）和每种常见错法的路，

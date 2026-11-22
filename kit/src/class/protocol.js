@@ -244,7 +244,7 @@ export function parseCommand(header) {
   }
   if (name === 'close') return { op: 'close' };
   if (name === 'coach') { const r = parseCoach(m[2] || ''); return r.error ? { error: r.error } : { op: 'coach', target: r.target, upto: r.upto }; }
-  // 老师自己的教学计划（学生看不到，docs/learning-plan.md 第 5 节）：块里是几行字
+  // 老师自己的教学计划（学生看不到）：块里是几行字
   if (name === 'plan') return { op: 'plan' };
   // 这节课要拿下的事（aims.js）：一行一件，写在块里；不上板，页面核过存进这节课
   if (name === 'aims') return { op: 'aims' };

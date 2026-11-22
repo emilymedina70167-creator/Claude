@@ -7,8 +7,8 @@ import { subjectKey, docsForSubject, componentDoc } from '../kit/src/subject.js'
 import { riemannRects, areaBetween, oscCircle } from '../kit/src/fx/graphgeom.js';
 import { stripOf } from '../kit/src/fx/plane.js';
 
-const manual = readFileSync('CLAUDE-PROJECT.md', 'utf8');
-const third = manual.slice(manual.indexOf('## 三、组件参考'), manual.indexOf('\n## 四、'));
+const manual = readFileSync('kit/components.md', 'utf8');
+const third = manual.slice(manual.indexOf('## 组件参考'));
 const graphsIn = (text) => [...text.matchAll(/```graph\n([\s\S]*?)```/g)].map((m) => m[1]);
 const demo = graphsIn(readFileSync('kit/examples/graph-demo.html', 'utf8'));
 const inManual = graphsIn(third);

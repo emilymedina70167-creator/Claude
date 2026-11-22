@@ -1,11 +1,11 @@
 // 舞台上的矩阵（线代：初等行变换、消元求秩和解方程组、矩阵乘法「行乘列」）：数据和指令，不碰 DOM（画法在 matrix.view.js）。
-// 纯函数，有测试（tests/stage-matrix.test.js）。照 array.js 的样子写（docs/stage-types.md）。
+// 纯函数，有测试（tests/stage-matrix.test.js）。照 array.js 的样子写。
 //
 // 数都是精确分数（exact.js 的 Q）：场景里存成字符串（'-3/2'；'' 是乘积里还空着的格），副本（structuredClone）不丢东西，算的时候再变回 Q。
 // 一格（部件）的 key 是造它时的位置（'2.3'），交换两行时格子带着数走过去（r、c 跟着变）；m.2,3 永远指「现在」第 2 行第 3 列。
 // 跟着算的（value.js）：格里写算成一个数的式子（{k}、{A.1,2}、{l - 1}），或者整个矩阵写 = {A + B}、{P^-1}；依赖一变场景叫 relive，在原地改格。
 // 格里写 _ 是空着的一格（matrix D = _ _ / _ _：等学生填的空牌，填满以前判断式、量都判不了）。
-// 整张当把手（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 2.3）：收集用的矩阵（matrix Sum = collect）学生把矩阵放进来就跟着算
+// 整张当把手：收集用的矩阵（matrix Sum = collect）学生把矩阵放进来就跟着算
 // {AA + AB}（put）；两张同一个矩阵的倍数并成一项（merge，只认 数 × 矩阵，value.js 的 termOf）；拖去逐格比（compare，scene.js 照 compareWhole）。
 import { Q, isQ, isQVec, isQMat } from '../../exact.js';
 // 规则那边算的读回方程、解的样子（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事

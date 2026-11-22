@@ -1,4 +1,4 @@
-// 组件写 exam: / like:（docs/exam-plan.md 4.1）：这道题是哪一道真题（exam=），或者对标哪一道真题出的（like=）。
+// 组件写 exam: / like:：这道题是哪一道真题（exam=），或者对标哪一道真题出的（like=）。
 // 渲染时（render.js）拿掉这两行、挂在组件外面（data-exam / data-like），组件不用一个个改；作答记录（session.record）从那一层取。
 // 字段名不叫 q：q 已经是题面（证据、组件、题库、记忆点里都是）。纯函数，有测试（tests/exam-fields.test.js）。
 const LINE = /^\s*(exam|like|harder)\s*[:：]\s*(\S+)\s*$/;

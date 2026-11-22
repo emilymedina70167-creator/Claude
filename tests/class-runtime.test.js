@@ -199,8 +199,8 @@ test('发给课堂 Claude 的说明、小结要求、模拟老师的小结：提
     ['PROTOCOL_DOC', PROTOCOL_DOC],
     ['closingPrompt', closingPrompt()],
     ['compactionPrompt', compactionPrompt({ summary: '', turns: [T(1, 'student', '没懂')] })],
-    // 组件手册也在同一份课堂说明里（构建时从 CLAUDE-PROJECT.md 第三节截出来）
-    ['组件手册', componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'))],
+    // 组件手册也在同一份课堂说明里（构建时从 kit/components.md截出来）
+    ['组件手册', componentDocs(readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8'))],
   ]) {
     const bad = s.split('\n').filter((l) => he.test(l.replace(/不用「他」「她」/g, '')));
     assert.deepEqual(bad, [], `${name} 里有性别代词`);

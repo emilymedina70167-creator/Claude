@@ -1,4 +1,4 @@
-// 预案（kit/src/class/react.js，docs/board-plan.md 第 1 节）：写法、作答归到哪种情况、这一批能不能页面自己接、刷新后重建
+// 预案（kit/src/class/react.js）：写法、作答归到哪种情况、这一批能不能页面自己接、刷新后重建
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseReact, classify, planLocal, markFired, reactNote, armedText, rebuildRules, dropForSeg, stepOf } from '../kit/src/class/react.js';

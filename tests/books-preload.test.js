@@ -10,7 +10,7 @@ import { componentDocs } from '../kit/build-docs.js';
 import { sampleMemory } from '../kit/src/memory/sample.js';
 
 const KiB = 1024;
-const DOCS = componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
+const DOCS = componentDocs(readFileSync(new URL('../kit/components.md', import.meta.url), 'utf8'));
 
 // 一本假的书：三章，每章 20 条，每条约 3 KB（第二章是这节课的）
 const books = [{ id: 'B1', title: '线代30讲', kind: 'textbook' }];

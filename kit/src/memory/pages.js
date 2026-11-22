@@ -1,5 +1,5 @@
 import { laterLine, aimLines } from './holds.js';
-// 学习台给我看的页面（docs/desk-plan.md 第 3 批，统计是第 4 批）：课程地图、弱点表、错题本、以前的课、统计。
+// 学习台给我看的页面：课程地图、弱点表、错题本、以前的课、统计。
 // 都只读、不调用 Claude；数据是首页一直订阅着的那份记忆库（desk.js 传进来），算的部分在 views.js。
 // 地址用 # 区分：#map、#weak、#errors、#classes、#classes/c-…（一节课的报告）、#stats。翻看以前的课的黑板是 #view/c-…（整页刷新进只读的课堂）。
 import { sheetMd } from './sheet.js';
