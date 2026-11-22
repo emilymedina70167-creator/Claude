@@ -1009,7 +1009,12 @@ export const SYSTEM_MAX = 160 * 1024;
 // —— 学生在黑板上的动作 → 一行中文 ——
 
 const BLOCKS = new Set(['page', 'tutor']); // 不是组件 id 的占位
-const short = (v, n = 400) => oneLine(v, n);
+// 外部的课（主讲读 ext_out）：学生写的、填的一个字不截，换行留着（续行缩两格，一眼看出还是这一条）。
+// 去限制设计（2026-11-22）：主讲分析错因靠的就是这些原文。页面里的老师（说明有 160 KiB 上限）照旧压成一行、截短
+let FULL = false;
+/** 课堂开一节外部的课时打开：actionText 不截学生的原文 */
+export function useFullText(on) { FULL = !!on; }
+const short = (v, n = 400) => (FULL ? String(v ?? '').trim().replace(/\r\n?/g, '\n').replace(/\n/g, '\n  ') : oneLine(v, n));
 
 // 值：数组写成 [1, 2]，小数最多留 3 位
 function val(v) {
@@ -1107,6 +1112,13 @@ function conjectureRecord(a) {
 
 function recordText(a, type) {
   switch (type) {
+    // 自由段 html 的 lab.record / lab.check：ok 写明是谁判的（主讲的代码 / 页面）
+    case 'html': {
+      const v = a.value !== undefined && a.value !== null && a.value !== '' ? `给了 ${val(a.value)}` : '';
+      const by = a.judgedBy === 'page' ? '（页面判的）' : a.judgedBy === 'author' ? '（你的代码判的）' : '';
+      const res = a.ok === true ? `对${by}` : a.ok === false ? `不对${by}` : a.judgedBy === 'page' ? '页面判不了' : '';
+      return `[作答] ${where(a, 'html')}：${a.q ? `「${short(a.q, 120)}」` : ''}${tail([v, res, a.why ? `（${short(String(a.why), 200)}）` : ''].filter(Boolean).join('，'), a.text ? `说明：${short(a.text, 200)}` : '', duration(a.ms))}`;
+    }
     // 外部设计的交互（board widget 的 la.record / la.goal、board stage 的挑战）：q 是那一件事，value 是学生给的
     case 'widget':
     case 'stage': {
@@ -1233,6 +1245,10 @@ function eventText(a, type) {
   const subText = sub ? ` 第 ${sub} 步${stepTitle ? `（${short(stepTitle, 24)}）` : ''}` : '';
   switch (type) {
     // 外部设计的交互、舞台里学生的动作和叫老师的事（detail.text 是页面写好的一句）
+    case 'html-error':
+      return `[动作] ${where(a, 'html', { title: false })} 的代码出错了：${short(String(get('text') ?? ''), 400)}`;
+    case 'html-note':
+      return `[页面] ${where(a, 'html', { title: false })}：${short(String(get('text') ?? ''), 400)}`;
     case 'widget':
     case 'widget-error':
     case 'stage-act':
@@ -1548,7 +1564,7 @@ const okOf = (a) => (typeof a?.ok === 'boolean' ? a.ok : typeof a?.detail?.ok ==
 
 // 学生在黑板上的一个动作要不要告诉课堂 Claude。
 // 同一道题的「最终结果」只在看了答案、放弃时说（每次尝试已经说过了）；提问、提示这类不是作答
-const EXT_EVENTS = new Set(['widget', 'widget-error', 'stage-act', 'stage-call', 'stage-note']);
+const EXT_EVENTS = new Set(['html-error', 'html-note', 'widget', 'widget-error', 'stage-act', 'stage-call', 'stage-note']);
 export function reportable(a) {
   if (!a || typeof a !== 'object') return false;
   const type = typeOf(a);

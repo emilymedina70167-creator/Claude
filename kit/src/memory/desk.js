@@ -63,6 +63,7 @@ import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
 import { todayRows, packForBlock, coachPack } from '../project/today.js';
 import { factsDoc } from '../project/facts.js';
+import { interfaceDoc } from '../project/iface.js';
 import { latency } from '../class/ext.js';
 import { renderCheck } from './problemrender.js';
 import { CHARTER } from '../class/charter.js';
@@ -636,7 +637,7 @@ export async function renderDesk(root, meta) {
   // 外部交给页面的后台活（需求 R2，project/jobdesk.js）：首页开着时跑全局的 ext_jobs；进了课堂由课堂那边跑（enterClass）
   const jobs = startJobs({ db, getAI: deskAI, paths: ['ext_jobs'], getData: () => data, getBooks: () => ({ chunks: booksView.chunks?.() || [] }), onChange: () => { lastFacts = ''; writeFacts(toDate(Date.now())); } });
   // 页面能算的事实（project/facts.js）和「学习台里有什么」写进 meta/facts、meta/catalog：外部主 Claude 要就读，变了才写
-  let lastFacts = '', lastCatalog = '';
+  let lastFacts = '', lastCatalog = '', ifaceDone = false;
   function writeFacts(today) {
     if (failed.size) return;
     // 外部交给页面的后台活（project/jobs.js）排了几件、跑完几件
@@ -645,6 +646,12 @@ export async function renderDesk(root, meta) {
     if (fk !== lastFacts) { lastFacts = fk; put('meta', 'facts', { ...f, at: Date.now() }).catch(() => { lastFacts = ''; }); }
     const c = catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount, today });
     if (c !== lastCatalog) { lastCatalog = c; put('meta', 'catalog', { text: c, at: Date.now() }).catch(() => { lastCatalog = ''; }); }
+    // 接口卡（去限制设计：说明书不再发布，主讲第一次读这一份）：只跟着组件库的版本变，库里的和这一版不一样才写
+    if (!ifaceDone) {
+      ifaceDone = true;
+      const doc = interfaceDoc({ version: VERSION });
+      db.doc('meta/interface').get().then((x) => (x.exists && x.data()?.text === doc.text ? null : put('meta', 'interface', { ...doc, at: Date.now() }))).catch(() => { ifaceDone = false; });
+    }
   }
   function writeBriefs(today) {
     if (failed.size) return;

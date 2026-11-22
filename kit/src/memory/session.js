@@ -9,7 +9,7 @@ import { COLLECTIONS, MEMORY_COLLECTIONS, assertWrite, toDate } from './schema.j
 // report：下课时页面算的课后报告（report.js），sessions/{编号}/report/main
 // 学习台里的实时黑板（kind: live）还有 talk、ops、ops_done、lint、meta（黑板现状 meta/now 等）；自学单元（kind: unit）的课件在 unit/main。
 // 学习台自己的 meta（memcheck、ledger）不经过 scopeDb，不会被换走
-export const SESSION_SCOPED = ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit', 'said', 'ext_in', 'ext_out', 'stage_logs', 'check', 'ink'];
+export const SESSION_SCOPED = ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit', 'said', 'ext_in', 'ext_out', 'stage_logs', 'check', 'ink', 'html_state'];
 // 一节课是哪一种：课堂（课堂里的 Claude 讲，页面开）、实时黑板（对话里的 Claude 一块板一块板写，它开）、自学单元（一次写完的课件）
 // 练习（drill）：页面自己挑题、判分，不调用 Claude（drills.js、drillrun.js）
 // 一问一答（talk）：也是课堂里的 Claude 讲，只是写在活板上、一问一答地推进（docs/talk-impl.md）；除了画面，别的和课堂一样

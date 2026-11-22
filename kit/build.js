@@ -60,26 +60,12 @@ await build({
   logLevel: 'info',
 });
 
-// 发布组件库用的瘦身说明（build-split.js）：主说明 + 每个组件一份写法，放在 kit/dist/docs/
+// 说明书不再发布（2026-11-22 去限制设计第 5 步）：主讲读学习台数据库里的接口卡 meta/interface（project/iface.js，页面写），
+// 写错了报错里自己说清楚（组件认的字段和例子：subject.js 的 fieldHint）。以前拆出来发布的 kit/dist/docs/ 不再生成。
+// 仓库里的 CLAUDE-PROJECT.md 照旧是页面里的 Claude 用的组件手册的来源（virtual:component-docs），build-split.js 的拆法留给测试核手册
 {
-  const { splitProject, injectProtocol } = await import('./build-split.js');
-  const { PROTOCOL_DOC, PROJECT_CLASS_DOC } = await import('./src/class/prompt.js');
-  const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
-  const { KIT_URL } = await import('./src/version.js');
-  const out = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'dist', 'docs');
-  const { stageManual } = await import('./src/stage/doc.js');
-  const { WIDGET_DOC } = await import('./src/widgetspec.js');
-  const split = splitProject(readFileSync(projectDoc, 'utf8'), { kitUrl: KIT_URL, extra: { stage: stageManual(), widget: WIDGET_DOC } });
-  // 第四节「黑板指令」填进课堂说明里的同一份写法（外部和页面里的老师读到的是同一份）
-  // 开头一句写明哪些是页面里的老师才有的（外部的课里没有），免得外部照着找
-  const EXT_NOTE = '下面这一段和页面里的老师读到的是同一份写法。外部的课（第五节）里没有的：工具（calc、component_doc、board_read、textbook_read、view_image……）、【课堂摘要】、「分钟没有动静」的提醒、页面叫你重写写错的段（外部的课里写错的报在下一份 ext_out 最前面，自己用 board replace 改）、平台核验模型。';
-  const main = injectProtocol(split.main, `${EXT_NOTE}\n\n${PROTOCOL_DOC}\n\n${PROJECT_CLASS_DOC}`);
-  const { files } = split;
-  rmSync(out, { recursive: true, force: true });
-  mkdirSync(path.join(out, 'components'), { recursive: true });
-  writeFileSync(path.join(out, 'CLAUDE-PROJECT.md'), main);
-  for (const [f, text] of Object.entries(files)) writeFileSync(path.join(out, f), text);
-  console.log(`  kit/dist/docs/CLAUDE-PROJECT.md  ${(Buffer.byteLength(main) / 1024).toFixed(0)}kb，组件写法 ${Object.keys(files).length} 份`);
+  const { rmSync } = await import('node:fs');
+  rmSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'dist', 'docs'), { recursive: true, force: true });
 }
 
 // 读 PDF 用的 pdf.js（教材入库，docs/textbook-plan.md）：不打进 la-kit.js（一百多万字节，平时上课用不着），

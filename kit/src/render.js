@@ -4,6 +4,7 @@ import katex from 'katex';
 import { blocks } from './blocks/index.js';
 import { takeUploadField } from './upload.js';
 import { takeExamFields } from './exam/fields.js';
+import { parseHtmlSeg } from './htmlseg.js';
 import { session } from './session.js';
 import { calcValue, expandCalc, parseLets, letValue } from './exact.js';
 import './algofuncs.js'; // 表达式里的算法函数（next、nextval、faults……）：exact.js 交给它
@@ -177,7 +178,7 @@ const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'stage', 'predict', '
 // 课堂模式里 figure 指令要按 id 找图
 const FIGURES = new Set(['scene', 'graph', 'space', 'matrix', 'sketch', 'derive']);
 // 自己检查文字里 \calc 的组件（它们有自己的 let，变量要连同这些一起算）
-const SELF_CALC = new Set(['answer', 'scene', 'predict', 'matrix', 'let', 'sketch', 'derive', 'practice']);
+const SELF_CALC = new Set(['html', 'answer', 'scene', 'predict', 'matrix', 'let', 'sketch', 'derive', 'practice']);
 
 // 一段里的 let 块先算一遍：正文的公式在组件挂载之前就渲染了，里面的 \calc 要用到这些量。
 // 写错的不管，let 组件挂载时自己再算一次、报出来
@@ -240,12 +241,14 @@ export function renderLesson(src, root) {
   root.querySelectorAll('[data-block]').forEach((el) => {
     const { name, src: raw, near, wrong } = pending[+el.dataset.block];
     // exam: / like:（这道题是哪道真题、对标哪道真题，exam/fields.js）：挂在组件外面，组件不用认这两个字段
-    const ex = takeExamFields(raw);
+    // 自由段 html 的字段只认开头几行（HTML、CSS、JS 里同样的字不当字段），原文整段交给它自己读
+    const hs = name === 'html' ? parseHtmlSeg(raw).fields : null;
+    const ex = hs ? { exam: hs.exam || '', like: hs.like || '', body: raw } : takeExamFields(raw);
     let body = ex.exam || ex.like || ex.body !== raw ? ex.body : raw;
     if (ex.exam) el.dataset.exam = ex.exam;
     if (ex.like) el.dataset.like = ex.like;
     // upload: on / off（upload.js）：这个组件下面放不放截图入口，也挂在组件外面
-    const up = takeUploadField(body);
+    const up = hs ? {} : takeUploadField(body);
     if (up.upload) { el.dataset.upload = up.upload; body = up.body; }
     if (name === '_typo') {
       el.innerHTML = `<div class="block-error"><strong>没有「${escapeHtml(wrong)}」组件</strong>，是不是想写 <code>${near}</code>？<pre>${escapeHtml(body)}</pre></div>`;
@@ -253,7 +256,7 @@ export function renderLesson(src, root) {
       return;
     }
     // 组件 id：作答记录按它对应。课件里写了 id: 就用它，没写就按「小节 + 序号」生成
-    const own = body.match(/^\s*id\s*[:：]\s*([\w\-.~:@+]+)\s*$/m);
+    const own = hs ? (/^[\w\-.~:@+]+$/.test(hs.id || '') ? [null, hs.id] : null) : body.match(/^\s*id\s*[:：]\s*([\w\-.~:@+]+)\s*$/m);
     const prefix = root.closest?.('[data-step]')?.dataset.step || `s${session.stageOf(root)}`;
     el.dataset.bid = own ? own[1] : `${prefix}-${++seq}`;
     el.dataset.t0 = Date.now();
