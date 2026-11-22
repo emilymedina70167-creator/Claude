@@ -54,7 +54,7 @@ test('证据带 aim，不进 tags', () => {
   assert.equal(e.aim, 'a1'); assert.deepEqual(e.tags, ['OS-L3.2.1']);
 });
 test('报告里有每件事的状态；没有要拿下的事的课是空的', () => {
-  assert.equal(REPORT_VERSION, 2);
+  assert.equal(REPORT_VERSION, 3); // 2026-11-22 升到 3：旧课按现在的判法重算（tests/report-recount.test.js）
   const ev = [{ id: 'e1', src: 'record', kind: 'answer', comp: 'q1', ok: true, attempts: 1, aim: 'a1', session: 'c-1', at: 2 }];
   const r = buildReport({ session: { id: 'c-1', date: '2026-11-16', aims: parseAims(body).aims }, evidence: ev, turns: [], steps: [], now: 10 });
   assert.equal(r.aims.find((x) => x.id === 'a1').status, 'solo');

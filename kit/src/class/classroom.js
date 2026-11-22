@@ -16,7 +16,7 @@ import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
 import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
-import { queueDue, applyEdits, keptComponents, componentSources } from './extboard.js';
+import { queueDue, applyEdits, keptComponents, componentSources, missingTarget } from './extboard.js';
 import { errorOfJudged } from '../solvespec.js';
 import { watchTiming } from '../timing.js';
 import { stageBoxState } from '../blocks/stagebox.js';
@@ -1021,6 +1021,10 @@ export async function renderClass(root, meta, desk = null) {
     if (EXT) { extState.coachLines.push(`[页面] 解答题 ${target}：${msg}`); extWrite({ text: '' }); }
     else addTurn({ role: 'system', kind: 'note', text: `[系统] 解答题 ${target}：${msg}` });
   }
+  // 每一段的事实（missingTarget 用）：没画出来的段用它想写的那份原文
+  function segFacts() {
+    return [...segs.values()].filter((x) => !x.preview).map((x) => ({ id: x.id, md: x.pending || x.failed ? (x.tried || x.md) : x.md, failed: !!x.failed, pending: !!x.pending, hidden: !!x.hidden, error: x.error }));
+  }
   function liveBlockIds(exceptSeg) {
     const out = new Map();
     for (const s of segs.values()) {
@@ -1257,14 +1261,15 @@ export async function renderClass(root, meta, desk = null) {
         if (sec) { dropScenesOf(sec); sec.remove(); }
         for (const [id, step] of links) if (link(id).step !== step) link(id).set(step);
         // 记住 id、板、顺序和标题，重写时放回原位（重写多半不再写 title=）
-        if (isNew || seg.pending) { seg.pending = true; seg.title = next.title; seg.held = held; segs.set(seg.id, seg); }
+        if (isNew || seg.pending) { seg.pending = true; seg.title = next.title; seg.held = held; seg.tried = next.md; segs.set(seg.id, seg); }
+        seg.error = errors.map((p) => `${p.kind}：${p.msg}`).join('；');
         failures.push({ key: op.id, id: op.id, title: next.title, errors, isNew: !seg.sec });
         return { op: op.op, id: op.id, ok: false, page: seg.page || undefined, error: errors.map((p) => `${p.kind}：${p.msg}`).join('；') };
       }
       if (seg.sec) { dropScenesOf(seg.sec); seg.sec.remove(); }
       tools.dropMarks(seg.id);
       sec.classList.remove('class-pending');
-      Object.assign(seg, next, { sec, hidden: false, held, failed: false, pending: false, softNotes: soft.length ? soft.map((p) => p.msg) : undefined });
+      Object.assign(seg, next, { sec, hidden: false, held, failed: false, pending: false, error: undefined, tried: undefined, softNotes: soft.length ? soft.map((p) => p.msg) : undefined });
       if (held) sec.hidden = true;
       // 版面：放在 at= 写的地方（replace 不写就留在原处；new / add 不写就找空处）
       if (CANVAS && seg.place !== 'pin') seg.col = colFor(seg, op);
@@ -1330,7 +1335,7 @@ export async function renderClass(root, meta, desk = null) {
     }
     // 预写的「为什么」：学生点着问「为什么」时页面当场显示（ask.js）
     if (op.op === 'why') {
-      if (!segs.has(op.target) && !liveBlockIds().has(op.target)) return { op: 'why', target: op.target, ok: false, error: `黑板上没有 ${op.target}（写段的 id 或组件的 id:）` };
+      if (!segs.has(op.target) && !liveBlockIds().has(op.target)) return { op: 'why', target: op.target, ok: false, error: missingTarget(op.target, segFacts()).replace('预案没挂上', '「为什么」没挂上') };
       if (op.errors?.length) notes.push(`why ${op.target} 里有 ${op.errors.length} 行没读懂：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
       const wseg = segs.has(op.target) ? op.target : liveBlockIds().get(op.target);
       setWhy(op.target, op.items, wseg, opTurn.seq);
@@ -1340,7 +1345,7 @@ export async function renderClass(root, meta, desk = null) {
     if (op.op === 'react') {
       const seg = liveBlockIds().get(op.target);
       const owner = seg ? null : queuedOwner(op.target);
-      if (!seg && !owner) return { op: 'react', target: op.target, ok: false, error: `黑板上没有组件 ${op.target}（target 写组件的 id:，不是段的 id）` };
+      if (!seg && !owner) return { op: 'react', target: op.target, ok: false, error: missingTarget(op.target, segFacts()) };
       if (owner) { pendingTargets.set(String(op.target), { queue: owner.id }); notes.push(`react ${op.target} 挂在预备板 ${owner.id} 的组件上：开板时挂上`); }
       if (op.errors?.length) notes.push(`react ${op.target} 里有 ${op.errors.length} 行没用：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
       const unknown = [...new Set(op.cases.flatMap((c) => c.show || []))].filter((id) => !segs.has(id));
@@ -2018,7 +2023,15 @@ export async function renderClass(root, meta, desk = null) {
       r = execOp({ op: 'new', id: q.id, title: q.title, body: q.md }, failures, notes);
       // 挂在这块预备板里的预案：接到刚画出来的段上（段被改写、撤回时照常作废）
       const live = liveBlockIds();
-      for (const [t, p] of [...pendingTargets]) if (p.queue === q.id) { const rule = reacts.get(t); if (rule && live.has(t)) rule.seg = live.get(t); pendingTargets.delete(t); }
+      // 开了板组件还不在（那一段没画出来）：预案照实说没挂上、撤掉，不悄悄留着一条永远不会接的
+      const lost = [];
+      for (const [t, p] of [...pendingTargets]) if (p.queue === q.id) {
+        const rule = reacts.get(t);
+        if (rule && live.has(t)) rule.seg = live.get(t);
+        else if (rule) { reacts.delete(t); lost.push(missingTarget(t, segFacts())); }
+        pendingTargets.delete(t);
+      }
+      if (lost.length) extState.coachLines.push(`[页面] 预备板 ${q.id} 里的预案没挂上：${lost.join('；')}`);
       addTurn({ role: 'system', kind: 'queue', queue: q.id, text: `[系统] 预备板 ${q.id} 开了（${why}）${r.ok ? '' : `，但没画出来：${r.error}`}` });
       layoutPage(bv.cur);
       refresh();
