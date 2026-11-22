@@ -580,6 +580,9 @@ function nextId(list, letter) {
   return `${letter}${max + 1}`;
 }
 
+// 黑板现状里的一条：外部的课（主讲读 meta/now）不截、换行留着（和 ext_out 的作答一样，useFullText）；页面里的老师照旧压成一行、截短
+const keep = (s, n) => (FULL ? short(s) : oneLine(s, n));
+
 // 作答记录挂在组件下面时，开头的「b7 里的 steps ex-1「…」」就重复了，去掉
 function resultLine(r, blockId) {
   let s = typeof r === 'string' ? r : actionText(r);
@@ -588,29 +591,29 @@ function resultLine(r, blockId) {
     const m = new RegExp(`^[^：\\n]*?(?:^|\\s|的)${escRe(blockId)}(?![\\w\\-.~:@+])(?:「[^」]*」)?\\s*(?:的\\s*)?`).exec(s);
     if (m) s = s.slice(m[0].length).replace(/^[：:，,]\s*/, '');
   }
-  return oneLine(s, 300);
+  return keep(s, 300);
 }
 
 // 一段在黑板现状里的几行：标题、摘要、每个组件和作答（maxResults：每个组件最多列几条作答）
 function segmentLines(seg, { maxResults = Infinity } = {}) {
   const lines = [];
-  const head = `- ${seg.id}${seg.title ? `「${oneLine(seg.title, 40)}」` : ''}`;
+  const head = `- ${seg.id}${seg.title ? `「${keep(seg.title, 40)}」` : ''}`;
   if (seg.hidden) { lines.push(`${head}（已撤回，学生看不到）`); return lines; }
   // 写错了还没显示的段（等重写）、重写也没成的段（学生看到「这段没画出来」）：学生都看不到内容
   if (seg.pending) { lines.push(`${head}（写法错误，还没显示，学生看不到；用 board replace id=${seg.id} 重写）`); return lines; }
   if (seg.failed) { lines.push(`${head}（没画出来，学生只看到「这段没画出来」；可以用 board replace id=${seg.id} 重写）`); return lines; }
   // 藏着的段（add … hold）：画好了，学生还看不到，等预案的 show= 或 board show 揭开
   const held = seg.held ? '（藏着，学生还看不到；预案的 show= 或 board show 揭开）' : '';
-  lines.push(seg.summary ? `${head}${held}：${oneLine(seg.summary, 160)}` : head + held);
+  lines.push(seg.summary ? `${head}${held}：${keep(seg.summary, 160)}` : head + held);
   for (const b of seg.blocks || []) {
     if (!b?.id) continue;
     // 图能用 figure set / play 改的变量（课堂说明被压缩成摘要后，Claude 看不到当初写的命令，靠这里知道）
     const vars = Array.isArray(b.vars) ? b.vars.filter(Boolean).join('、') : String(b.vars ?? '').trim();
-    const name = `${b.kind || '组件'} ${b.id}${vars ? `（变量：${oneLine(vars, 160)}）` : ''}${b.outline ? `（${oneLine(b.outline, 200)}）` : ''}`;
+    const name = `${b.kind || '组件'} ${b.id}${vars ? `（变量：${keep(vars, 160)}）` : ''}${b.outline ? `（${keep(b.outline, 200)}）` : ''}`;
     const res = (b.results || []).map((r) => resultLine(r, b.id)).filter(Boolean).slice(-maxResults);
-    const draft = oneLine(String(b.draft ?? '').trim(), 300);
+    const draft = keep(String(b.draft ?? '').trim(), 300);
     // 还没用掉的预案（board react）：学生作答落在这几种情况时页面自己接
-    const armed = b.react ? `    - 预案（还没用）：${oneLine(String(b.react), 200)}` : '';
+    const armed = b.react ? `    - 预案（还没用）：${keep(String(b.react), 200)}` : '';
     if (res.length) {
       lines.push(`  - ${name} 的作答：`);
       res.forEach((r) => lines.push(`    - ${r}`));
@@ -622,11 +625,11 @@ function segmentLines(seg, { maxResults = Infinity } = {}) {
     }
     if (armed) lines.push(armed);
     // 舞台组件（board stage）：这块舞台现在什么样（页面写的舞台现状，缩进一层）
-    if (b.stage) lines.push('    - 舞台现在：', ...String(b.stage).trim().split('\n').slice(0, 40).map((l) => `      ${l}`));
+    if (b.stage) lines.push('    - 舞台现在：', ...String(b.stage).trim().split('\n').slice(0, FULL ? undefined : 40).map((l) => `      ${l}`));
   }
   // 板上已经圈了、框了什么（board mark）：要撤就 board unmark id=…
   const marks = (Array.isArray(seg.marks) ? seg.marks : []).filter(Boolean);
-  if (marks.length) lines.push(`  - 标注：${marks.map((m) => oneLine(m, 120)).join('；')}`);
+  if (marks.length) lines.push(`  - 标注：${marks.map((m) => keep(m, 120)).join('；')}`);
   return lines;
 }
 
@@ -683,9 +686,9 @@ function pagedStateText(board) {
   lines.push(`黑板现在是第 ${cur} 块板（一共 ${pages.length} 块${view && view !== cur ? `；学生正翻回去看第 ${view} 块` : ''}）。${screen}`);
   const onPage = (n) => list.filter((s) => (s.place || 'board') !== 'pin' && Number(s.page) === n);
   if (curPage) {
-    const title = curPage.title ? `「${oneLine(curPage.title, 40)}」` : '';
+    const title = curPage.title ? `「${keep(curPage.title, 40)}」` : '';
     if (curPage.kind === 'closing') lines.push(`当前板${title}是下课小结；接着讲就用 board new 换一块新板。`);
-    lines.push(curPage.talk ? `当前板${title}最上面写着你上一句话：「${oneLine(curPage.talk, 160)}」（说新的话会把它换掉）。` : `当前板${title}最上面还没有你说的话。`);
+    lines.push(curPage.talk ? `当前板${title}最上面写着你上一句话：「${keep(curPage.talk, 160)}」（说新的话会把它换掉）。` : `当前板${title}最上面还没有你说的话。`);
     const here = onPage(cur);
     if (here.length) {
       lines.push(board.canvas ? '当前板上的段：' : '当前板上的段（从上到下）：');
@@ -713,7 +716,7 @@ function pagedStateText(board) {
     lines.push(board.ext ? '以前的板（学生翻回去才看得到；在上面 mark / figure / edit / replace，页面在板上方提醒学生翻过去）：' : '以前的板（学生翻回去才看得到；上面的图不能再用 figure 动）：');
     for (const p of before) {
       const segsHere = onPage(p.n);
-      const title = p.title ? `「${oneLine(p.title, 40)}」` : '';
+      const title = p.title ? `「${keep(p.title, 40)}」` : '';
       lines.push(`- 第 ${p.n} 块${title}${p.kind === 'closing' ? '（下课小结）' : ''}${segsHere.length ? '' : '：没有段'}`);
       for (const seg of segsHere) lines.push(...segmentLines(seg, { maxResults: 3 }).map((l) => `  ${l}`));
     }
@@ -727,7 +730,7 @@ function pagedStateText(board) {
   }
   // 这节课的量（let 块）：\calc 和组件里都能直接用
   const vars = (Array.isArray(board.vars) ? board.vars : []).filter(Boolean);
-  if (vars.length) lines.push(`这节课定义的量（let 块，\\calc 和组件里都能直接用）：${vars.map((v) => oneLine(v, 200)).join('；')}`);
+  if (vars.length) lines.push(`这节课定义的量（let 块，\\calc 和组件里都能直接用）：${vars.map((v) => keep(v, 200)).join('；')}`);
   lines.push(ids);
   if (board.nextMark) lines.push(`新的标注不写 id 时自动编号（下一个是 ${board.nextMark}）。`);
   // 外部的课：页面替外部记着的（预备板、叫来的助手）

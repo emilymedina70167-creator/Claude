@@ -2064,8 +2064,8 @@ export async function writeReport(db, sid, { doc, turns = null, steps = null, up
   await scopeDb(db, sid).doc('report/main').set(report);
   const patch = { report: { v: REPORT_VERSION, at: report.at, line: reportLine(report), items: report.totals.items, first: report.totals.first, activeMs: report.time.activeMs, ...(doc.status === 'open' ? { provisional: true } : {}) } };
   await update(patch);
-  // 课上点开看过意思的生词收进「要记的」（vocab.js，不调用 Claude）
-  await harvestVocab(db, sid, { doc }).catch((e) => console.warn('生词没收进要记的', sid, e));
+  // 课上点开看过意思的生词只留证据（kind: gloss）：记不记成「要记的」由主讲定（去限制设计：页面不替主讲定记什么）。
+  // 以前在这里自动收进 recall（harvestVocab，留着给以后主讲叫页面做时用）
   // 课上判得了分的题抄进题库（练习用，不调用 Claude）
   if (kindOf(doc) !== 'drill') await harvestSession(db, sid, { doc: { ...doc, ...patch }, report, steps, turns, update: (p) => update({ ...patch, ...p }) }).catch((e) => console.warn('题没抄进题库', sid, e));
   return report;
