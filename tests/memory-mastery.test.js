@@ -32,7 +32,8 @@ test('sureKey 和课后报告里那道题的键对得上；一道题只问一次
   const st = { type: 'stepper', block: 'p1', q: '下一步换哪一页', detail: '第 3 步', ok: false };
   assert.equal(sureKey(st), 'p1|第 3 步');
   const asked = new Set();
-  assert.ok(wantsSure(st, asked));
+  // 2026-11-22 起不再问（FEATURES.confidence 关着）：什么都不问
+  assert.ok(!wantsSure(st, asked));
   asked.add(sureKey(st));
   assert.ok(!wantsSure(st, asked), '问过了');
   assert.ok(!wantsSure({ ...st, detail: '第 4 步', revealed: true }, asked), '看了答案不问');
@@ -48,11 +49,12 @@ test('报告：每道题带 sure，reportText 写出没把握', () => {
   assert.equal(r.totals.unsure, 1);
 });
 
-test('walk：两道干净 → 基础题过；隔够 1 天 → 复现通过 1；失手 → 掉了；没把握不算干净', () => {
+test('walk：两道干净 → 基础题过；隔够 1 天 → 复现通过 1；失手 → 掉了；自己点的有没有把握不算数（2026-11-22）', () => {
   const it = (key, outcome, d, s = null) => ({ key, outcome, first: at(d), sure: s, evidence: [`ev-${key}-${d}`] });
   assert.equal(walk([it('a', 'first', 0)]).state, '未学');
   assert.equal(walk([it('a', 'first', 0), it('a', 'first', 0)]).state, '未学', '同一道题两遍不算两道');
-  assert.equal(walk([it('a', 'first', 0), it('b', 'first', 0, false)]).state, '未学', '没把握不算');
+  // 2026-11-22 我说：掌握要看真正做题的事实，不靠我一句「有没有把握」——以前标了没把握的照样按做对算
+  assert.equal(walk([it('a', 'first', 0), it('b', 'first', 0, false)]).state, '基础题过', '自己点的没把握不算数');
   const b = walk([it('a', 'first', 0), it('b', 'first', 0)]);
   assert.equal(b.state, '基础题过');
   assert.deepEqual(b.basis, ['ev-a-0', 'ev-b-0']);
@@ -92,7 +94,7 @@ test('masteryProposals：按块和知识点出提议；记忆里已经定下的�
   ];
   const ps = masteryProposals(mem);
   const byT = Object.fromEntries(ps.map((p) => [p.target, p]));
-  assert.equal(byT['L2.2.1'].data.state, '基础题过', '块：q1、q2 干净（q3 没把握）');
+  assert.equal(byT['L2.2.1'].data.state, '基础题过', '块：q1、q2、q3 都干净（q3 点的没把握不算数）');
   assert.equal(byT['L2.2.1#tr'].data.state, '基础题过');
   assert.equal(byT['L2.2.1'].op, 'add');
   assert.ok(byT['L2.2.1'].reason.includes('页面按证据算的'));

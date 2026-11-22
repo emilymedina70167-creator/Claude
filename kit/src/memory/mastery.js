@@ -29,7 +29,8 @@ export const MASTERY_RULE = {
 /** 练一练里做的原题（题库编号 d-…）：做对不算数，做错照样算失手。
  * 教研室出的新题（d-lab-…）第一次做的那节课不算原题（it.fresh，masteryProposals 标的）：学生没见过，正是复现要的新题；以后再做就是原题了 */
 export const isOriginal = (it) => (/^d-/.test(String(it?.comp || '')) && !it?.fresh) || !!it?.renumbered; // 复测退回换了数的模板题（rule-rev-2）也是原题
-const CLEAN = (it) => it.outcome === 'first' && it.sure !== false && !isOriginal(it);
+// 干净 = 一上来就对、不是原题。自己点的「没把握」不算数（2026-11-22：看做题的事实，不靠一句话）
+const CLEAN = (it) => it.outcome === 'first' && !isOriginal(it);
 // 改对了（第一次错）也算失手：考试只有一次机会
 // 试出来的选择题（report.js 的 guess）outcome 是 ok，本来就算失手
 const FAIL = (it) => ['wrong', 'giveup', 'revealed', 'ok'].includes(it.outcome);

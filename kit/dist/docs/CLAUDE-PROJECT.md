@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-21e**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-22**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -829,7 +829,7 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 - **`sessions`**：编号 `c-20261027-1`（日期 - 当天第几节，三种课共用一套编号）。`kind`：`class` 课堂（黑板课，不写 kind 就是它；页面开，2026-11-16 起新开的课都是它。这种课有 `aims`：这节课要拿下的 2～5 件事 `[{ id, can, proof?, exam? }]`，老师课上定、页面按我的作答算每件到了没有，状态在课后报告的 `aims` 里；下课后页面留几道隔天做的题 `holds: { ids, at, exam, made }`，我隔天在首页「验上次学的」做完以后记 `later: { n, right, days, far }`——这三个字段都是页面写的，你不要改）、`stage` 舞台课（2026-11-06 到 11-15 新开的课是它：用画面讲课，每一轮的 `class_turns` 带 `log`，作答的组件 id 是 `S5` 这种；不再新开）和 `talk` 一问一答（更早的课，不再新开）、`ext` 外部的课（外部主 Claude 开、讲，第五节；`sessions/{编号}/ext_in`、`ext_out`）、`live` 实时黑板、`unit` 自学单元（停用了，以前的能翻看）。`date`、`block`（这节课的块）、`space`、`title`、`status`（`open` 还在上 / `closed` 下课了、用完了）、`startedAt`、`endedAt`、`pack`（开课时资料包的 `unit`、`goal`）、`verify`（核验了几轮、作废了几轮）、`summary`（下课小结那条观察的 id）、`usage`（这节课调用 Claude 花了多少：每一轮的 `cost` 在 `class_turns` 上）、`report`（课后报告的要点：`line` 一行字、`items` 做了几题、`first` 一次对几题、`at`、`v`、`provisional`）、`skills`（知识点归类，第七节「课后报告」后面）。这节课的东西都在 `sessions/{编号}/` 下面（课堂：`steps`、`class_turns`、`class_pages`、`pack`；实时黑板：`steps`、`talk`、`ops`、`ops_done`、`meta`、`lint`、`uploads`；自学单元：`unit`；三种都有课后报告 `report`）。
 - **`evidence`**：编号 `ev-…`，页面自动编。每条都有 `session`、`block`（这节课的块）、`tags`（知识点标签：`["L2.2.1", "L2.2.1#tr"]`，后一个来自课堂里的 Claude 给那一段标的 `point=`）、`kind`、`src`、`at`：
   - `src: "record"`：一次作答。`kind` 是组件（`answer`、`practice`、`quiz`、`predict`、`steps`、`conjecture`……），`comp` 是组件的 id，`step` 是黑板上的段，`q` 题面，`text` / `value` 我写的、选的，`ok` 程序判的对错（判不了是 null），`attempts` 第几次，`ms` 用时（课堂里：这题出现在我屏幕上到第一次交，切走、锁屏、翻到别的板、滚出屏幕的时间不算），`msTotal`（到这一次交，同样扣掉不在屏幕上的），`giveup` 想不出来，`final` 这道题的最终结果，`images` 手写原图，`transcript` 转写。解答题（`kind: "solve"`）：交的那一条 `value` 是打的字、`photos` 是照片的 asset id；判了的那一条 `judged: true`、`by`（`ext` / `helper` / `teacher`）、`steps: [{ id, ok: true | false | "missing" | null, unsure, why, tag }]`（`unsure: true`：判的人拿不准，待核，不进错题本）。
-  - `src: "event"`：一个动作。`kind` 是 `reveal`（揭开一步）、`giveup`、`drag`（拖动，`detail` 里是变量、松手时的值、`from` 从哪拖起、`path` 中途停过 0.5 秒以上的点（最多 8 个）、`ms` 拖了多久）、`guess-drag`（`predict` 里拖猜测点，还没点「确定」，同样带过程）、`sure`（我点的「有把握 / 没把握」，`detail.sure` 是 true / false，`detail.key` 是课后报告里那道题的键，`detail.ok` 那题判的对错）、`open`（打开）、`end`（下课）等。
+  - `src: "event"`：一个动作。`kind` 是 `reveal`（揭开一步）、`giveup`、`drag`（拖动，`detail` 里是变量、松手时的值、`from` 从哪拖起、`path` 中途停过 0.5 秒以上的点（最多 8 个）、`ms` 拖了多久）、`guess-drag`（`predict` 里拖猜测点，还没点「确定」，同样带过程）、`sure`（我点的「有把握 / 没把握」，2026-11-22 起页面不再问，只在以前的记录里有；`detail.sure` 是 true / false，`detail.key` 是课后报告里那道题的键，`detail.ok` 那题判的对错）、`open`（打开）、`end`（下课）等。
   - `src: "say"`：我在课堂输入框里说的话（`kind: "say"`，`text`），在实时黑板上「交截图」交的图和那句说明，附的图（`kind: "photo"`，`images` 是 asset id，用 `Artifact` 工具 `action: "read"`、`path` 填 id 看原图；`ink: 2` 表示最后 2 张是我在黑板上用 Pencil 写的板书导出的图）。`turn` 是课堂第几轮。
   - `src: "draft"`（`kind: "draft"`）：点「下课」那一刻我在黑板上写了、还没交的草稿：`comp` 组件 id、`compKind` 组件、`step` 段、`label` 第几步、`text` 写着什么。
   - `src: "manual"`（`kind: "manual"`）：我在学习台首页「补记」的，学习台外面做的（纸上、Notability、和你的对话里）：`text`、`images`（截图）、`block`（挂到哪一块，可能没有）、`verdict`：`对` / `错` / `不会`（没标就没有；`ok` 跟着是 true / false / null，`不会` 还有 `giveup: true`）。没有 `session`；下一节课的课后报告的 `manual` 里会列出来。
@@ -843,7 +843,7 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 
 - `time`：`wallMs` 开课到下课、`activeMs` 去掉超过 10 分钟没动静的空档后的时长、`gaps` 几段空档。
 - `totals`：`items` 做了几题，`first` 一次对、`ok` 改了几次后对、`wrong` 最后还错、`giveup` 想不出来、`revealed` 看了答案、`open` 程序判不了对错（猜想、自由写的）；`says` 说了几句、`photos` 附图几次、`drafts` 没交的草稿、`turns` 几轮。
-- `items`：每道题一条（一个组件里分步的按步分开）：`comp`、`kind`、`q` 题面（截短）、`seg` 段、`page` 第几块板、`segTitle`、`tags`、`seq` 每次的对错（`✗✗✓`）、`attempts`、`outcome`（上面那几种）、`sure`（我点的有没有把握：true / false / null 没点；`totals.unsure` 是标了没把握的题数。**错了但有把握**多半是误解，**对了但没把握**不能算过）、`ms` 用时、`last` 最后写的、`expected`、`images` 手写原图、`turn`、`evidence`（这道题的证据 id，看原文用）。
+- `items`：每道题一条（一个组件里分步的按步分开）：`comp`、`kind`、`q` 题面（截短）、`seg` 段、`page` 第几块板、`segTitle`、`tags`、`seq` 每次的对错（`✗✗✓`）、`attempts`、`outcome`（上面那几种）、`sure`（我点的有没有把握：true / false / null 没点；2026-11-22 起不再问，新的课都是 null，掌握不看它；`totals.unsure` 是标了没把握的题数。**错了但有把握**多半是误解，**对了但没把握**不能算过）、`ms` 用时、`last` 最后写的、`expected`、`images` 手写原图、`turn`、`evidence`（这道题的证据 id，看原文用）。
 - `byTag`：按块、按知识点（`L2.2.1#tr`）汇总，字段同 `totals`，`ms` 是总用时。
 - `unfinished`：错了还没改对、也没看答案的题（`items` 的 `key`）；`drafts`：没交的草稿；`says`：我说的话（原文）和附的图；`manual`：上一节下课以后我补记的。
 - `notes`：课堂里的 Claude 这节课的观察、提议、小结（id、`kind`、开头一段）；`summary` 小结的 id；`slips` 它记的失误。
@@ -883,7 +883,7 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 
 - `status`：`open` 等我确认、`done` 写进去了（`doneAt`；改的写在 `applied`：每个字段的 `from`、`to`；我在「改」里改过的在 `edited`）、`rejected` 我点了「不要」、`undone` 我撤销了（`undoneAt`）、`held` 守卫先暂存了（引的原话、轮次对不上这类，`guard` 里写着看出了什么；我在「管理 → 自检 → 守卫」里放行或者不要）。被守卫拒收、暂存的条目不会写进记忆；写进去但挂了提醒的，那一条上有 `guard` 字段（`verdict: flag`、`checks`）。带 `by: "lab"`、`backfill: true` 的是**云端教研室**事后补写的（每晚在云端照学习台出的单子 `lab_brief` 做，回答进 `lab_inbox`，学习台过了守卫才并进来，回执在 `lab_inbox_log`）：`lab_brief`、`lab_inbox`、`lab_inbox_log` 由学习台和教研室管，你不要写。
 - **撤销**：写进去 7 天内我能撤。状态类（弱点、复现组、位置、偏好）退回旧值（也记一条 `by: "me"` 的 log）；新加的偏好、弱点、复现组改成 `status: "void"`（复现组的 `status` 还有 `active` / `paused` 我暂停了 / `done` 停掉了 / `void`）。历史类（错题、失误、观察）原条不动，追加一条作废的更正：`corrects` 指向原条、`void: true`、`note` 写为什么。**读记忆时 `void` 的、被作废更正指向的都当没有**；错题有一条 `resolved: true` 的更正指向它，就是我标了已解决。
-- **掌握的提议（`kind: "mastery"`、`by: "page"`）**：页面按证据算的（不调用 Claude）：两道不同的题一次对、没标没把握 → 基础题过；之后隔够 1 / 3 / 7 / 14 / 30 天又一次对（新题；练一练里的原题做对不算）→ 复现通过到那一档；过了以后第一次就错、想不出来、看了答案 → 掉了。从记忆里现有的状态出发，只看那以后的证据。算出来直接写进 `mastery`（log 的 `by` 是 `page`，`ref` 是改动单）。你写的掌握状态照旧直接写，页面以你写的为起点往后算。
+- **掌握的提议（`kind: "mastery"`、`by: "page"`）**：页面按证据算的（不调用 Claude）：两道不同的题一次对 → 基础题过；之后隔够 1 / 3 / 7 / 14 / 30 天又一次对（新题；练一练里的原题做对不算）→ 复现通过到那一档；过了以后第一次就错、想不出来、看了答案 → 掉了。从记忆里现有的状态出发，只看那以后的证据。算出来直接写进 `mastery`（log 的 `by` 是 `page`，`ref` 是改动单）。你写的掌握状态照旧直接写，页面以你写的为起点往后算。
 - `status: "open"` 的是以前留下的（那时还要我确认）：学习台打开时页面会直接写进去。
 
 ### 备份和恢复

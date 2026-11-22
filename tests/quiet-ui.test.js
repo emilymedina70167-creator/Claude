@@ -26,3 +26,17 @@ test('源码里没有教人怎么操作的小字', () => {
   }
   assert.deepEqual(hits, []);
 });
+
+// 2026-11-22 我说「有把握吗」没用：掌握看做题的事实，不靠我一句话
+test('作答后不问有没有把握；检验交题不用先点把握', async () => {
+  assert.equal(FEATURES.confidence, false);
+  const shell = readFileSync('kit/src/check/shell.js', 'utf8').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+  assert.doesNotMatch(shell, /有多大把握|先点有多大把握|ck-sure-btn/);
+});
+
+// 2026-11-22 我说「这节课要拿下的事」固定在不影响看东西的地方，别一直跟着：不吸顶，跟着板顶滚走
+test('「这节课要拿下的」那一条不吸顶', () => {
+  const css = readFileSync('kit/src/class/class.css', 'utf8');
+  const rule = /\.class-aims \{([^}]*)\}/.exec(css)?.[1] || '';
+  assert.doesNotMatch(rule, /sticky|fixed/);
+});

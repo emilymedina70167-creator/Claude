@@ -225,7 +225,7 @@ test('分步例题的一步最多算带着做到（路是老师铺好的）；�
   const step = (outcome, first, more = {}) => ({ aim: 'a1', kind: 'steps', outcome, first, ...more });
   assert.equal(aimStatus(a, [step('first', 1), step('giveup', 2, { giveup: true })]), 'miss');
   assert.equal(aimStatus(a, [step('first', 1), step('first', 2)]), 'led');
-  assert.equal(aimStatus(a, [step('first', 1), { aim: 'a1', kind: 'quiz', outcome: 'first', first: 2, options: 4, sure: true }]), 'solo');
+  assert.equal(aimStatus(a, [step('first', 1), { aim: 'a1', kind: 'quiz', outcome: 'first', first: 2, options: 4 }]), 'solo');
   assert.equal(aimStatus(a, [step('first', 1), { aim: 'a1', kind: 'answer', outcome: 'first', first: 2 }]), 'solo');
   // 例题的一步失手在后：前面那道独立做对的也不算了
   assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'quiz', outcome: 'first', first: 1 }, step('wrong', 2)]), 'miss');
@@ -233,25 +233,26 @@ test('分步例题的一步最多算带着做到（路是老师铺好的）；�
   assert.deepEqual(aimsSummary([a], [step('first', 1), step('first', 2)]).map((x) => [x.status, x.n]), [['led', 2]]);
 });
 
-test('一次对但学生标了没把握：不算独立，算带着做到', () => {
+// 2026-11-22 我说：「有没有把握」是我自己说的，不是事实，不拿它算——以前标的照样不算数
+test('学生自己点的有没有把握不影响：一次对就是独立做到', () => {
   const aim = { id: 'a1', can: '手算 LRU 的缺页次数' };
-  assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: false }]), 'led');
+  assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: false }]), 'solo');
   assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: true }]), 'solo');
   assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: null }]), 'solo');
 });
 
-test('够得上独立的只有学生自己写出、做出答案的题；选择题要至少 4 个选项而且点了有把握', () => {
+test('够得上独立的只有学生自己写出、做出答案的题；选择题要至少 4 个选项（或多选）', () => {
   const a = { id: 'a1', can: 'x' };
   const one = (more) => aimStatus(a, [{ aim: 'a1', outcome: 'first', ...more }]);
   // 没写种类、没列进白名单的种类：一次对也最多带着做到
   assert.equal(one({}), 'led');
   assert.equal(one({ kind: 'steps' }), 'led');
   for (const kind of ['answer', 'practice', 'code', 'derive', 'cloze', 'translate', 'errfind', 'parse', 'chunk', 'link', 'drill', 'findbug', 'recognize']) assert.equal(one({ kind }), 'solo', kind);
-  // 选择题：点一下就对不够
-  assert.equal(one({ kind: 'quiz', options: 4 }), 'led');
-  assert.equal(one({ kind: 'quiz', options: 2, sure: true }), 'led');
-  assert.equal(one({ kind: 'quiz', options: 4, sure: true }), 'solo');
-  assert.equal(one({ kind: 'quiz', multi: true, sure: true }), 'solo');
+  // 选择题：两三个选项一次对不够（蒙对的可能大）；四个以上、多选一次对算（不看自己点的有没有把握）
+  assert.equal(one({ kind: 'quiz', options: 2 }), 'led');
+  assert.equal(one({ kind: 'quiz', options: 3 }), 'led');
+  assert.equal(one({ kind: 'quiz', options: 4 }), 'solo');
+  assert.equal(one({ kind: 'quiz', multi: true }), 'solo');
   // 演示组件：走到某一步问一下是带着走；只给输入写出结果、自己填表是自己做
   assert.equal(one({ kind: 'stepper', key: 'pg1|第 4 步' }), 'led');
   assert.equal(one({ kind: 'stepper', key: 'pg1|引用串 7 0 1 2 0 3，3 个页框，FIFO 缺页几次' }), 'solo');
@@ -288,7 +289,8 @@ test('走真的管道：选择题的选项数带到报告的题上；scene 不�
   const q = r.items.find((it) => it.comp === 'q1');
   assert.equal(q.options, 4);
   assert.equal(q.kind, 'quiz');
-  assert.deepEqual(r.aims.map((x) => [x.id, x.status]), [['a1', 'led'], ['a2', 'none']]);
+  // 四个选项一次对：算自己做到（2026-11-22 起不再看自己点的有没有把握）
+  assert.deepEqual(r.aims.map((x) => [x.id, x.status]), [['a1', 'solo'], ['a2', 'none']]);
 });
 test('带竖线的数学不被切开；编号列表、加粗的编号也认', () => {
   let r = parseAims('a1 | 算条件概率 P(A | B) | 独立做一道');

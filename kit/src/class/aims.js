@@ -122,11 +122,12 @@ const SOLO_KINDS = new Set(['answer', 'practice', 'code', 'derive', 'cloze', 'tr
 const stepperAsk = (it) => /\|第 \d+ 步$/.test(String(it.key || ''));
 // 选择题点一下就对，蒙的成分不小（设计 6.8：封闭的、点一下一次对是没产生信息的停）：
 // 至少 4 个选项（或者多选），而且学生自己点了「有把握」，才算独立
-const quizSolo = (it) => it.sure === true && (it.multi === true || Number(it.options) >= 4);
+// 选择题：四个以上选项或多选、一次对才算自己做到（两三个选项蒙对的可能大）。不看自己点的有没有把握（2026-11-22）
+const quizSolo = (it) => it.multi === true || Number(it.options) >= 4;
 const soloKind = (it) => { const k = kindOf(it); return SOLO_KINDS.has(k) || (k === 'stepper' && !stepperAsk(it)) || (k === 'quiz' && quizSolo(it)); };
 // 独立：够得上的种类，第一次作答就对，没揭开过、没点想不出来，学生也没标「没把握」
 // （根本规则：学生说没把握按没会处理；掌握那边没把握的一次对也不算，mastery.js）
-const solo = (it) => it.outcome === 'first' && !it.revealed && !it.giveup && !(it.reveals > 0) && it.sure !== false && soloKind(it);
+const solo = (it) => it.outcome === 'first' && !it.revealed && !it.giveup && !(it.reveals > 0) && soloKind(it);
 
 // 按出结果的时间排（题上的 end：最后一条证据的时间；没有就用 first）。用开始的时间会排错：
 // 一道题先错一下、学生去做了另一道、再回来看了答案，这道失手是最后才定下来的。

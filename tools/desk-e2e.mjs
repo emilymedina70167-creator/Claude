@@ -138,7 +138,8 @@ async function plant(t, docs) {
 }
 // 计划 4：408、英语的检验样板（devsample.js；?dev 的暗号「测试:检验408」「测试:检验英语」写的就是这两条）放进一节外部的课，做完一遍
 const ckCard = (t) => t.page.evaluate(() => { const c = document.querySelector('.ck-teach, .ck-done, .ck-probe'); return c ? (c.classList.contains('ck-teach') ? 'teach' : c.classList.contains('ck-done') ? 'done' : c.dataset.probe) : ''; });
-const ckSure = (t) => t.page.click('.ck-sure-btn[data-sure="sure"]');
+// 2026-11-22 起检验不问「有多大把握」：交之前不用点（留着这个名字，调用的地方不用改）
+const ckSure = async () => {};
 async function ckSubmit(t) { await sleep(500); await t.page.click('.ck-submit'); }
 async function ckType(t, sel, text) { const tab = await t.page.$('.ck-card .ck-tab[data-tab="type"]'); if (tab) await tab.click(); await t.page.fill(sel, text); }
 async function ckOpen(t, sid, today, block, space, text) {
@@ -1231,7 +1232,7 @@ const SUITES = {
     await t.page.click('.ck-start');
     check(await t.page.evaluate(() => document.body.classList.contains('is-checking') && getComputedStyle(document.querySelector('.class-pages')).display === 'none'), '开始以后板书没收起来（合书）');
     const fill = async (vals) => { const cells = await t.page.$$('.ck-card .mi-cell'); for (let i = 0; i < vals.length; i++) await cells[i].fill(String(vals[i])); };
-    const sure = (k = 'sure') => t.page.click(`.ck-sure-btn[data-sure="${k}"]`);
+    const sure = async () => {}; // 不问「有多大把握」了（2026-11-22）
     const card = () => t.page.evaluate(() => { const c = document.querySelector('.ck-teach, .ck-done, .ck-probe'); return c ? (c.classList.contains('ck-teach') ? 'teach' : c.classList.contains('ck-done') ? 'done' : c.dataset.probe) : ''; });
     // p1 构造：两次都写成相等的，第三次想不出来（retry 用完 → 未吸收、记错题）
     for (let i = 0; i < 2; i++) {

@@ -343,7 +343,8 @@ body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 96px) - 1
 .cb-font-n { min-width: 3.2em; text-align: center; color: var(--muted); font-size: 14px; }
 
 /* —— 板上方的一条：这节课要拿下的事（class/aims.js）。收着一行，点开是清单；状态是页面按作答算的 —— */
-.class-aims { position: sticky; top: max(8px, env(safe-area-inset-top, 0px)); z-index: 6; margin: 0 0 10px; border-radius: 14px; background: rgb(var(--shade-rgb) / 0.22); font-family: var(--sans); }
+/* 这节课要拿下的事：在板顶上，跟着板一起滚走，不吸在屏幕上挡着看东西（2026-11-22 我说的） */
+.class-aims { position: relative; z-index: 1; margin: 0 0 10px; border-radius: 14px; background: rgb(var(--shade-rgb) / 0.22); font-family: var(--sans); }
 .class-aims[hidden] { display: none; }
 .class-aims-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; padding: 8px 14px; border: 0; background: none; color: var(--body); font: 500 15px/1.3 var(--sans); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .class-aims-chev { flex: none; width: 9px; height: 9px; border-right: 1.6px solid rgb(var(--chalk-rgb) / 0.5); border-bottom: 1.6px solid rgb(var(--chalk-rgb) / 0.5); transform: rotate(-45deg); transition: transform .2s ease; }

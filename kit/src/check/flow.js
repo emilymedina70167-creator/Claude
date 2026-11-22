@@ -105,7 +105,8 @@ function canSkip(s, block) {
   const b = s.check.blocks.find((x) => x.block === block);
   return b.must.every((id) => {
     const r = s.results[id];
-    return r && r.final === 'pass' && r.sure === 'sure' && !s.judging[id] && (!b.fast || (Number(r.ms) || 0) <= b.fast);
+    // 可选题跳不跳只看做题的事实：必做的都过了、够快。不再问「有多大把握」（2026-11-22）；以前点过「大概 / 蒙的」的照旧不跳
+    return r && r.final === 'pass' && r.sure !== 'maybe' && r.sure !== 'guess' && !s.judging[id] && (!b.fast || (Number(r.ms) || 0) <= b.fast);
   });
 }
 

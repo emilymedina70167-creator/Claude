@@ -54,9 +54,9 @@ test('掌握参考：一块有了检验以后只看检验（练习错了也不�
   // 只有练习的块：照旧（两道一次对 → 基础题过）
   const p11 = props.find((p) => p.target === 'L2.1.1');
   assert.equal((p11.patch || p11.data).state, '基础题过');
-  // 蒙的不算干净
+  // 以前检验里点过「蒙的」：自己说的一句话不算数（2026-11-22），做对了就是做对了
   const guessed = masteryProposals({ ...mem, evidence: [ck('p3', 'pass', { sure: 'guess' }), ck('p4', 'pass', { sure: 'guess', at: DAY(18, 12) })] });
-  assert.ok(!guessed.find((p) => p.target === 'L2.1.4' && (p.patch || p.data).state === '基础题过'));
+  assert.ok(guessed.find((p) => p.target === 'L2.1.4' && (p.patch || p.data).state === '基础题过'));
   // retry 不算一道题
   const retry = masteryProposals({ ...mem, evidence: [ck('p3', 'pass'), ck('p3a', 'pass', { retryOf: 'p3', at: DAY(18, 12) })] });
   assert.ok(!retry.find((p) => p.target === 'L2.1.4' && (p.patch || p.data).state === '基础题过'));

@@ -17,7 +17,6 @@ import { sweepInk } from './inkstore.js';
 import { flushIds } from './record.js';
 import { mdToHtml, escapeHtml } from '../blocks/common.js';
 
-const SURE = [['sure', '很确定'], ['maybe', '大概'], ['guess', '蒙的']];
 const FACET_TEXT = { ok: '✓', fixed: '补上', fail: '✗', pending: '待核' };
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
@@ -136,7 +135,7 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     main.innerHTML = `<div class="ck-card ck-intro">
       <h3>检验${check.title ? `：${escapeHtml(check.title)}` : ''}</h3>
       <p class="ck-sub">${check.blocks.length} 块 · ${must} 道必做${check.limit ? ` · 限时 ${Math.round(check.limit / 60000)} 分钟` : ''}</p>
-      <ul class="ck-rules"><li>合书：开始以后板书收起来，做完放回来。</li><li>第一次作答算数；没有提示、没有「看答案」；想不出来可以点「想不出来」。</li><li>每道题交之前点一下有多大把握。</li><li>错了会指出错在哪、补一两句，再出一道同类的让你自己做。</li></ul>
+      <ul class="ck-rules"><li>合书：开始以后板书收起来，做完放回来。</li><li>第一次作答算数；没有提示、没有「看答案」；想不出来可以点「想不出来」。</li><li>错了会指出错在哪、补一两句，再出一道同类的让你自己做。</li></ul>
       <button type="button" class="btn btn-primary ck-start">开始</button></div>`;
     main.querySelector('.ck-start').addEventListener('click', () => dispatch({ type: 'start' }));
   }
@@ -156,18 +155,10 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     const card = document.createElement('div');
     card.className = `ck-card ck-probe-card${v.kind === 'retry' ? ' is-retry' : ''}`;
     card.innerHTML = `<div class="ck-tag">${v.kind === 'retry' ? '同类的一道' : v.kind === 'optional' ? '可选' : '必做'} · ${escapeHtml(v.block || '')}</div><div class="ck-body"></div>
-      <div class="ck-sure" role="group" aria-label="有多大把握"><span class="ck-sure-q">有多大把握？</span>${SURE.map(([k, t]) => `<button type="button" class="btn ck-sure-btn" data-sure="${k}">${t}</button>`).join('')}</div>
       <div class="ck-actions"><button type="button" class="btn btn-primary ck-submit" disabled>交</button><button type="button" class="btn ck-giveup">想不出来</button><span class="ck-warn" aria-live="polite"></span></div>`;
     main.appendChild(card);
     pv = probeView(card.querySelector('.ck-body'), probe, { onChange: syncSubmit, inkKey: inkKey(v.id) || '', pause: check.pause, base: vars });
     timer.set(v.id, visible());
-    card.querySelector('.ck-sure').addEventListener('click', (e) => {
-      const b = e.target.closest('.ck-sure-btn');
-      if (!b) return;
-      sure = b.dataset.sure;
-      card.querySelectorAll('.ck-sure-btn').forEach((x) => x.classList.toggle('is-on', x === b));
-      syncSubmit();
-    });
     card.querySelector('.ck-submit').addEventListener('click', () => { if (!tooSoon(shownAt, now())) submit(v.id); });
     card.querySelector('.ck-giveup').addEventListener('click', () => {
       if (tooSoon(shownAt, now()) || submitting || state.results[v.id]?.submitted) return;
@@ -185,12 +176,13 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     const warn = main.querySelector('.ck-warn');
     const problem = pv.problem();
     const empty = pv.empty();
-    btn.disabled = !sure || empty || !!problem;
-    warn.textContent = problem || (empty ? '' : !sure ? '先点有多大把握' : '');
+    // 2026-11-22 我说「有多大把握」是我自己说的、不是事实：不再问，写了就能交
+    btn.disabled = empty || !!problem;
+    warn.textContent = problem || '';
   }
 
   async function submit(id) {
-    if (submitting || !pv || pv.problem() || pv.empty() || !sure) { syncSubmit(); return; }
+    if (submitting || !pv || pv.problem() || pv.empty()) { syncSubmit(); return; }
     submitting = true;
     const probe = check.probes[id];
     const sureNow = sure;
