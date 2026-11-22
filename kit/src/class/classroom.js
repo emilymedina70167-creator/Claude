@@ -15,6 +15,7 @@ import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
+import { createWaker } from './wake.js';
 import { pendingIns, inProblems, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
 import { queueDue, applyEdits, keptComponents, componentSources, missingTarget } from './extboard.js';
 import { errorOfJudged } from '../solvespec.js';
@@ -172,6 +173,9 @@ export async function renderClass(root, meta, desk = null) {
   useFullText(!!desk?.ext);
   // 截图入口（upload.js，需求 R11）：外部的课默认不放，外部写 board set upload=on 才放。翻看（只读）外部的课也一样
   if (desk?.ext) session.upload = desk.ext.upload === 'on';
+  // 叫醒主讲（wake.js）：主讲在这节课上写了 wake: 'comments' 才开；门铃在学生的手势里按
+  let waker = null;
+  const ring = (why) => { if (EXT && waker) waker.ring(why); };
   // 舞台组件（board stage）里外部预写的「没做到」「走偏」（.wrong / .miss）：外部的课整节课都收
   session.extPrewrite = !!desk?.ext;
   // board stage 刷新前的样子（dr-trail-fix 3）：舞台的 log 存在 stage_logs/{段 id}（学习台里换到 sessions/{编号}/ 下面），再画时放回
@@ -298,7 +302,7 @@ export async function renderClass(root, meta, desk = null) {
     images: teacher.images,
     tag: mock ? `${MODEL_TAG} · 模拟老师` : MODEL_TAG,
     stuck: { on: stuckOn, onChange: (v) => { stuckOn = v; lastActive = Date.now(); try { localStorage.setItem(stuckKey, v ? 'on' : 'off'); } catch { /* 无痕模式 */ } } },
-    onSend: ({ text, images }) => { bv.go(bv.cur); enqueueStudent(text, images, true); },
+    onSend: ({ text, images }) => { bv.go(bv.cur); if (String(text || '').trim() || images?.length) ring(String(text || '').trim() ? '学生说了话' : '学生附了图'); enqueueStudent(text, images, true); },
     inkPending: () => hasFreshInk(),
     // 一问一答：活板上试过的（拨、拖、折）还没发：输入框空着也能发，发送键写「就这样 →」
     actionsPending: null,
@@ -1728,6 +1732,7 @@ export async function renderClass(root, meta, desk = null) {
     // 外部叫来的助手（board claude）：学生在那一题上出了外部写的那件事
     if (EXT) helperOnAction(a);
     // 外部主讲的课：作答都写进 ext_out（1.5 秒合并），外部一读就是最新的；页面里的老师照旧「later 的跟着下一条说」
+    if (EXT && trig === 'now' && reportable(a)) ring('学生交了作答');
     if (trig === 'later' && !EXT) return; // 只是往下翻、拖一拖：跟着下一条一起说
     queue.triggered = true;
     schedule(trig === 'now' && !EXT);
@@ -1864,6 +1869,12 @@ export async function renderClass(root, meta, desk = null) {
     const sight = sightNow();
     const sig = sightSig(sight);
     if (sig !== (extState.sightTold || '')) { extState.sightTold = sig; if (sight.length) lines.push(boardSightText(sight)); }
+    // 门铃（wake.js）：这节课开了 wake 却按不响（视图不支持、学生没同意、出错）：照实报一次，变了再报
+    if (waker) {
+      const w = waker.state();
+      const bad = w.error ? `出错：${w.error}` : w.cm && w.status !== 'available' ? `状态：${w.status}` : !w.cm && w.status !== '准备中' ? w.status : '';
+      if (bad !== (extState.wakeTold || '')) { extState.wakeTold = bad; if (bad) lines.push(`[页面] 学生作答时叫醒你的门铃（评论发给 Claude）按不响，${bad}；学生要在 Safari 里打开学习台才行`); }
+    }
     return lines;
   }
   // 页面正在做别的（写 ext_out、助教、上一条 ext_in）：等它空下来再做，不跳过——exclusive 碰上 busy 会直接不做
@@ -2278,6 +2289,7 @@ export async function renderClass(root, meta, desk = null) {
   paintExtTools();
   // 叫主讲（需求 R10）：马上写一份 ext_out，最前面「学生在等你」；手上排着的作答、草稿一起写掉
   async function callTeacherNow(btn) {
+    ring('学生点了「叫主讲」');
     if (btn) { btn.disabled = true; btn.textContent = '已经告诉主讲'; setTimeout(() => { btn.disabled = false; btn.textContent = '叫主讲'; }, 4000); }
     extState.calling = true;
     queue.triggered = true;
@@ -2286,6 +2298,7 @@ export async function renderClass(root, meta, desk = null) {
     if (extState.calling) await extWrite({ text: '' });
   }
   function extStart() {
+    if (desk?.ext?.wake === 'comments') waker = createWaker({ session: desk.sid || '', anchorEl: board, enabled: true });
     extState.lastSys = turnSeq; // 刷新以前的系统话已经报过了
     extState.ready = db.collection('ext_out').get().then((x) => { for (const d of x.docs) extState.outs.push({ seq: Number(d.data().seq) || 0, at: d.data().at }); }, () => {});
     db.collection('ext_in').onSnapshot((x) => extRun(x.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});
