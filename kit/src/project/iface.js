@@ -40,6 +40,7 @@ export function interfaceDoc({ version = '' } = {}) {
       out: 'sessions/{编号}/ext_out/{序号}：学生每一批作答、说的话、草稿、板书',
       since: 'sessions/{编号}/meta/since：上一条 ext_in 执行完以后的全部 ext_out 拼成一份',
       now: 'sessions/{编号}/meta/now：板现在什么样',
+      answers: 'sessions/{编号}/meta/answers：这节课每道题一行（交了几次、第几次对、每次怎么答、页面怎么判、点开过的生词）',
       evidence: 'evidence：每一条作答（session 是这节课的编号；judgedBy: author 是你的代码判的，page 是页面判的）',
     },
     { what: '下课', cmd: 'board close', report: 'sessions/{编号}/report/main：页面算的课后报告' },
