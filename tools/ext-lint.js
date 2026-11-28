@@ -13,7 +13,7 @@ import { primedExpects } from '../kit/src/check/judge.js';
 import { materialize } from '../kit/src/check/template.js';
 import { formulaSpec } from '../kit/src/formula.js';
 import { LINT_BUDGET } from '../kit/src/fx/calc.js';
-import { parseGloss } from '../kit/src/entext.js';
+import { parseGloss, parseBrackets, parseAlso } from '../kit/src/entext.js';
 import MarkdownIt from 'markdown-it';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -131,6 +131,8 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
         if (f.name === 'derive' && /^\s*mode\s*[:：]\s*do\s*$/m.test(f.body)) for (const msg of deriveDoProblems(f.body)) problems.push({ where, msg });
         // 生词表（英语第 8 节）：词条里写了省略号这类页面不认的，页面整块报错；这里用页面同一个读法先查
         if (f.name === 'gloss') for (const msg of parseGloss(f.body).problems) problems.push({ where, msg });
+        // 句子成分：answer / also / feedback 照页面同一份读一遍（写错了页面整块报错）
+        if (f.name === 'parse') for (const msg of parseProblems(f.body)) problems.push({ where, msg });
         if (f.name === 'solve') for (const msg of parseSolve(f.body, { ext: true }).problems) problems.push({ where, msg });
         // answer 的 formula: / calc:（计划 3）：和页面同一个 formulaSpec，外部写的答案先核；页面核不了的是提示
         if (f.name === 'answer') for (const p of answerProblems(f.body, vars)) problems.push({ where, ...p });
@@ -294,6 +296,20 @@ export function answerProblems(body, vars = {}) {
     if (!f.values || !REAL_FNS.test(fields.answer) || !new RegExp(`\\b${f.name}\\b`).test(fields.answer)) continue;
     out.push({ msg: `${f.name} 按整数 ${f.values[0]}…${f.values.at(-1)} 取点；要实数写 formula: ${f.name} in (…)`, level: 'hint' });
   }
+  return out;
+}
+
+/** parse 的 answer、also、feedback 查一遍（和页面 blocks/english.js 同一份函数） */
+export function parseProblems(body) {
+  const answer = one(body, 'answer');
+  if (!answer) return [];
+  let ans;
+  try { ans = parseBrackets(answer); } catch (e) { return [`answer: ${e.message}`]; }
+  const out = [];
+  const also = one(body, 'also');
+  if (also) { try { parseAlso(also, ans); } catch (e) { out.push(e.message); } }
+  const fb = one(body, 'feedback');
+  if (fb && !/^(count|role)$/i.test(fb)) out.push('feedback 只有两种：count（只报几处，不写就是它）、role（带上是哪个成分）');
   return out;
 }
 

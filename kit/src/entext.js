@@ -228,7 +228,8 @@ export const ROLES = {
   RC: '定语从句', SC: '主语从句', ObC: '宾语从句', PC: '表语从句', AppC: '同位语从句', AdvC: '状语从句', NF: '非谓语', Conj: '连接词',
 };
 // 层次图、句子变换用的两个成分（视觉第 5 批）。不放进 ROLES：舞台的句子（stage/types/sentence.js）拿 ROLES 当它认得的成分名，那边的行为不变
-export const MORE_ROLES = { Par: '插入语', Emp: '被强调的部分', Aux: '助动词' };
+// X 划掉：先把介词短语、插入语拿掉再找主干时用，标成 X 的词当场画删除线（blocks/enpick.js）
+export const MORE_ROLES = { Par: '插入语', Emp: '被强调的部分', Aux: '助动词', X: '划掉' };
 const ALL_ROLES = { ...ROLES, ...MORE_ROLES };
 /** 成分的中文名（不认识的原样返回） */
 export const roleName = (k) => ALL_ROLES[k] || k;
@@ -263,17 +264,18 @@ export function parseBrackets(src) {
   const stack = [];
   // [S~1 …]：~1 是分裂结构的记号（同一个号的两段本来是连着的）
   // 第二种：「[」后面跟着读不懂的成分名（[S~ …]、[S~1=O …]、[A#2 …]）——单独说，不让它落到后面成了「多了一个 ]」
-  const re = /\[([A-Za-z][\w]*)(?:~(\d+))?\s+|(\[[^\s\]]*)|\]|[^\s[\]]+/g;
+  // [A? …]：? 是「这一段标不标都行」（边界有争议、不是这道题要问的）
+  const re = /\[([A-Za-z][\w]*)(?:~(\d+))?(\?)?\s+|(\[[^\s\]]*)|\]|[^\s[\]]+/g;
   let m;
   const pieces = [];
   while ((m = re.exec(s))) {
-    if (m[3] !== undefined) throw new Error(badTag(m[3]));
-    if (m[1]) { stack.push({ role: m[1], from: null, depth: stack.length, ...(m[2] ? { join: Number(m[2]) } : {}) }); continue; }
+    if (m[4] !== undefined) throw new Error(badTag(m[4]));
+    if (m[1]) { stack.push({ role: m[1], from: null, depth: stack.length, ...(m[2] ? { join: Number(m[2]) } : {}), ...(m[3] ? { opt: true } : {}) }); continue; }
     if (m[0] === ']') {
       const top = stack.pop();
       if (!top) throw new Error('多了一个 ]');
       if (top.from === null) throw new Error(`[${top.role} …] 里面没有词`);
-      spans.push({ role: top.role, from: top.from, to: lastWord(top.from), depth: top.depth, ...(top.join ? { join: top.join } : {}) });
+      spans.push({ role: top.role, from: top.from, to: lastWord(top.from), depth: top.depth, ...(top.join ? { join: top.join } : {}), ...(top.opt ? { opt: true } : {}) });
       continue;
     }
     // 一段文字：再按句子的切法切开（标点单独成词）
@@ -300,7 +302,7 @@ export function parseBrackets(src) {
 export function spansMarkup(tokens, spans) {
   const words = tokens.map((t) => t.w);
   const open = words.map(() => []), close = words.map(() => 0);
-  for (const sp of [...spans].sort((a, b) => a.from - b.from || b.to - a.to)) { open[sp.from].push(sp.join ? `${sp.role}~${sp.join}` : sp.role); close[sp.to]++; }
+  for (const sp of [...spans].sort((a, b) => a.from - b.from || b.to - a.to)) { open[sp.from].push(`${sp.role}${sp.join ? `~${sp.join}` : ''}${sp.opt ? '?' : ''}`); close[sp.to]++; }
   return joinWords(words.map((w, i) => `${open[i].map((r) => `[${r} `).join('')}${w}${']'.repeat(close[i])}`));
 }
 
@@ -427,7 +429,9 @@ const key = (x) => `${x.role}:${x.from}-${x.to}`;
  * 范围一样、角色不一样算 wrongRole；答案里有、学生没标算 missing；学生标了答案里没有的范围算 extra。
  */
 export function judgeSpans(mine = [], answer = []) {
-  const ansByRange = new Map(answer.map((a) => [`${a.from}-${a.to}`, a]));
+  // 答案的一段可以有另一种也算对的范围（alts，also: 写的）、可以标不标都行（opt，[A? …]）
+  const ansByRange = new Map();
+  for (const a of answer) for (const g of [a, ...(a.alts || [])]) if (!ansByRange.has(`${g.from}-${g.to}`)) ansByRange.set(`${g.from}-${g.to}`, a);
   const right = [], wrongRole = [], extra = [];
   const hit = new Set();
   for (const s of mine) {
@@ -436,22 +440,78 @@ export function judgeSpans(mine = [], answer = []) {
     hit.add(key(a));
     if (a.role === s.role) right.push(s); else wrongRole.push({ span: s, should: a.role });
   }
-  const missing = answer.filter((a) => !hit.has(key(a)));
+  const missing = answer.filter((a) => !a.opt && !hit.has(key(a)));
   return { ok: !wrongRole.length && !missing.length && !extra.length, right, wrongRole, missing, extra };
+}
+
+/**
+ * also: [P a difficult task] [S the manager]……：这几个范围也算对。每一个要在句子里找得到、和答案里同一种成分的那一段重叠；
+ * 记在那一段的 alts 上（改 ans.spans），返回加了几个。写错了报错
+ */
+export function parseAlso(src, ans) {
+  const text = String(src ?? '').trim();
+  if (!text) return 0;
+  const items = [...text.matchAll(/\[([A-Za-z]\w*)\s+([^[\]]+)\]/g)];
+  if (!items.length || text.replace(/\[([A-Za-z]\w*)\s+([^[\]]+)\]/g, '').trim()) throw new Error('also 要写成 [成分 词…]（可以写几个，不能套），比如 also: [P a difficult task]');
+  const words = ans.tokens.map((t, i) => ({ ...t, i })).filter((t) => t.word);
+  for (const m of items) {
+    const role = m[1];
+    const frag = tokenizeSentence(m[2]).filter((t) => t.word).map((t) => t.w);
+    const same = ans.spans.filter((a) => a.role === role);
+    let found = false, placed = false;
+    for (let k = 0; k + frag.length <= words.length && !placed; k++) {
+      if (!frag.every((w, j) => words[k + j].w === w)) continue;
+      found = true;
+      const from = words[k].i, to = words[k + frag.length - 1].i;
+      const a = same.find((x) => x.from <= to && from <= x.to);
+      if (!a) continue;
+      if (!(a.from === from && a.to === to)) (a.alts ||= []).push({ from, to });
+      placed = true;
+    }
+    if (!found) throw new Error(`also 的 [${role} ${m[2].trim()}] 在句子里找不到这几个词（照原句写，大小写一样）`);
+    if (!placed) throw new Error(`also 的 [${role} ${m[2].trim()}]：answer 里没有和它重叠的${roleName(role)}`);
+  }
+  return items.length;
 }
 
 /** 一段范围写成文字：「The man who lives next door」 */
 export const spanText = (tokens, s) => joinWords(tokens.slice(s.from, s.to + 1).map((t) => t.w));
 
-/** 判分结果给学生的一句话（不说答案） */
-export function spansHint(r, roles = []) {
+/**
+ * 判分结果给学生的一句话（不说答案）。level: 'role' 时带上是哪个成分（主讲在题上写 feedback: role 才有），
+ * 不给范围；不写就是只报数
+ */
+export function spansHint(r, roles = [], { level = '' } = {}) {
   if (r.ok) return '';
   const name = (k) => roles.find((x) => x.key === k)?.name || ALL_ROLES[k] || k;
+  const names = (ks) => (level === 'role' && ks.length ? `（${[...new Set(ks.map(name))].join('、')}）` : '');
   const bits = [];
   if (r.right.length) bits.push(`对了 ${r.right.length} 处`);
   if (r.wrongRole.length) bits.push(`${r.wrongRole.length} 处范围对了、成分标错了（${r.wrongRole.map((x) => name(x.span.role)).join('、')}）`);
-  if (r.extra.length) bits.push(`${r.extra.length} 处范围不对`);
-  if (r.missing.length) bits.push(`还少 ${r.missing.length} 处`);
+  if (r.extra.length) bits.push(`${r.extra.length} 处范围不对${names(r.extra.map((s) => s.role))}`);
+  if (r.missing.length) bits.push(`还少 ${r.missing.length} 处${names(r.missing.map((s) => s.role))}`);
+  return bits.join('；');
+}
+
+/**
+ * 给主讲看的「错在哪」（只进记录，不给学生看）：哪一段多圈了、少圈了哪几个词，哪一段没标，哪一段标错了成分。
+ * r 是 judgeSpans 的结果，answer 是答案的成分
+ */
+export function spansDiff(r, tokens = [], answer = [], roles = []) {
+  if (!r || r.ok) return '';
+  const name = (k) => roles.find((x) => x.key === k)?.name || ALL_ROLES[k] || k;
+  const wordsOf = (from, to, skip) => joinWords(tokens.slice(from, to + 1).filter((t, j) => t.word && !(from + j >= skip.from && from + j <= skip.to)).map((t) => t.w));
+  const bits = r.wrongRole.map((x) => `「${spanText(tokens, x.span)}」标成了${name(x.span.role)}，应是${name(x.should)}`);
+  const told = new Set();
+  for (const e of r.extra) {
+    const over = (a) => Math.min(a.to, e.to) - Math.max(a.from, e.from);
+    const a = answer.filter((x) => x.role === e.role && over(x) >= 0 && !told.has(x)).sort((x, y) => over(y) - over(x))[0];
+    if (!a) { bits.push(`多标了一段：${name(e.role)}「${spanText(tokens, e)}」`); continue; }
+    told.add(a);
+    const more = wordsOf(e.from, e.to, a), less = wordsOf(a.from, a.to, e);
+    bits.push(`${name(e.role)}：标了「${spanText(tokens, e)}」${more ? `，多圈了 ${more}` : ''}${less ? `，少圈了 ${less}` : ''}`);
+  }
+  for (const m of r.missing) if (!told.has(m)) bits.push(`没标：${name(m.role)}「${spanText(tokens, m)}」`);
   return bits.join('；');
 }
 
@@ -690,8 +750,10 @@ export function translationHint(r, n) {
 export function parseGloss(src) {
   const items = [];
   const problems = [];
+  let showAll = false; // show: all：主讲要这张生词表直接摊开
   for (const raw of String(src ?? '').split('\n')) {
     const line = raw.replace(/^\s*[-*]\s*/, '').trim();
+    if (/^show\s*[:：]\s*all$/i.test(line)) { showAll = true; continue; }
     if (!line || /^(id|title)\s*[:：]/i.test(line)) continue;
     const m = /^([A-Za-z][A-Za-z' .\-/]*?)\s*[=＝:：]\s*(.+)$/.exec(line);
     if (!m) { problems.push(`看不懂「${line.slice(0, 30)}」：一行写一个「英文词 = 中文意思」，比如 breakthrough = 突破`); continue; }
@@ -700,7 +762,7 @@ export function parseGloss(src) {
     items.push({ word, gloss: m[2].trim() });
   }
   if (!items.length && !problems.length) problems.push('gloss 块是空的：一行写一个「英文词 = 中文意思」');
-  return { items, problems };
+  return { items, problems, ...(showAll ? { showAll: true } : {}) };
 }
 
 /**
