@@ -19,6 +19,7 @@ import { createWaker } from './wake.js';
 import { pendingIns, inProblems, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines, recallOutLine } from './ext.js';
 import { recallToday, recallSpace, isLive } from '../memory/recall.js';
 import { runRecall } from '../memory/recallrun.js';
+import { answerSheet } from './sheet.js';
 import { queueDue, applyEdits, keptComponents, componentSources, missingTarget } from './extboard.js';
 import { errorOfJudged } from '../solvespec.js';
 import { watchTiming } from '../timing.js';
@@ -152,7 +153,7 @@ export async function renderClass(root, meta, desk = null) {
   }
   const { db } = store;
   // 学习台里：作答、动作写成证据，带上这节课、这一块、这一段标的知识点（point=）
-  const sink = createSink(store, desk ? { evidence: (rec) => evCtx(rec.step), onEvidence: (d) => { aimEvs.push(d); aimsSoon(); } } : {});
+  const sink = createSink(store, desk ? { evidence: (rec) => evCtx(rec.step), onEvidence: (d) => { aimEvs.push(d); aimsSoon(); sheetSoon(); } } : {});
   // turn：这时课堂进行到第几轮（最近一轮的 seq），课后报告按它和课堂记录对齐
   // aim：这一段的题是给这节课要拿下的哪件事用的（段上的 aim=）
   const evCtx = (step) => ({ session: desk?.sid, block: desk?.block, point: segs.get(step)?.point, aim: segs.get(step)?.aim, turn: turnSeq });
@@ -277,6 +278,20 @@ export async function renderClass(root, meta, desk = null) {
   // 课上被老师换掉的那几件（aims.js 的 mergeAims.retired）：留着，报告和隔天验照样算它们
   const aimsPast = Array.isArray(desk?.aimsPast) ? [...desk.aimsPast] : [];
   const aimEvs = [];
+  // 按题汇总的作答表（sheet.js）：外部的课里证据一变，过 2 秒把这节课的证据按题拢一遍写进 meta/answers（内容没变不写）。
+  // 只是多一份读数给外部主讲；页面上什么都不多，流水证据照旧
+  let sheetKey = '', sheetTimer = 0;
+  const sheetSoon = () => {
+    if (!desk || !desk.ext || desk.readOnly) return;
+    clearTimeout(sheetTimer);
+    sheetTimer = setTimeout(() => {
+      const s = answerSheet(aimEvs);
+      const key = JSON.stringify(s.rows);
+      if (!s.n || key === sheetKey) return;
+      sheetKey = key;
+      db.doc('meta/answers').set(s).catch((e) => { sheetKey = ''; reportError(e, { what: '写 meta/answers', path: 'meta/answers', soft: true }); });
+    }, 2000);
+  };
   // live：最后一道还只是错、学生多半还在改的先不算，免得写错第一下板上方就亮「做了没到」
   const aimsNow = ({ live = true } = {}) => (aims ? aimsSummary(aims, itemsOf(aimEvs), live ? { live: true } : {}) : null);
   let aimsTimer = 0;
@@ -627,6 +642,7 @@ export async function renderClass(root, meta, desk = null) {
     aimEvs.length = 0;
     for (const d of s.docs) {
       aimEvs.push({ id: d.id, ...d.data() });
+      sheetSoon();
       const x = fromEvidence({ id: d.id, ...d.data() });
       if (x.kind === 'record') { an.push(x.rec); if (x.rec.block && !x.rec.judged) timing?.seedFirst(x.rec.block, Number(x.rec.at) || 0); }
       else if (x.kind === 'event') ev.push(x.rec);

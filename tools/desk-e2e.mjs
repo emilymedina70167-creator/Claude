@@ -1965,6 +1965,35 @@ const SUITES = {
     return t;
   },
 
+  // 按题汇总的作答表：外部的课里答一道题（先错后对），页面写出 meta/answers；刷新以后照旧在、只读翻看不写
+  async answersheet(browser) {
+    const t = await seeded(browser);
+    const F4 = '````', F3 = '```';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-7`;
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', title: '外部（作答表）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: `一题。\n\n${F4}board new id=b1 title="算"\n${F3}answer\nid: a1\nq: 2+2 等于几？\nanswer: 4\n${F3}\n${F4}\n`, at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('[data-bid="a1"] .ans-check'), { timeout: 20000, what: '题画上板' });
+    const box = () => t.page.locator('[data-bid="a1"] .ans-input input, [data-bid="a1"] .ans-input textarea, [data-bid="a1"] .ans-input [contenteditable="true"]').first();
+    await box().click(); await t.page.keyboard.type('5'); await t.page.click('[data-bid="a1"] .ans-check');
+    const sheet = async () => (await t.db())[`sessions/${sid}/meta/answers`];
+    const s1 = await t.waitFor(async () => { const x = await sheet(); return x?.rows?.some((r) => r.comp === 'a1' && r.n === 1) ? x : null; }, { timeout: 15000, what: '答错一次以后写出 meta/answers' });
+    const r1 = s1.rows.find((r) => r.comp === 'a1');
+    check(r1.okAt === 0 && r1.step === 'b1' && r1.tries[0].ok === false && String(r1.tries[0].value).includes('5'), `答错那一行不对：${JSON.stringify(r1)}`);
+    await box().click(); await t.page.keyboard.press('Backspace'); await t.page.keyboard.type('4'); await t.page.click('[data-bid="a1"] .ans-check');
+    const s2 = await t.waitFor(async () => { const x = await sheet(); return x?.rows?.some((r) => r.comp === 'a1' && r.okAt === 2) ? x : null; }, { timeout: 15000, what: '第二次答对以后那一行 okAt 是 2' });
+    check(!JSON.stringify(s2).includes('掌握'), '作答表里不该有「掌握」');
+    // 刷新：照读回来的证据重算，内容一样
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('[data-bid="a1"] .ans-check'), { timeout: 20000, what: '刷新以后板放回来' });
+    await sleep(3500);
+    check(JSON.stringify((await sheet()).rows) === JSON.stringify(s2.rows), '刷新以后作答表变了');
+    return t;
+  },
+
   async errors(browser) {
     const t = await seeded(browser);
     // 故意制造一个没接住的错误：应该被记进 meta/errors，管理页能看到
