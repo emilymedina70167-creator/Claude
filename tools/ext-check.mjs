@@ -48,7 +48,7 @@ if (LINT) {
   const { lintTurn, blockNames, priorTexts, checkers } = await import('./ext-lint.js');
   const t0 = Date.now();
   const extra = await checkers();
-  const r = lintTurn({ prior: priorTexts(s?.ins || []), text: readFileSync(resolve(nextFile), 'utf8'), names: await blockNames(), ...extra });
+  const r = lintTurn({ prior: priorTexts(s?.ins || []), text: readFileSync(resolve(nextFile), 'utf8'), names: await blockNames(), ...extra, hints: { react: String(arg('hints', '')).split(',').includes('react') } });
   const errs = r.problems.filter((p) => p.level !== 'hint'), hints = r.problems.filter((p) => p.level === 'hint');
   console.log(`写法检查：${r.segments} 段、${r.components} 个组件，${errs.length ? `${errs.length} 处问题` : '没有问题'}${hints.length ? `；${hints.length} 条出题提示` : ''}（${Date.now() - t0} 毫秒，没开浏览器；画出来的样子用不带 --lint 的跑）`);
   for (const p of errs) console.log(`  · ${p.where}：${p.msg}`);

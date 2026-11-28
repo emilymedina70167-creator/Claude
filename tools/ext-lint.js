@@ -13,6 +13,8 @@ import { primedExpects } from '../kit/src/check/judge.js';
 import { materialize } from '../kit/src/check/template.js';
 import { formulaSpec } from '../kit/src/formula.js';
 import { LINT_BUDGET } from '../kit/src/fx/calc.js';
+import { parseGloss } from '../kit/src/entext.js';
+import MarkdownIt from 'markdown-it';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(here, '../kit/src');
@@ -68,8 +70,9 @@ const TARGET_OPS = new Set(['mark', 'figure', 'react', 'why', 'coach', 'claude']
 /**
  * 查一轮（外加这节课以前的几轮，用来认已有的段和组件 id）：
  * lintTurn({ prior: [以前的 ext_in.text…], text, names }) → { problems: [{ where, msg }], segments: n, components: n }
+ * hints.react：要不要报「没写预案」（默认不报：答错以后怎么接由主讲当场定，不预写不算疏漏）
  */
-export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck = null, widgetCheck = null } = {}) {
+export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck = null, widgetCheck = null, hints = {} } = {}) {
   const problems = [];
   const segIds = new Set();
   const compIds = new Map(); // 组件 id → 段 id
@@ -126,6 +129,8 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
         if (f.name === 'let') { try { parseLets(f.body); } catch (e) { problems.push({ where, msg: e.message }); } addLets(f.body); }
         // derive 的学生版（dr-batch4 第 3 条：queue 里写了页面不认的 E(2)，预检说没问题）：start / goal / let 照页面同一份读一遍、算一遍
         if (f.name === 'derive' && /^\s*mode\s*[:：]\s*do\s*$/m.test(f.body)) for (const msg of deriveDoProblems(f.body)) problems.push({ where, msg });
+        // 生词表（英语第 8 节）：词条里写了省略号这类页面不认的，页面整块报错；这里用页面同一个读法先查
+        if (f.name === 'gloss') for (const msg of parseGloss(f.body).problems) problems.push({ where, msg });
         if (f.name === 'solve') for (const msg of parseSolve(f.body, { ext: true }).problems) problems.push({ where, msg });
         // answer 的 formula: / calc:（计划 3）：和页面同一个 formulaSpec，外部写的答案先核；页面核不了的是提示
         if (f.name === 'answer') for (const p of answerProblems(f.body, vars)) problems.push({ where, ...p });
@@ -139,6 +144,7 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
       const prose = String(o.body).replace(/^\s{0,3}(`{3,}|~{3,})[\s\S]*?^\s{0,3}\1\s*$/gm, '');
       if (prose.includes('\\calc')) for (const e of expandCalc(prose, (x) => calcValue(x, vars).tex).errors) problems.push({ where: `${o.op} id=${o.id}`, msg: `\\calc{${e.expr}} 算不出来：${e.msg}` });
       for (const msg of radianHints(calcsIn(prose).join('\n'), vars)) problems.push({ where: `${o.op} id=${o.id}`, msg, level: 'hint' });
+      for (const msg of boldProblems(prose)) problems.push({ where: `${o.op} id=${o.id}`, msg });
     }
   }
   // 指令指的东西在不在：段 id 或组件 id（以前的轮、这一轮写的都算）
@@ -148,8 +154,31 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
     if (segIds.has(t) || here.has(t) || compIds.has(t)) continue;
     problems.push({ where: `${o.op} target=${t}`, msg: `板上没有 ${t}（段 id 或组件的 id:）` });
   }
-  problems.push(...designHints({ out, prior, here }));
+  // react 的 show= 要揭开的段写在这条 react 后面：页面执行到 react 时还没有那一段，会警告（顺序换一下就好）
+  out.ops.forEach((o, i) => {
+    if (o.op !== 'react') return;
+    for (const id of new Set((o.cases || []).flatMap((c) => c.show || []))) {
+      if (segIds.has(id)) continue;
+      if (out.ops.slice(i + 1).some((x) => x.id === id && segOps([x]).length)) problems.push({ where: `react target=${o.target}`, msg: `show=${id} 写在 ${id} 这一段前面：把 ${id} 这一段（带 hold）挪到这条 react 前面`, level: 'hint' });
+    }
+  });
+  problems.push(...designHints({ out, prior, here, react: !!hints.react }));
   return { problems, segments, components };
+}
+
+// —— 加粗画不出来（英语第 6、8 节）：** 里面紧挨着标点、外面又紧挨着字时 Markdown 不认，** 原样留在板上 ——
+// 用页面同一个 markdown-it 照着画一遍：公式、行内代码先拿掉，画完还剩 ** 的就是
+const mdInline = new MarkdownIt({ html: false });
+export function boldProblems(prose) {
+  const src = String(prose ?? '').replace(/\$\$[\s\S]*?\$\$/g, ' ').replace(/\$[^$\n]*\$/g, ' ').replace(/`[^`\n]*`/g, ' ').replace(/\\\*/g, ' ');
+  if (!src.includes('**')) return [];
+  for (const para of src.split(/\n\s*\n/)) {
+    if (!para.includes('**')) continue;
+    if (!mdInline.renderInline(para).includes('**')) continue;
+    const at = para.split('\n').find((l) => l.includes('**') && mdInline.renderInline(l).includes('**')) || para;
+    return [`加粗没画出来：「${at.trim().slice(0, 40)}」（** 紧挨着标点时画不出，把标点挪到 ** 外面）`];
+  }
+  return [];
 }
 
 // —— 替外部挡出题错误（dr-batch4 第 5 条）：只是提示（level: 'hint'），不算写错 ——
@@ -162,7 +191,7 @@ const quizOptions = (body) => [...String(body).matchAll(/^\s*-\s*\[([ xX])\]\s*(
 const plain = (t) => String(t || '').replace(/[$\\{}\s*_`]/g, '').toLowerCase();
 const INTERACTIVE = new Set(['answer', 'steps', 'derive', 'elim', 'predict', 'recognize', 'scene', 'sort', 'cloze', 'parse', 'solve']);
 
-export function designHints({ out, prior = [], here = new Map() } = {}) {
+export function designHints({ out, prior = [], here = new Map(), react = true } = {}) {
   const hints = [];
   const hint = (where, msg) => hints.push({ where, msg, level: 'hint' });
   // 这一轮和以前几轮写的预案、助手：target → 有没有接答错 / 想不出来 / 很久没动
@@ -176,7 +205,7 @@ export function designHints({ out, prior = [], here = new Map() } = {}) {
     fs.forEach((f, i) => {
       const id = idOf(f.body);
       const where = `${o.op} id=${segId} ${f.name}${id ? ` ${id}` : ''}`;
-      if (id && graded(f) && !covered.has(id)) hint(where, `学生答错要等你：${id} 没写预案（board react 的 wrong / stuck / giveup），也没挂 board claude`);
+      if (react && id && graded(f) && !covered.has(id)) hint(where, `学生答错要等你：${id} 没写预案（board react 的 wrong / stuck / giveup），也没挂 board claude`);
       if (f.name !== 'quiz') return;
       const opts = quizOptions(f.body);
       const right = opts.filter((x) => x.correct), wrong = opts.filter((x) => !x.correct);
