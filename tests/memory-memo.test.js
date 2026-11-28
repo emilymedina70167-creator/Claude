@@ -295,3 +295,22 @@ test('数据库这一层：直接写的马上写；同一道题不记两次；�
   assert.equal(mem.reviews.find((r) => r.id === 'R3').status, 'paused');
   assert.deepEqual(hard(mem), []);
 });
+
+test('记忆点不占一个 memo 块的 12 条（学生要求要背的都记下来，11-24 一节下课 54 条只收了 12 条）', async () => {
+  const db = fakeDb('memo-recall-cap');
+  db._clear();
+  const seed = sampleMemory(TODAY);
+  for (const [c, docs] of Object.entries(seed)) for (const d of docs) { const { id, ...rest } = d; await db.doc(`${c}/${id}`).set(rest); }
+  const read = async () => {
+    const out = {};
+    for (const c of [...Object.keys(seed), 'pending', 'recall']) out[c] = (await db.collection(c).get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+    return out;
+  };
+  let mem = await read();
+  const ops = createMemOps({ db, mem: () => mem });
+  const words = ['formerly', 'commonly', 'objective', 'escape', 'context', 'unique', 'perspective', 'prefer', 'source', 'decline', 'publication', 'editor', 'impression', 'mixture', 'skepticism', 'optimism', 'confused', 'tend', 'federal', 'minimum wage'];
+  const { entries } = parseMemoLines(words.map((w, i) => `recall q="${w}" a="意思之${'甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉'[i]}" block=L2.2.2`).join('\n'));
+  assert.equal(entries.length, 20);
+  const { rejected } = await ops.applyMemo(entries, { session: SID, block: 'L2.2.2', turn: 3 });
+  assert.ok(!rejected.some((r) => /最多记 12 条/.test(r.error)), JSON.stringify(rejected));
+});

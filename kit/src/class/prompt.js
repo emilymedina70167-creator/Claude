@@ -66,7 +66,7 @@ export const CLASS_MEMO_DOC = MEMO_DOC
   .replace('是以前的失误归纳出来的，上课照着做。', `是以前的失误归纳出来的，上课照着做。${LESSON_NO_FORM}`)
   // 2026-11-14 起不再按条数挡（memo.js 的 SESSION_CAPS 只是参考）：照代码现在真做的写，舞台课那份另有改写、不动
   .replace('页面在代码里卡着：一节课观察最多 3 条、失误 3 条、错题 5 道（同一个弱点只记一道）、新弱点 3 个，和已有的说的是同一件事的不收；一个 memo 块最多 12 条（合并、作废、判复现结果、position、归纳守则不算）。',
-    '页面在代码里卡着：和已有的、这节课已经记的说的是同一件事的不收；同一个弱点一节课只记一道错题；一个 memo 块最多 12 条（合并、作废、判复现结果、position、归纳守则、标失误看过了不算）。条数本身不挡。')
+    '页面在代码里卡着：和已有的、这节课已经记的说的是同一件事的不收；同一个弱点一节课只记一道错题；一个 memo 块最多 12 条（合并、作废、判复现结果、position、归纳守则、记忆点、标失误看过了不算）。条数本身不挡。')
   // 同一类的两句：记忆点一节课几条页面不挡（memo.js 的 recall 那一支只查和已有的像不像）；每一类到了 CAPS 页面照收，只在下课整理时叫合并
   .replace('一节课最多 8 条，和已有的几乎一样的页面不收。', '和已有的几乎一样的页面不收。')
   .replace('每一类有上限，到了先合并（下课整理时页面会告诉你怎么并）。', '哪一类攒多了，下课整理时页面会叫你合并、告诉你怎么并。');
@@ -1273,7 +1273,8 @@ function eventText(a, type) {
       return `[动作] ${where(a, '组件', { title: false })}${subText}：学生标了「${sure ? '有把握' : '没把握'}」${sure === false && ok === true ? '——这题答对了，但没把握：没把握按没会处理' : sure === true && ok === false ? '——答错了却有把握：多半是一个误解，先弄清学生是怎么想的' : ''}`;
     }
     case 'gloss': if (get('dict')) return `[动作] 点了板上的「${short(get('word'), 40)}」查词典（${short(get('gloss'), 40)}）`;
-      return `[动作] 点开了生词「${short(get('word'), 40)}」看意思（${short(get('gloss'), 40)}）：这个词学生不认识`;
+      // 只写点了哪个词（事实）：点开看一眼不等于不认识（有时是核对词性、确认意思），结论主讲下
+      return `[动作] 点开了生词「${short(get('word'), 40)}」看意思（${short(get('gloss'), 40)}）`;
     case 'done': return `[动作] 点了 ${typeof a.step === 'string' ? a.step : '这一段'}${stepTitle ? `「${short(stepTitle, 30)}」` : ''}的「这段做完了」`;
     case 'ask': return `[动作] 问了：「${short(get('question'), 200)}」`;
     case 'open': return '[动作] 打开了课堂页面';

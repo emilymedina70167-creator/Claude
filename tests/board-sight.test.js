@@ -11,6 +11,8 @@ const line = (x0, x1, y) => Array.from({ length: 21 }, (_, i) => ({ x: x0 + ((x1
 test('漏出来的源码：成对的 **、==、$…$、反斜杠命令', () => {
   assert.deepEqual(rawBits('为什么老是有 **两个星号** 呢'), ['**两个星号**']);
   assert.deepEqual(rawBits('要背的 ==be + done== 这里'), ['==be + done==']);
+  // 代码里的比较两头是空格：不是漏出来的荧光笔（11-24 trace 的 predict 条件被报了）
+  assert.deepEqual(rawBits('执行到 dk == 2 && i == 5 的时候'), []);
   assert.deepEqual(rawBits('答案是 $\\frac{1}{2}$'), ['$\\frac{1}{2}$']);
   assert.ok(rawBits('写成 \\frac{a}{b} 了').some((b) => b.startsWith('\\frac')));
   // 正文本来的符号不算

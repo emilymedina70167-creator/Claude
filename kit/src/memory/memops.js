@@ -66,11 +66,13 @@ export function createMemOps({ db, mem, exam = () => null }) {
     // 一个 memo 块最多记 MEMO_MAX 条（归纳守则的 lesson 不算）：记得太多学生看不过来，挑要紧的。
     // 整理（合并、作废、停掉、关掉）、判复现结果、改 position 不算：它们让记忆变少、变准，
     // 下课整理单常常一次有好几行，算进去会把排在最后的合并、position 截掉（下课以后没人看得到被拒了）
-    const free = (e) => e.kind === 'lesson' || e.kind === 'position' || ['merged', 'void', 'retired', 'closed', 'done', 'seen'].includes(e.attrs?.status) || (e.kind === 'review' && e.attrs?.result);
+    // 记忆点（recall）也不算：学生要求「遇见要背的一定要记下来」，一节英语课常有四五十个生词；
+    // 11-24 那节下课 54 条只收了 12 条，主讲只好课后绕过页面直接写（一科最多 RECALL_CAP 条照旧）
+    const free = (e) => e.kind === 'lesson' || e.kind === 'recall' || e.kind === 'position' || ['merged', 'void', 'retired', 'closed', 'done', 'seen'].includes(e.attrs?.status) || (e.kind === 'review' && e.attrs?.result);
     let n = 0;
     for (const e of entries || []) {
       if (author === 'aide' && !AIDE_KINDS.has(e.kind)) { rejected.push({ line: e.line, error: '助手只写事实（错题、弱点、过程观察、讲错的地方、记忆点），这一条留给课上的老师' }); continue; }
-      if (!free(e) && ++n > MEMO_MAX) { rejected.push({ line: e.line, error: `一次最多记 ${MEMO_MAX} 条（归纳守则不算），这条没记：挑要紧的` }); continue; }
+      if (!free(e) && ++n > MEMO_MAX) { rejected.push({ line: e.line, error: `一次最多记 ${MEMO_MAX} 条（归纳守则、记忆点不算），这条没记：挑要紧的` }); continue; }
       const ch = planEntry(e, { mem: local, evidence, session, block, space, date });
       if (ch.error) { rejected.push({ line: e.line, error: ch.error }); continue; }
       // 事后补写的不改「下一节从哪接」：之后可能又上过课，课堂里当场写的那条为准（单子里也说了）
