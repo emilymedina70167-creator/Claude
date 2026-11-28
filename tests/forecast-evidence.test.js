@@ -6,7 +6,7 @@ import { toEvidence } from '../kit/src/memory/session.js';
 import { toAnswer } from '../kit/src/live/sync.js';
 
 const DAY = 86400000;
-const T0 = Date.parse('2026-11-01T10:00:00');
+const T0 = Date.parse('2026-11-01T10:00:00+08:00');
 const at = (d, min = 0) => T0 + d * DAY + min * 60000;
 let n = 0;
 function rec({ comp, q = '题', ok, attempts = 1, d = 0, min = 0, session = 'c-20261101-1', block = 'DS-L2.1.1', type = 'answer', extra = {} }) {
@@ -71,7 +71,7 @@ test('upTo 截到某一天和按 asOf 重新整理一样', async () => {
   const evs = [rec({ comp: 'a', ok: true, session: 's1' }), rec({ comp: 'b', ok: false, d: 3, session: 's2' }), rec({ comp: 'c', ok: true, d: 6, session: 's3', block: 'DS-L2.1.2' })];
   const m = mem(evs, [{ id: 's9', block: 'DS-L2.1.2', date: '2026-11-05' }]);
   const cut = upTo(blockEvidence(m), '2026-11-04');
-  const fresh = blockEvidence(m, { asOf: Date.parse('2026-11-04T23:59:59') });
+  const fresh = blockEvidence(m, { asOf: Date.parse('2026-11-04T23:59:59+08:00') });
   for (const b of ['DS-L2.1.1', 'DS-L2.1.2']) {
     assert.deepEqual(cut.get(b).obs, fresh.get(b).obs, b);
     assert.deepEqual(cut.get(b).reviews, fresh.get(b).reviews, b);

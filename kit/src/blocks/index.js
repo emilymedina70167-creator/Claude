@@ -26,6 +26,7 @@ import { cloze, errfind, parse, drill, chunk, link as enLink, translate } from '
 import { gloss } from './gloss.js';
 import { stage } from './stagebox.js';
 import { widgetBlock } from './widget.js';
+import { recallDue } from './recalldue.js';
 import { solve } from './solve.js';
 import { venn } from './venn.js';
 import { ptree } from './ptree.js';
@@ -59,6 +60,8 @@ export const blocks = {
   stage,
   // 外部设计的交互：一小段 JS 调 la.*（blocks/widget.js）
   widget: widgetBlock,
+  // 板上的记忆点（外部的课的 board recall 包成它）
+  recalldue: recallDue,
   // 自由段：主讲自己写的整页 HTML / CSS / SVG / JS，跑在隔离框里，经 lab 桥记作答、借计算（blocks/html.js、htmlseg.js）
   html: htmlBlock,
   // 解答题：按步骤判（blocks/solve.js，dr-batch4）

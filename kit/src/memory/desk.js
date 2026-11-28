@@ -59,6 +59,7 @@ import { createHead } from '../head/headdesk.js';
 import { createChatPage } from '../head/chatview.js';
 import { createProjectView } from '../project/notebookview.js';
 import { catalogText, examFactsOf } from '../project/catalog.js';
+import { classFacts } from '../project/factsclass.js';
 import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
 import { todayRows, packForBlock, coachPack } from '../project/today.js';
@@ -123,7 +124,8 @@ export const viewHash = () => { const h = decodeURIComponent(String(location.has
 const nameIn = (get) => (coll, id) => { const d = (get()?.[coll] || []).find((x) => String(x.id) === String(id)); return d ? String(d.title || d.text || d.q || '') : ''; };
 
 // 顶上那行日期：11月3日 · 周二
-const todayLabel = (d = new Date()) => `${d.getMonth() + 1}月${d.getDate()}日 星期${'日一二三四五六'[d.getDay()]}`;
+// 顶上的日期和排期用同一个「今天」（上海），设备时区不是上海时不各说各的
+const todayLabel = (now = Date.now()) => { const [, m, d] = toDate(now).split('-').map(Number); return `${m}月${d}日 星期${'日一二三四五六'[new Date(`${toDate(now)}T00:00:00Z`).getUTCDay()]}`; };
 
 // 首页以外的页面（pages.js），换页不刷新
 const PAGES = { chat: '班主任', notes: '笔记', map: '课程地图', books: '教材', exam: '考情', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
@@ -1839,7 +1841,27 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   let doc = snap.data();
   const mem = Object.fromEntries(MEMORY_FOR_CLASS.map((c) => [c, []]));
   const memLoaded = new Set(); // 哪几类已经读到了（记忆是订阅着一类一类到的）
-  for (const c of MEMORY_FOR_CLASS) db.collection(c).onSnapshot((s) => { mem[c] = s.docs.map((d) => ({ id: d.id, ...d.data() })); memLoaded.add(c); }, () => {});
+  for (const c of MEMORY_FOR_CLASS) db.collection(c).onSnapshot((s) => { mem[c] = s.docs.map((d) => ({ id: d.id, ...d.data() })); memLoaded.add(c); factsSoon(); }, () => {});
+  // 页面算的事实（meta/facts）课堂里也写（project/factsclass.js）：从入口链接直接进课时首页的代码不跑，它会停在上一次开首页那天。
+  // 只读的课不写；题库课堂不订阅，另读一次；记忆连着变时 5 秒合成一次，内容没变不写
+  let factsProbes = null, factsPrev = null, factsKey = '', factsTimer = 0;
+  function factsSoon() {
+    if (readOnly || factsTimer) return;
+    factsTimer = setTimeout(() => {
+      factsTimer = 0;
+      const f = classFacts({ mem, loaded: memLoaded, probes: factsProbes, today: toDate(Date.now()), prev: factsPrev });
+      const key = f && JSON.stringify(f);
+      if (!f || key === factsKey) return;
+      factsKey = key;
+      db.doc('meta/facts').set({ ...f, at: Date.now() }).catch(() => { factsKey = ''; });
+    }, factsKey ? 5000 : 300);
+  }
+  if (!readOnly) {
+    Promise.all([
+      db.collection('probes').get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => []),
+      db.doc('meta/facts').get().then((x) => (x.exists ? x.data() : null), () => null),
+    ]).then(([p, prev]) => { factsProbes = p; factsPrev = prev; factsSoon(); });
+  }
   // 话的账（saiddesk.js）在课上、首页另写 sessions.said：跟着它，免得这里整份写回去时盖成开课时的旧值
   db.doc(`sessions/${sid}`).onSnapshot((x) => { if (x.exists && x.data().said) doc = { ...doc, said: x.data().said }; }, () => {});
   // 外部主 Claude 也写这一条（status: closed、换块……）：拿开课时的旧副本整份写回会把它盖掉。
@@ -1955,6 +1977,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     project,
     // 外部的课：整节课的设置（board set 写过的：截图入口 upload、停掉助手 helperOff）刷新以后照旧
     ...(kind === 'ext' ? { ext: { upload: doc.upload || '', helperOff: !!doc.helperOff, wake: doc.wake || '' } } : {}),
+    // 板上的记忆点（board recall）：记忆读到了没有、记忆库在根上的那个数据库
+    memReady: (c) => memLoaded.has(c), rootDb: db,
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), books, prevRead,
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
     exam: examLoad, reserve: examYears, examFor: kind === 'class' || kind === 'ext' ? loadExam : null,
