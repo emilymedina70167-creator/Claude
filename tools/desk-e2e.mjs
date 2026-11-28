@@ -1956,6 +1956,12 @@ const SUITES = {
     const r2 = await t.waitFor(async () => (await t.db())[`sessions/${sid}/ext_in/002`]?.result, { timeout: 15000, what: 'ext_in/002 执行' });
     check(r2.notes?.some((x) => /recall b10：没有到期的记忆点/.test(x)), `没有到期的，执行结果应说明：${JSON.stringify(r2)}`);
     check(!(await t.page.$('[data-step="b10"]')), '没有到期的记忆点，不该画 b10 这一段');
+    // 「以前的课」翻看这块黑板（只读）：记忆点那一段不出自测、也不报错
+    await t.open(`view/${sid}`);
+    await t.waitFor(() => t.page.evaluate(() => document.body.innerText.includes('开始。')), { timeout: 20000, what: '只读的黑板画出来' });
+    await sleep(1500);
+    check(!(await t.page.evaluate(() => document.body.innerText.includes('recalldue'))), `只读的黑板上记忆点那一段报了错：${(await t.text('.block-error')) || ''}`);
+    check(!(await t.page.$('.rc-show')), '只读的黑板上不该能做记忆点自测');
     return t;
   },
 

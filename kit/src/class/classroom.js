@@ -1149,6 +1149,8 @@ export async function renderClass(root, meta, desk = null) {
   }
   // recalldue 组件（blocks/recalldue.js）画的时候来这里要：把自测挂在 host 上。停下的那一刻回报外部（一段只报一次，一条都没评的不报）
   function mountRecall(host, { id, n, space }) {
+    // 「以前的课」翻看黑板（只读）：不出自测（会记账），这一段收起来，不当成写错
+    if (readOnly) { setTimeout(() => host.closest('.class-seg')?.setAttribute('hidden', ''), 0); return true; }
     if (!EXT || !desk?.rootDb) return false;
     const titleOf = (b) => (desk.mem?.curriculum || []).find((x) => x.id === b)?.title || '';
     const start = (d) => {
