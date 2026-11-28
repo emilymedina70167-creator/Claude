@@ -25,6 +25,7 @@
 - 页面执行完一条 `ext_in`，在那一条上写 `result` = `{ at, ok, summary, ops: [{ op, id, target, ok, error, page }], errors: [写错没显示的段和原因], notes: [别的提醒], memo: [{ line, ok, id, error }], shots: [asset 编号], shotNote }`。`memo` 是这一轮 `board memo` 块的每一行：写进去了的 `ok: true`、`id` 是写成的那一条（`errors/L2-60`、`sessions/{编号}.block`、`summary（新笔记）`），没写成的 `ok: false`、`error` 是为什么（读不懂、守卫拒了、超了条数）。这一轮写了 `board snap` 时，页面先等这块板画好（字体载完、段的淡入和别的动画走完、舞台演完、板上 0.35 秒不再变，最多等 6 秒）再拍，整块板拍成一张长图（比 4800 像素还高才切，`shotNote` 写切成几张、各是哪一段；等满 6 秒还在变也写一句）；下一份 `ext_out` 也带同几张。
 - `sessions/{编号}/meta/now` = `{ at, text, board }`：黑板现状，`board` 是结构化的（每块板、每段、组件 id、每张图能改的变量、标注、草稿、作答、舞台现状、预备板、助手、屏幕）。板一变就覆盖写（最多一秒一次；写 `ext_out` 的那一刻也跟着写一份）；学生没动也读得到。
 - `sessions/{编号}/meta/since` = `{ at, from（外部上一条执行完的 ext_in 的编号）, fromAt, outs: [序号], shots, text }`：那一条执行完以后写的全部 `ext_out` 按先后拼成一份，一次 get 读完；下一条 `ext_in` 执行完时从头攒。
+- `sessions/{编号}/meta/answers` = `{ at, n, rows }`：这节课的证据按组件拢成一道题一行，证据变了 2 秒后重写。一行 `{ comp, step, kind, title, q, n（交了几次）, okAt（第几次对，0 是还没对）, tries: [{ at, ok, value, why（页面判错时说的）, ms }]（最多最后 12 次）, gloss: [{ word, gloss, n }]（点开过的生词）, reached（演示拖到过第几步）, revealed（steps 揭到第几步）, giveup }`。只列事实，不算掌握；流水在 `evidence`。
 - 屏幕照这个页面真有的地方报（`visualViewport`）：分屏时写「横屏 860×734（分屏：这个页面只占屏幕的一部分，整个屏幕 1180×820）」，`meta/now.board.screen` 里是 `{ w, h, landscape, split, full }`。
 
 **分析游标和这一科没分析的证据**（证据一条都不丢、每一条都被分析过）：
