@@ -126,3 +126,14 @@ test('board check 的 408、英语样板：ext-check --lint 退出码 0；改坏
   assert.equal(bad.status, 1, bad.stdout);
   assert.match(bad.stdout, /1 处问题/);
 });
+
+test('board recall：认得这条指令；id 和已有的段重了照旧报', async () => {
+  const names = await blockNames();
+  const ok = lintTurn({ prior: [], text: `做几条到期的。\n\n${F}board recall id=b9 n=5\n${F}`, names });
+  assert.deepEqual(ok.problems, []);
+  assert.equal(ok.segments, 1);
+  const dup = lintTurn({ prior: [seg('new', 'b9', 'x')], text: `${F}board recall id=b9\n${F}`, names });
+  assert.match(dup.problems.map((p) => p.msg).join('\n'), /b9 已经用过了/);
+  const bad = lintTurn({ prior: [], text: `${F}board recall id=b9 n=99\n${F}`, names });
+  assert.match(bad.problems.map((p) => p.msg).join('\n'), /1 到 20/);
+});

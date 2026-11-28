@@ -16,7 +16,9 @@ import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
 import { createWaker } from './wake.js';
-import { pendingIns, inProblems, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
+import { pendingIns, inProblems, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines, recallOutLine } from './ext.js';
+import { recallToday, recallSpace, isLive } from '../memory/recall.js';
+import { runRecall } from '../memory/recallrun.js';
 import { queueDue, applyEdits, keptComponents, componentSources, missingTarget } from './extboard.js';
 import { errorOfJudged } from '../solvespec.js';
 import { watchTiming } from '../timing.js';
@@ -113,6 +115,8 @@ export async function renderClass(root, meta, desk = null) {
   setLineBreaks(true);
   // body 上不叫 class-talk：板顶那句话的样式也叫 .class-talk，撞了名整页 body 会多一道金线、多一圈内边距
   session.mode = 'class';
+  // 板上的记忆点（blocks/recalldue.js）：恢复黑板时组件就会来要，所以一上来就挂上（函数在下面）
+  session.recallBoard = (host, spec) => mountRecall(host, spec);
   session.live = true; // 共用 live 的行为：猜想默认不批改、作答逐次记录、组件要有 id
   session.stages = [];
   const unitName = meta.unit || session.title;
@@ -1137,6 +1141,32 @@ export async function renderClass(root, meta, desk = null) {
     return { ...res, op: 'edit', ...(res.ok ? { kept: [...old.keys()] } : {}) };
   }
 
+  // 板上的记忆点：这一科现在到期的（记忆还没读到返回 null）
+  function recallDueNow({ n, space }) {
+    if (desk.memReady && !desk.memReady('recall')) return null;
+    const sp = space || desk.space;
+    return recallToday((desk.mem?.recall || []).filter((k) => isLive(k) && recallSpace(k) === sp), { today: toDate(Date.now()), n });
+  }
+  // recalldue 组件（blocks/recalldue.js）画的时候来这里要：把自测挂在 host 上。停下的那一刻回报外部（一段只报一次，一条都没评的不报）
+  function mountRecall(host, { id, n, space }) {
+    if (!EXT || !desk?.rootDb) return false;
+    const titleOf = (b) => (desk.mem?.curriculum || []).find((x) => x.id === b)?.title || '';
+    const start = (d) => {
+      if (!host.isConnected) return;
+      if (!d.items.length) { host.closest('.class-seg')?.setAttribute('hidden', ''); return; }
+      let told = false;
+      runRecall(host, {
+        items: d.items, db: desk.rootDb, titleOf, scroll: false,
+        onFinish: (tally, missed) => { if (told || readOnly || !(tally.got + tally.vague + tally.miss)) return; told = true; extState.coachLines.push(recallOutLine(id, tally, missed)); extWrite({ text: '' }); },
+        onDone: () => { const p = host.querySelector('.rc-sum'); host.innerHTML = p ? `<p class="rc-sum">${p.innerHTML}</p>` : ''; },
+      });
+    };
+    // 刚打开页面、记忆还没读到（刷新后重画）：读到了再放，10 秒还读不到就算了；组件画的那一刻还没进文档，也等一下
+    let tries = 0;
+    const wait = () => { const d = host.isConnected ? recallDueNow({ n, space }) : null; if (d) start(d); else if (++tries < 34) setTimeout(wait, 300); };
+    setTimeout(wait, 0);
+    return true;
+  }
   function execOp(op, failures, notes) {
     if (op.warn) notes.push(`${op.op} ${op.id || ''}：${op.warn}`);
     // 教学计划：不上黑板；下一轮从对话历史里取最新的一份放进说明（prompt.js 的 latestPlan）
@@ -1161,6 +1191,20 @@ export async function renderClass(root, meta, desk = null) {
       const fence = '~~~~~';
       const body = `${fence}${op.op}\nid: ${op.id}\n${op.op === 'widget' ? '---\n' : ''}${String(op.body || '').replace(/^\s*\n/, '')}\n${fence}`;
       return { ...execOp({ ...op, op: segs.has(op.id) ? 'replace' : 'add', body }, failures, notes), op: op.op };
+    }
+    // 板上的记忆点（board recall）：这一科到期的若干条放成一段，学生当场做；记账和首页自测同一条路（recallrun.js）。
+    // 放不放、放几条是外部主讲定的，页面里的老师不能写。包成 recalldue 组件照 add 画（和 stage / widget 一样），
+    // 刷新后这一段重画时组件重新取到期的：评过的不再出
+    if (op.op === 'recall') {
+      if (!EXT) return { op: 'recall', id: op.id, ok: false, error: 'recall 只在外部主讲的课里有用' };
+      if (!desk?.rootDb) return { op: 'recall', id: op.id, ok: false, error: 'recall 只在学习台里上课时能用（单独的课堂没有记忆库）' };
+      const d = recallDueNow(op);
+      if (d && !d.items.length) { notes.push(`recall ${op.id}：没有到期的记忆点，没画这一段`); return { op: 'recall', id: op.id, ok: true }; }
+      const fence = '~~~~~';
+      const body = `${fence}recalldue\nid: ${op.id}\nn: ${op.n}${op.space ? `\nspace: ${op.space}` : ''}\n${fence}`;
+      const r = execOp({ op: segs.has(op.id) ? 'replace' : 'add', id: op.id, title: op.title, body }, failures, notes);
+      if (r.ok) notes.push(`recall ${op.id}：${d ? `到期 ${d.total} 条，这一段放 ${d.items.length} 条` : '记忆点还没读到，读到了再放'}`);
+      return { ...r, op: 'recall' };
     }
     // 预备板（需求 R7）：先存着，条件到了页面自己开那块板、翻过去
     if (op.op === 'queue') {

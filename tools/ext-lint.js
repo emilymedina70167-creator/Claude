@@ -77,7 +77,7 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
   const addLets = (body) => {
     try { for (const c of parseLets(body)) { try { vars[c.name] = letValue(c.name, calcValue(c.src, vars).value); } catch { /* 下面会报 */ } } } catch { /* 下面会报 */ }
   };
-  const segOps = (ops) => ops.filter((o) => ['new', 'add', 'replace', 'pin', 'stage', 'widget', 'queue', 'edit'].includes(o.op));
+  const segOps = (ops) => ops.filter((o) => ['new', 'add', 'replace', 'pin', 'stage', 'widget', 'queue', 'edit', 'recall'].includes(o.op));
   for (const t of prior || []) {
     for (const o of segOps(parseOutput(String(t || ''), { final: true }).ops)) {
       segIds.add(o.id);
@@ -96,14 +96,14 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
     // 带着这节课到这里 let 过的量（以前的轮 + 这一轮前面的段），和页面开检验时一样按浮点
     if (o.op === 'check' && o.check) for (const msg of selfCheck(o.check, floatVars(vars))) problems.push({ where: `check id=${o.id}`, msg });
     if (o.op === 'check' && o.check) for (const msg of primeHints(o.check, floatVars(vars))) problems.push({ where: `check id=${o.id}`, msg, level: 'hint' });
-    if ((o.op === 'add' || o.op === 'new' || o.op === 'stage' || o.op === 'widget') && (segIds.has(o.id) || here.has(o.id))) problems.push({ where: `${o.op} id=${o.id}`, msg: `${o.id} 已经用过了：新的一段换一个 id，改这一段用 board replace id=${o.id}` });
+    if ((o.op === 'add' || o.op === 'new' || o.op === 'stage' || o.op === 'widget' || o.op === 'recall') && (segIds.has(o.id) || here.has(o.id))) problems.push({ where: `${o.op} id=${o.id}`, msg: `${o.id} 已经用过了：新的一段换一个 id，改这一段用 board replace id=${o.id}` });
     if ((o.op === 'hide' || o.op === 'show' || o.op === 'move' || o.op === 'edit') && !segIds.has(o.id) && !here.has(o.id)) problems.push({ where: `${o.op} id=${o.id}`, msg: `黑板上没有 ${o.id}` });
     if (segOps([o]).length) {
       here.set(o.id, o);
       segments++;
       if (o.op === 'stage' && stageCheck) for (const msg of stageCheck(`id: ${o.id}\n${o.body}`)) problems.push({ where: `stage id=${o.id}`, msg });
       if (o.op === 'widget' && widgetCheck) for (const msg of widgetCheck(`id: ${o.id}\n---\n${o.body}`)) problems.push({ where: `widget id=${o.id}`, msg });
-      if (o.op === 'stage' || o.op === 'widget' || o.op === 'edit') continue;
+      if (o.op === 'stage' || o.op === 'widget' || o.op === 'edit' || o.op === 'recall') continue;
       const seen = new Set();
       for (const f of fencesOf(o.body)) {
         const where = `${o.op} id=${o.id} 第 ${f.line} 行 ${f.name}`;

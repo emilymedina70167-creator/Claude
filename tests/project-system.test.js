@@ -86,3 +86,8 @@ test('考试资料的事实：meta/exam 的 papers 是「门课 → 年份 → �
   assert.equal(examFactsOf(null), null);
   assert.equal(examFactsOf({ counts: {} }), null);
 });
+
+test('学习台里有什么：外部的课里可选的指令只列名字', () => {
+  const t = catalogText({ data: {} });
+  assert.match(t, /外部的课里可选的指令（写法在仓库 docs\/ext-class\.md 按名字查）：board recall/);
+});

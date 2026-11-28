@@ -148,3 +148,9 @@ export function memoLines(r) {
     ...(r.rejected || []).map((x) => ({ line: String(x.line || ''), ok: false, error: String(x.error || '') })),
   ];
 }
+
+/** 板上的记忆点（board recall）做完，回报外部的一行：各评了几条，没想起的是哪几条 */
+export function recallOutLine(id, tally = {}, missed = []) {
+  const n = (k) => Number(tally?.[k]) || 0;
+  return `[页面] 记忆点 ${id}：想起来 ${n('got')}、模糊 ${n('vague')}、没想起 ${n('miss')}${missed.length ? `（${missed.join('、')}）` : ''}`;
+}

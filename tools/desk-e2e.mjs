@@ -1912,6 +1912,53 @@ const SUITES = {
     return t;
   },
 
+  // 外部的课：board recall 把到期的记忆点放到板上做；记账和首页自测同一条路，做完回报一行；刷新不重复、没到期不画
+  async boardrecall(browser) {
+    const t = await seeded(browser);
+    const F4 = '````';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const ago = (n) => new Date(Date.parse(`${today}T00:00:00Z`) - n * 86400000).toISOString().slice(0, 10);
+    const sid = `c-${today.replace(/-/g, '')}-6`;
+    const k = (id, last) => ({ q: `问 ${id}`, a: `答 ${id}`, space: 'en', tier: 1, last, status: 'active' });
+    // 示例记忆里别的英语记忆点先停掉：这一段只看自己放的这几条
+    const stop = Object.fromEntries((await t.docs('recall')).map((d) => { const { id, ...rest } = d; return [`recall/${id}`, { ...rest, status: 'stopped' }]; }));
+    await plant(t, {
+      ...stop,
+      'recall/KE1': k('KE1', ago(3)), 'recall/KE2': k('KE2', ago(2)), 'recall/KE3': k('KE3', ago(2)), 'recall/KE4': k('KE4', today),
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', title: '外部（记忆点）', space: 'en', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: `先过几条到期的。\n\n${F4}board new id=b1 title="开头"\n开始。\n${F4}\n\n${F4}board recall id=b9 n=2\n${F4}\n`, at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('.class-recall .rc-show'), { timeout: 20000, what: '板上出现第一张记忆点' });
+    const res = (await t.db())[`sessions/${sid}/ext_in/001`]?.result;
+    check(res?.ops?.some((o) => o.op === 'recall' && o.ok) && res.notes?.some((x) => /recall b9：到期 3 条，这一段放 2 条/.test(x)), `执行结果里没有「到期 3 条，这一段放 2 条」：${JSON.stringify(res)}`);
+    const ev0 = (await t.docs('evidence')).filter((e) => e.src === 'recall').length;
+    for (const r of ['got', 'miss']) {
+      await t.page.click('.class-recall .rc-show'); await sleep(900);
+      await t.page.click(`.class-recall .rc-r[data-r="${r}"]`);
+      await sleep(1500);
+    }
+    await t.waitFor(async () => (await t.text('.class-recall'))?.includes('想了 2 条'), { timeout: 10000, what: '两条评完出小结' });
+    const rec = await t.docs('recall');
+    check(rec.filter((d) => /^KE/.test(d.id) && d.last === today && d.result).length === 2, '评了 2 条，记忆点里今天评过的不是 2 条');
+    check((await t.docs('evidence')).filter((e) => e.src === 'recall').length === ev0 + 2, '评了 2 条，证据没有正好多 2 条');
+    const missed = rec.find((d) => /^KE/.test(d.id) && d.result === 'miss')?.id;
+    await t.waitFor(async () => Object.entries(await t.db()).some(([p, d]) => p.startsWith(`sessions/${sid}/ext_out/`) && String(d.text || '').includes(`[页面] 记忆点 b9：想起来 1、模糊 0、没想起 1（${missed}）`)), { timeout: 15000, what: 'ext_out 里回报记忆点做完的一行' });
+    // 刷新：这一段重画，只剩没评过的那 1 条（没想起的那条明天才到期）；证据不多
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('.class-recall .rc-show'), { timeout: 20000, what: '刷新后板上还有剩下的那一条' });
+    check((await t.text('.class-recall'))?.includes('第 1 / 1 条'), `刷新后应只剩 1 条：${await t.text('.class-recall')}`);
+    check((await t.docs('evidence')).filter((e) => e.src === 'recall').length === ev0 + 2, '刷新以后证据多了');
+    // 没有到期的：不画段，执行结果里说明
+    await plantLive(t, { 'recall/KE1': { ...k('KE1', today), result: 'got' }, 'recall/KE2': { ...k('KE2', today), result: 'got' }, 'recall/KE3': { ...k('KE3', today), result: 'got' } });
+    await sleep(1500);
+    await plantLive(t, { [`sessions/${sid}/ext_in/002`]: { seq: 2, text: `再来。\n\n${F4}board recall id=b10\n${F4}\n`, at: Date.now() } });
+    const r2 = await t.waitFor(async () => (await t.db())[`sessions/${sid}/ext_in/002`]?.result, { timeout: 15000, what: 'ext_in/002 执行' });
+    check(r2.notes?.some((x) => /recall b10：没有到期的记忆点/.test(x)), `没有到期的，执行结果应说明：${JSON.stringify(r2)}`);
+    check(!(await t.page.$('[data-step="b10"]')), '没有到期的记忆点，不该画 b10 这一段');
+    return t;
+  },
+
   async errors(browser) {
     const t = await seeded(browser);
     // 故意制造一个没接住的错误：应该被记进 meta/errors，管理页能看到
