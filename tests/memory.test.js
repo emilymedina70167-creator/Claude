@@ -60,7 +60,7 @@ test('日期：YYYY-MM-DD，按日历加减，2 月 30 日这种不算', () => {
   assert.equal(addDays('2026-11-01', 1), '2026-11-02', '夏令时那天也是 1 天');
   assert.equal(daysBetween('2026-10-27', '2026-11-03'), 7);
   assert.equal(toDate('2026-10-27'), '2026-10-27');
-  assert.equal(toDate(new Date(2026, 9, 27, 23, 59)), '2026-10-27', '按本地日期');
+  assert.equal(toDate(new Date(Date.UTC(2026, 9, 27, 15, 59))), '2026-10-27', '按上海的日期（上海 23:59）');
 });
 
 test('复现档位 1 → 3 → 7 → 14 → 30：过了升一档，没过回到 1 天', () => {

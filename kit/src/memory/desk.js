@@ -123,7 +123,8 @@ export const viewHash = () => { const h = decodeURIComponent(String(location.has
 const nameIn = (get) => (coll, id) => { const d = (get()?.[coll] || []).find((x) => String(x.id) === String(id)); return d ? String(d.title || d.text || d.q || '') : ''; };
 
 // 顶上那行日期：11月3日 · 周二
-const todayLabel = (d = new Date()) => `${d.getMonth() + 1}月${d.getDate()}日 星期${'日一二三四五六'[d.getDay()]}`;
+// 顶上的日期和排期用同一个「今天」（上海），设备时区不是上海时不各说各的
+const todayLabel = (now = Date.now()) => { const [, m, d] = toDate(now).split('-').map(Number); return `${m}月${d}日 星期${'日一二三四五六'[new Date(`${toDate(now)}T00:00:00Z`).getUTCDay()]}`; };
 
 // 首页以外的页面（pages.js），换页不刷新
 const PAGES = { chat: '班主任', notes: '笔记', map: '课程地图', books: '教材', exam: '考情', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
