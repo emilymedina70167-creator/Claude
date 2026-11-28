@@ -78,7 +78,7 @@ test('点过的生词：下课进记忆点（同一个词不重复、在记的�
   const evs = [gl('breakthrough', '突破', 1), gl('Breakthrough', '突破', 2), gl('instance', '例子', 3), gl('other', 'x', 4, 'c-other')];
   assert.deepEqual(glossedWords(evs, 'c-20261104-1').map((w) => w.word), ['breakthrough', 'instance']);
   const recall = [{ id: 'K3', q: 'instance', a: '例子', kind: 'word', tier: 3, status: 'active' }];
-  const out = vocabRecalls({ evidence: evs, recall, session: { id: 'c-20261104-1', block: 'EN-L1.2.1', space: 'en' }, now: Date.parse('2026-11-04T10:00:00') });
+  const out = vocabRecalls({ evidence: evs, recall, session: { id: 'c-20261104-1', block: 'EN-L1.2.1', space: 'en' }, now: Date.parse('2026-11-04T10:00:00+08:00') });
   assert.equal(out.length, 1);
   assert.equal(out[0].id, 'K4');
   assert.deepEqual({ q: out[0].doc.q, a: out[0].doc.a, kind: out[0].doc.kind, tier: out[0].doc.tier, block: out[0].doc.block, space: out[0].doc.space, last: out[0].doc.last }, { q: 'breakthrough', a: '突破', kind: 'word', tier: 1, block: 'EN-L1.2.1', space: 'en', last: '2026-11-04' });

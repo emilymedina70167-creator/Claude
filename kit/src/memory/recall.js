@@ -102,3 +102,16 @@ export function recallEvidence(d, { typed = '', rating, at = Date.now() } = {}) 
     ...(d.block ? { block: String(d.block) } : {}),
   };
 }
+
+/** 板上的记忆点（blocks/recalldue.js）组件里的几行：n（1 到 RECALL_N，默认 10）、space（不写就是这节课的科）。返回 { n, space } 或 { error } */
+export function parseRecallDue(src) {
+  const out = { n: 10, space: '' };
+  for (const line of String(src || '').split('\n')) {
+    const m = line.match(/^\s*([a-z]+)\s*[:：]\s*(.*?)\s*$/);
+    if (!m || m[1] === 'id') continue;
+    if (m[1] === 'n') { const n = Number(m[2]); if (!Number.isInteger(n) || n < 1 || n > RECALL_N) return { error: `n 写 1 到 ${RECALL_N} 的整数` }; out.n = n; }
+    else if (m[1] === 'space') { if (!Object.keys(SPACES).includes(m[2])) return { error: `space 只能是 ${Object.keys(SPACES).join('、')}` }; out.space = m[2]; }
+    else return { error: `不认识「${m[1]}」：只有 n、space` };
+  }
+  return out;
+}

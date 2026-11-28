@@ -15,7 +15,7 @@ import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { extClass, sessionFromFile } from './ext-class.js';
+import { extClass, sessionFromFile, sessionDirs } from './ext-class.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const KIT = resolve(here, '../kit/dist/la-kit.js');
@@ -29,16 +29,6 @@ if (!nextFile) { console.error('要写 --next 这一轮.txt（这一轮要写进
 const LINT = process.argv.includes('--lint');
 if (!LINT && !existsSync(KIT)) { console.error(`没有 ${KIT}：先 npm run build`); process.exit(2); }
 
-// 存下来的 JSON：ArtifactData 的 out_dir 每条一个文件，内容可能是文档本身，也可能包了一层 { data }
-const readDocs = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => { const j = JSON.parse(readFileSync(join(dir, f), 'utf8')); return { id: f.replace(/\.json$/, ''), ...(j.data || j) }; }) : []);
-function sessionDirs(root, sid) {
-  const base = join(root, 'sessions');
-  if (!existsSync(base)) return null;
-  const ids = sid ? [sid] : readdirSync(base).filter((x) => existsSync(join(base, x, 'ext_in'))).sort();
-  const id = ids.at(-1);
-  return id ? { id, ins: readDocs(join(base, id, 'ext_in')), outs: readDocs(join(base, id, 'ext_out')) } : null;
-}
-
 const root = arg('session');
 // --session 是一个文件（每行一条 { id, data }，或一个数组）也认（dr-ext-round2）
 const asFile = root && existsSync(resolve(root)) && statSync(resolve(root)).isFile();
@@ -48,7 +38,7 @@ if (LINT) {
   const { lintTurn, blockNames, priorTexts, checkers } = await import('./ext-lint.js');
   const t0 = Date.now();
   const extra = await checkers();
-  const r = lintTurn({ prior: priorTexts(s?.ins || []), text: readFileSync(resolve(nextFile), 'utf8'), names: await blockNames(), ...extra });
+  const r = lintTurn({ prior: priorTexts(s?.ins || []), text: readFileSync(resolve(nextFile), 'utf8'), names: await blockNames(), ...extra, hints: { react: String(arg('hints', '')).split(',').includes('react') } });
   const errs = r.problems.filter((p) => p.level !== 'hint'), hints = r.problems.filter((p) => p.level === 'hint');
   console.log(`写法检查：${r.segments} 段、${r.components} 个组件，${errs.length ? `${errs.length} 处问题` : '没有问题'}${hints.length ? `；${hints.length} 条出题提示` : ''}（${Date.now() - t0} 毫秒，没开浏览器；画出来的样子用不带 --lint 的跑）`);
   for (const p of errs) console.log(`  · ${p.where}：${p.msg}`);

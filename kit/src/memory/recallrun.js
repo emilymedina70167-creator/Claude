@@ -16,14 +16,16 @@ const inline = (s) => { try { return mdToHtml(String(s ?? ''), { inline: true })
 
 /**
  * host：画在哪（首页那张卡的身体）；items：这次要想的记忆点（recall.js 的 recallToday）；db：学习台的数据库；
- * titleOf(block)：块的标题；onDone()：想完了 / 先到这（回到卡片的样子）
+ * titleOf(block)：块的标题；onDone()：想完了 / 先到这（回到卡片的样子）；
+ * onFinish(tally, missed)：这一叠停下的那一刻（板上的 board recall 拿它回报外部）；scroll：false 时不动页面的滚动（板上的段自己有位置）
  */
-export function runRecall(host, { items = [], db, titleOf = () => '', onDone = () => {} } = {}) {
+export function runRecall(host, { items = [], db, titleOf = () => '', onDone = () => {}, onFinish = null, scroll = true } = {}) {
   const list = items.slice();
   const tally = { got: 0, vague: 0, miss: 0 };
   let at = 0;
   let busy = false;
   let stopped = false; // 评分还在写、卡还在飞时点了「先到这」：写完这张就停，不再翻出下一张
+  const missed = []; // 没想起的那几条的编号
   const evIds = new Map(); // 一条记忆点这一叠里只记一条证据：写记忆点失败重试时不再多出一条
 
   function show() {
@@ -48,7 +50,7 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
     host.querySelector('.rc-show').addEventListener('click', reveal);
     // 不是第一张：从后面那一叠里跟上来
     if (at > 0) anim(host.querySelector('.rc-card'), [{ transform: 'translateY(14px) scale(.95)', opacity: 0.6 }, { transform: 'none', opacity: 1 }], { duration: 460, easing: SPRING });
-    window.scrollTo({ top: Math.max(0, host.getBoundingClientRect().top + window.scrollY - 80), behavior: 'smooth' });
+    if (scroll) window.scrollTo({ top: Math.max(0, host.getBoundingClientRect().top + window.scrollY - 80), behavior: 'smooth' });
   }
 
   function reveal() {
@@ -90,6 +92,7 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
       await db.doc(`evidence/${evId}`).set({ ...evDoc, wroteAt: Date.now() });
       await db.doc(`recall/${k.id}`).set(applyChange(base, patch, { date: today, by: 'page', basis: [evId], note: `我自己想了一遍：${note}` }));
       tally[rating]++;
+      if (rating === 'miss') missed.push(k.id);
       // 评完那张飞走：想起来了往右、没想起往左、模糊往上
       const dir = rating === 'got' ? 1 : rating === 'miss' ? -1 : 0;
       await anim(host.querySelector('.rc-card'), [{ transform: 'none', opacity: 1 }, { transform: dir ? `translateX(${dir * 120}%) rotate(${dir * 10}deg)` : 'translateY(-40px) scale(.92)', opacity: 0 }], { duration: 380, easing: SHEET, fill: 'forwards' }).finished.catch(() => {});
@@ -103,6 +106,7 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
 
   function done() {
     const n = tally.got + tally.vague + tally.miss;
+    if (onFinish) onFinish({ ...tally }, missed.slice());
     if (!n) { onDone(); return; }
     host.innerHTML = `
       <div class="rc-run">
@@ -111,7 +115,7 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
         <p class="muted">${tally.miss ? '没想起的明天再来；' : ''}想起来的隔得更久再问，隔 30 天还想得起来就算记牢了。</p>
         <div class="rc-acts"><button type="button" class="btn btn-primary rc-ok">好</button></div>
       </div>`;
-    host.querySelector('.rc-ok').addEventListener('click', onDone);
+    host.querySelector('.rc-ok').addEventListener('click', () => onDone());
   }
 
   show();

@@ -11,6 +11,9 @@ const n = (v) => (Array.isArray(v) ? v.length : 0);
  * data：学习台的数据（记忆库各类、sessions、notebook）；books：{ books, chunks }；exam：{ questions, years: [从, 到], profiles }；
  * chats：和班主任对话的段数；today：YYYY-MM-DD（给了就写首页「今天」照哪里画、现在的几个数）
  */
+/** 外部的课里后加的可选指令的名字（meta/catalog 里只列名字） */
+export const EXT_EXTRAS = ['board recall'];
+
 export function catalogText({ data = {}, books = null, exam = null, chats = 0, today = '' } = {}) {
   const lines = [];
   const bk = books?.books || [];
@@ -36,6 +39,8 @@ export function catalogText({ data = {}, books = null, exam = null, chats = 0, t
   if (led.length) lines.push(`- 学习的账：${led.join('、')}`);
   lines.push('- 页面算好的事实：预测分 meta/forecast；真题统计 meta/exam；每节课的「要拿下的事」和隔天验在 sessions/{编号} 的 aims、holds、later；体检 meta/health');
   if (today) lines.push(todayFacts(data, today));
+  // 外部的课里可选的指令：只列名字（工具只是工具，用不用、什么时候用由上课的 Claude 定；写法要用时自己查）
+  lines.push(`- 外部的课里可选的指令（写法在仓库 docs/ext-class.md 按名字查）：${EXT_EXTRAS.join('、')}`);
   lines.push('- 学生的项目指令：meta/instructions');
   lines.push('- dev_requests：写在这里的，开发那边每次开工先读（要改页面代码才做得到的事）');
   return lines.join('\n');

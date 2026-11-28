@@ -1,5 +1,8 @@
 // 外部的预检工具（第十五轮，tools/ext-check.mjs）的纯函数：这节课已有的 ext_in / ext_out 加上这一轮要写的，
 // 拼成 check-lesson.mjs 认的 .class.json（{ unit, subject, turns: [{ student, teacher }] }）。tests/ext-class.test.js
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 const num = (d) => Number(d?.seq) || Number(String(d?.id ?? '').replace(/\D/g, '')) || 0;
 const START = '开始上课。';
 const F = '````';
@@ -59,4 +62,15 @@ export function sessionFromFile(text = '') {
     else if (coll === 'ext_out') outs.push({ id, ...data });
   }
   return { id: sid, ins, outs, bad };
+}
+
+// 存下来的 JSON：ArtifactData 的 out_dir 每条一个文件，内容可能是文档本身，也可能包了一层 { data }
+export const readDocs = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => { const j = JSON.parse(readFileSync(join(dir, f), 'utf8')); return { id: f.replace(/\.json$/, ''), ...(j.data || j) }; }) : []);
+/** 存数据的目录里的一节课：{ id, ins, outs }；不写课号取最后一节 */
+export function sessionDirs(root, sid) {
+  const base = join(root, 'sessions');
+  if (!existsSync(base)) return null;
+  const ids = sid ? [sid] : readdirSync(base).filter((x) => existsSync(join(base, x, 'ext_in'))).sort();
+  const id = ids.at(-1);
+  return id ? { id, ins: readDocs(join(base, id, 'ext_in')), outs: readDocs(join(base, id, 'ext_out')) } : null;
 }

@@ -18,6 +18,7 @@
 - `board snap`：下一份 `ext_out` 带这块板的截图（`shots`：asset 编号，用读图的工具取）。不写不拍。
 - `board close`：这一轮画完就下课（不调用 Claude、不写小结）：页面写 `status: closed`、`closedBy: "ext"`，算课后报告 `sessions/{编号}/report/main`（里面 `ext: { n, median, p90 }` 是来回的毫秒数）。学生在页面上点「下课」也一样。
 - `board coach target=题的 id upto=…`：开这一题的板边助教（见文末）。不写就没有。
+- `board recall id=b9 [n=10] [space=math|cs|en] [title="…"]`：把这一科到期的记忆点放成当前板上的一段，学生当场做（先写、翻面、自己评；记账和首页「要记的」同一条路）。`n` 一次放几条（1 到 20，不写是 10），`space` 不写就是这节课的科。没有块内容。执行结果的 `notes` 里写「recall b9：到期 23 条，这一段放 10 条」，没有到期的写「recall b9：没有到期的记忆点，没画这一段」；做完（或学生点了「先到这」）下一份 `ext_out` 有一行 `[页面] 记忆点 b9：想起来 6、模糊 1、没想起 3（K12、K40、K77）`。
 
 **执行完当场回报**（不用等学生动一下）：
 

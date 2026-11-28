@@ -4,7 +4,7 @@ import { heldDrillIds } from './drills.js';
 //
 // 情绪价值照我的口味（profile：语气平实，不夸、不铺垫）：只说真发生了的事——连着学了几天、这周学了多久、
 // 哪个知识点上次错了几道这次一上来就对了、哪一块升了一档。没有可说的就不说，不编鼓励的话。
-import { toDate, addDays, daysBetween } from './schema.js';
+import { toDate, addDays, daysBetween, SHANGHAI_MS } from './schema.js';
 import { voidedIds } from './memo.js';
 import { spaceOfId, courseOf, COURSES, SPACES } from './space.js';
 import { pointCatalog } from './skills.js';
@@ -17,11 +17,10 @@ const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v =
 /** 离考试还有几天（考试那天是 0，过了是负数） */
 export const daysLeft = (today = toDate(Date.now()), exam = EXAM_DATE) => daysBetween(today, exam);
 
-/** 离下一个本地午夜还有多少毫秒（页面一直开着时，到点把「今天」换成新的一天）；至少 1 秒，免得在午夜那一刻连着触发 */
+/** 离上海的下一个零点还有多少毫秒（页面一直开着时，到点把「今天」换成新的一天；和 toDate 一样不看设备时区）；多等 1 秒，免得在零点那一刻连着触发 */
 export function msToNextDay(now = Date.now()) {
-  const d = new Date(now);
-  const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 1);
-  return Math.max(1000, next.getTime() - d.getTime());
+  const DAY = 24 * 3600 * 1000;
+  return DAY - ((now + SHANGHAI_MS) % DAY) + 1000;
 }
 
 /** 顶上那一行：离考研 413 天 */

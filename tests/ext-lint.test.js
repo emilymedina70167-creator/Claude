@@ -74,7 +74,7 @@ test('出题提示：没写预案、正确选项长、露答案、能绕过前�
   const names = await blockNames();
   const F3 = '```';
   const text = `\`\`\`\`board new id=b1 title="t"\n${F3}answer\nid: a1\nq: 2+3 等于几\nanswer: 5\n${F3}\n${F3}quiz\nid: z1\nq: 选一个\n- [x] 因为矩阵乘法一般不满足交换律所以不能这样\n- [ ] 能\n- [ ] 不一定\n${F3}\n${F3}quiz\nid: z2\nq: 上面那题得 5，对吗\n- [x] 5\n- [ ] 6\n${F3}\n\`\`\`\`\n\n\`\`\`\`board react target=a1\nwrong: 再想想\n\`\`\`\``;
-  const r = lintTurn({ text, names });
+  const r = lintTurn({ text, names, hints: { react: true } });
   const hints = r.problems.filter((p) => p.level === 'hint').map((p) => p.msg).join('\n');
   assert.doesNotMatch(hints, /a1 没写预案/);
   assert.match(hints, /z1 没写预案/);
@@ -125,4 +125,49 @@ test('board check 的 408、英语样板：ext-check --lint 退出码 0；改坏
   const bad = run(three);
   assert.equal(bad.status, 1, bad.stdout);
   assert.match(bad.stdout, /1 处问题/);
+});
+
+test('board recall：认得这条指令；id 和已有的段重了照旧报', async () => {
+  const names = await blockNames();
+  const ok = lintTurn({ prior: [], text: `做几条到期的。\n\n${F}board recall id=b9 n=5\n${F}`, names });
+  assert.deepEqual(ok.problems, []);
+  assert.equal(ok.segments, 1);
+  const dup = lintTurn({ prior: [seg('new', 'b9', 'x')], text: `${F}board recall id=b9\n${F}`, names });
+  assert.match(dup.problems.map((p) => p.msg).join('\n'), /b9 已经用过了/);
+  const bad = lintTurn({ prior: [], text: `${F}board recall id=b9 n=99\n${F}`, names });
+  assert.match(bad.problems.map((p) => p.msg).join('\n'), /1 到 20/);
+});
+
+test('补漏：生词表照页面同一个读法查（词条里的省略号页面会整块报错）', async () => {
+  const names = await blockNames();
+  const bad = lintTurn({ prior: [], text: seg('new', 'b1', `He owes it to her.\n${f}gloss\nowe … to = 归功于\n${f}`), names });
+  assert.match(bad.problems.filter((p) => p.level !== 'hint').map((p) => p.msg).join('\n'), /看不懂「owe … to = 归功于」/);
+  const ok = lintTurn({ prior: [], text: seg('new', 'b1', `He keeps track of it.\n${f}gloss\nkeep track of = 跟踪\n${f}`), names });
+  assert.deepEqual(ok.problems.filter((p) => p.level !== 'hint'), []);
+});
+
+test('补漏：加粗紧挨着标点、画不出来的（** 会原样留在板上）', async () => {
+  const names = await blockNames();
+  const msgs = (body) => lintTurn({ prior: [], text: seg('new', 'b1', body), names }).problems.filter((p) => p.level !== 'hint').map((p) => p.msg).join('\n');
+  assert.match(msgs('这个词**, which is,**后面接着写'), /加粗没画出来/);
+  assert.match(msgs('这是**重点：**后面'), /加粗没画出来/);
+  assert.equal(msgs('这是 **重点**：后面，**, which is,** 句首的能画'), '');
+  assert.equal(msgs(`公式 $a**b$ 和代码 \`x**y\` 里的不算\n${f}answer\nid: q1\nq: 2**3 是几\nanswer: 8\n${f}`), '');
+});
+
+test('补漏：react 写在它要揭开的段前面，提示一句（页面会警告）', async () => {
+  const names = await blockNames();
+  const q = `${f}answer\nid: q1\nq: 1\nanswer: 1\n${f}`;
+  const react = `${F}board react target=q1\nright show=b2:\n${F}`;
+  const hints = (text, prior = []) => lintTurn({ prior, text, names }).problems.filter((p) => p.level === 'hint').map((p) => p.msg).join('\n');
+  assert.match(hints([seg('new', 'b1', q), react, `${F}board add id=b2 hold\n第二问\n${F}`].join('\n\n')), /show=b2 写在 b2 这一段前面/);
+  assert.doesNotMatch(hints([seg('new', 'b1', q), `${F}board add id=b2 hold\n第二问\n${F}`, react].join('\n\n')), /写在 b2 这一段前面/);
+  assert.doesNotMatch(hints(react, [seg('new', 'b1', q), `${F}board add id=b2 hold\n第二问\n${F}`]), /写在 b2 这一段前面/, '以前的轮里已经有 b2');
+});
+
+test('「没写预案」的提示默认不报（答错不预写是这位学生定的做法），要看的自己开', async () => {
+  const names = await blockNames();
+  const text = seg('new', 'b1', `${f}answer\nid: q1\nq: 1\nanswer: 1\n${f}`);
+  assert.doesNotMatch(lintTurn({ prior: [], text, names }).problems.map((p) => p.msg).join('\n'), /学生答错要等你/);
+  assert.match(lintTurn({ prior: [], text, names, hints: { react: true } }).problems.map((p) => p.msg).join('\n'), /学生答错要等你/);
 });

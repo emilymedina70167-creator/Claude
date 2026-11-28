@@ -4,6 +4,8 @@
 // mark / unmark（在板上圈、框、划、写旁注）。
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
 import { parseCoach } from './ext.js';
+import { RECALL_N } from '../memory/recall.js';
+import { SPACE_KEYS } from '../memory/space.js';
 import { parseClaude, parseClaudeOff } from './delegate.js';
 import { parseQueue, parseEdits } from './extboard.js';
 import { parseCheck } from '../check/spec.js';
@@ -155,7 +157,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / unqueue / edit / stage / widget / judge / check';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / unqueue / edit / stage / widget / judge / check / recall';
 
 /**
  * 解析 board 后面那一行：
@@ -241,6 +243,20 @@ export function parseCommand(header) {
     if (!id) return { error: 'check 缺少 id：board check id=k1 limit=15m，块里写 block 行和探题' };
     if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
     return { op: 'check', id, head: m[2].trim() };
+  }
+  // 外部的课：把这一科到期的记忆点放成板上的一段（memory/recallrun.js，和首页自测同一条路）。放不放、放几条由主讲定
+  if (name === 'recall') {
+    const t = tokenize(m[2] || '');
+    const get = (k) => t.find((x) => x.key === k)?.value;
+    const id = get('id') || t.find((x) => !x.key)?.value;
+    if (!id) return { error: 'recall 缺少 id：board recall id=b9（可选 n=10 space=en title="…"）' };
+    if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
+    const n = get('n') === undefined ? 10 : Number(get('n'));
+    if (!Number.isInteger(n) || n < 1 || n > RECALL_N) return { error: `n 写 1 到 ${RECALL_N} 的整数（一次放几条）` };
+    const space = get('space');
+    if (space !== undefined && !SPACE_KEYS.includes(space)) return { error: `space 只能是 ${SPACE_KEYS.join('、')}（不写就是这节课的科）` };
+    const title = get('title');
+    return { op: 'recall', id, n, ...(space ? { space } : {}), ...(title ? { title } : {}) };
   }
   if (name === 'close') return { op: 'close' };
   if (name === 'coach') { const r = parseCoach(m[2] || ''); return r.error ? { error: r.error } : { op: 'coach', target: r.target, upto: r.upto }; }

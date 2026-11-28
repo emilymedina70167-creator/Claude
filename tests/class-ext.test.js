@@ -101,3 +101,10 @@ test('页面里的 Claude 说的话记成证据 src: helper', () => {
   assert.equal(e.target, 'q1');
   assert.equal(e.session, 's1');
 });
+
+test('recallOutLine：板上的记忆点做完，回报外部的那一行', async () => {
+  const { recallOutLine } = await import('../kit/src/class/ext.js');
+  assert.equal(recallOutLine('b9', { got: 6, vague: 1, miss: 3 }, ['K12', 'K40', 'K77']), '[页面] 记忆点 b9：想起来 6、模糊 1、没想起 3（K12、K40、K77）');
+  assert.equal(recallOutLine('b9', { got: 2, vague: 0, miss: 0 }, []), '[页面] 记忆点 b9：想起来 2、模糊 0、没想起 0');
+  assert.equal(recallOutLine('b9', {}, []), '[页面] 记忆点 b9：想起来 0、模糊 0、没想起 0');
+});

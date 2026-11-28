@@ -299,7 +299,10 @@ export function assertWrite(role, coll) {
 
 // —— 日期 ——
 
-/** Date 或时间戳 → 本地日期 YYYY-MM-DD；已经是 YYYY-MM-DD 的字符串原样 */
+/** 上海比 UTC 早 8 小时，没有夏令时 */
+export const SHANGHAI_MS = 8 * 3600 * 1000;
+
+/** Date 或时间戳 → 上海的日期 YYYY-MM-DD；已经是 YYYY-MM-DD 的字符串原样 */
 export function toDate(d) {
   if (typeof d === 'string' && DATE_RE.test(d)) {
     const t = new Date(`${d}T00:00:00Z`);
@@ -307,8 +310,10 @@ export function toDate(d) {
   }
   const t = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(t.getTime())) return '';
+  // 按上海时间取日期，不看设备时区：学生的 iPad 时区不是上海时，本地日期会早（晚）一天，记忆点、复现的排期跟着错位
+  const s = new Date(t.getTime() + SHANGHAI_MS);
   const p = (n) => String(n).padStart(2, '0');
-  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+  return `${s.getUTCFullYear()}-${p(s.getUTCMonth() + 1)}-${p(s.getUTCDate())}`;
 }
 
 /** YYYY-MM-DD 加几天（按日历算，不受时区、夏令时影响） */

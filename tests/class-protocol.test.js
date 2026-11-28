@@ -416,3 +416,16 @@ test('乱七八糟的输入不抛异常', () => {
   assert.doesNotThrow(() => parseOutput(12345));
   assert.deepEqual(parseOutput(12345, { final: true }).segments, [{ type: 'speech', text: '12345' }]);
 });
+
+test('board recall：把到期的记忆点放到板上（外部的课），只有 id、条数、科、标题', async () => {
+  const { parseCommand: pc } = await import('../kit/src/class/protocol.js');
+  assert.deepEqual(pc('recall id=b9'), { op: 'recall', id: 'b9', n: 10 });
+  assert.deepEqual(pc('recall id=b9 n=5 space=en title="先过一遍到期的"'), { op: 'recall', id: 'b9', n: 5, space: 'en', title: '先过一遍到期的' });
+  assert.match(pc('recall id=b9 n=0').error, /1 到 20/);
+  assert.match(pc('recall id=b9 n=21').error, /1 到 20/);
+  assert.match(pc('recall id=b9 n=三').error, /1 到 20/);
+  assert.match(pc('recall id=b9 space=政治').error, /math、cs、en/);
+  assert.match(pc('recall').error, /id=/);
+  assert.match(pc('recall id=a/b').error, /不合法/);
+  assert.match(pc('nothing').error, /recall/, '认得的指令清单里有它');
+});

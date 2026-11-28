@@ -3,7 +3,7 @@
 // （tests/memory-guard.test.js），真数据的量法在 tools/guard-audit.mjs。
 //
 // 不碰上课的速度：只在写进记忆库那一刻跑（memo 块执行时、下课以后、首页、云端），几毫秒，不调用 Claude。
-import { COLLECTIONS } from './schema.js';
+import { COLLECTIONS, toDate } from './schema.js';
 import { validateWrite } from './writer.js';
 import { similarity } from './memo.js';
 import { spaceOfId } from './space.js';
@@ -263,7 +263,7 @@ export function guardCandidate(cand, ctx = {}) {
 
 function list(v) { return Array.isArray(v) ? v : v == null || v === '' ? [] : [v]; }
 function cut(s, n) { s = String(s ?? ''); return s.length > n ? `${s.slice(0, n)}…` : s; }
-function toDay(at) { const d = new Date(Number(at) || 0); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+function toDay(at) { return toDate(Number(at) || 0); } // 和别处同一个「哪一天」（上海），不看设备时区
 
 /** 挂在那一条上的记号（挂提醒、暂存时）：哪几道看出了什么，不含 info */
 export function guardMark(g, now = Date.now()) {
