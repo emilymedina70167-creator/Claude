@@ -52,3 +52,10 @@ test('lab.check：页面判的四种', () => {
   assert.equal(odd.ok, null);
   assert.match(odd.why, /value/);
 });
+
+test('框里的状态带 $$、$\' 时原样放回去（替换值不当特殊写法）', async () => {
+  const { frameDoc } = await import('../kit/src/htmlseg.js');
+  const doc = frameDoc({ html: '<p>x</p>', nonce: 'n1', state: { a: '$$x^2$$', b: "$'y" } });
+  assert.ok(doc.includes('"$$x^2$$"'), doc.slice(0, 200));
+  assert.ok(doc.includes(`"$'y"`));
+});

@@ -24,7 +24,8 @@ export function rawBits(text) {
   // 认出来的一段换成空格：后面的规则不再从它里面认一遍（$\frac{1}{2}$ 只算一处）
   const take = (re) => { t = t.replace(re, (m) => { if (out.length < 3) out.push(clip(m, 30)); return ' '.repeat(m.length); }); };
   take(/\*\*[^*\n]{1,40}\*\*|\*\*/g);
-  if (out.length < 3) take(/==[^=\n]{1,40}==/g);
+  // 荧光笔的 ==…== 两头贴着字（render.js 也只认这种）；代码里的「dk == 2 && i == 5」两头是空格，不是漏出来的写法（11-24 被当成了）
+  if (out.length < 3) take(/==(?=[^\s=])[^=\n]{1,40}(?<=[^\s=])==/g);
   if (out.length < 3) take(/\$[^$\s][^$\n]{0,60}\$/g);
   if (out.length < 3) take(/\\(?:frac|dfrac|begin|end|sqrt|times|cdot|left|right|mathbf|text|hl|chalk|calc|alpha|beta|lambda|sum|int)\b[^\s，。]{0,24}/g);
   return [...new Set(out)];

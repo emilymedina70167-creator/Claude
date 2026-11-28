@@ -144,7 +144,8 @@ function frameBoot() {
  * 不写 color-scheme：框里和外面的 color-scheme 不一样时浏览器给框铺一层不透明的底色（深色风格里是一块黑）
  */
 export function frameDoc({ html = '', nonce = '', state = null, look = {} } = {}) {
-  const boot = `(${frameBoot.toString()})();`.replace('__N__', scriptJson(String(nonce))).replace('__S__', scriptJson(state && typeof state === 'object' ? state : {}));
+  const boot = `(${frameBoot.toString()})();`.replace('__N__', () => scriptJson(String(nonce))).replace('__S__', () => scriptJson(state && typeof state === 'object' ? state : {}));
+  // 替换值用函数：字符串替换值里的 $$、$'、$` 有特殊意思，存着 LaTeX 的状态（'$$x^2$$'）刷新后会被改坏（11-22 全面检查第 2 条）
   const css = [
     `html,body{margin:0;background:transparent}`,
     `body{color:${cssSafe(look.color) || 'inherit'};font:16px/1.6 ${cssSafe(look.font) || 'system-ui,sans-serif'};overflow-wrap:anywhere}`,

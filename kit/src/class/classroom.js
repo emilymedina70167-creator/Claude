@@ -917,8 +917,11 @@ export async function renderClass(root, meta, desk = null) {
     syncUsage();
     refresh();
     if (bv.view !== bv.cur) bv.show(bv.cur, { animate: true });
-    const el = shown.map((o) => segs.get(o.id)?.sec).filter(Boolean).at(-1) || (plan.talk ? cur?.talkEl : null);
-    el?.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: shown.length ? 'nearest' : 'start' });
+    // 揭开了下一问：滚到刚好露出来。只接了一句话（「对。」）时不拉回板顶（学生 11-24 说了两次：
+    // 「每次我回答完还要给我拉到上面看个对」），和老师说话时的不打扰（quiet.js）一样：板顶不在眼前就用输入条上方的一小条
+    const el = shown.map((o) => segs.get(o.id)?.sec).filter(Boolean).at(-1);
+    if (el) el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' });
+    else if (plan.talk && cur?.talkEl && cur.talkEl.getBoundingClientRect().top < 0) showEcho(plan.talk);
     nudged = false;
     lastActive = Date.now();
     bar.setStatus('idle', '');
@@ -1119,8 +1122,12 @@ export async function renderClass(root, meta, desk = null) {
     const old = new Map(keep.map((id) => [id, seg.sec.querySelector(`[data-bid="${CSS.escape(id)}"]`)]).filter(([, el]) => el));
     const scenes = new Map([...session.scenes].filter(([, sc]) => [...old.values()].some((el) => el === sc.el || el.contains(sc.el))));
     for (const el of old.values()) { const ph = document.createElement('div'); ph.dataset.keep = el.dataset.bid; el.replaceWith(ph); }
+    // 留下的组件上挂的预案（「答对揭开下一问」）也留着：replace 会把这一段的预案都作废，
+    // 11-25 改一张生词表就把 show= 的链断了，学生答对第二句以为这块板做完了
+    const keptRules = keep.map((id) => [id, reacts.get(id)]).filter(([, r]) => r && r.seg === op.id);
     const res = execOp({ op: 'replace', id: op.id, body: r.md }, failures, notes);
     const sec = segs.get(op.id)?.sec;
+    if (res.ok) for (const [id, rule] of keptRules) if (!reacts.has(id)) reacts.set(id, rule);
     if (res.ok && sec) {
       for (const [id, el] of old) {
         const fresh = sec.querySelector(`[data-bid="${CSS.escape(id)}"]`);
@@ -1137,6 +1144,7 @@ export async function renderClass(root, meta, desk = null) {
     return { ...res, op: 'edit', ...(res.ok ? { kept: [...old.keys()] } : {}) };
   }
 
+  let turnIds = new Set(); // 正在执行的这一轮里写到的段 id（finishTurn 里设）
   function execOp(op, failures, notes) {
     if (op.warn) notes.push(`${op.op} ${op.id || ''}：${op.warn}`);
     // 教学计划：不上黑板；下一轮从对话历史里取最新的一份放进说明（prompt.js 的 latestPlan）
@@ -1388,7 +1396,7 @@ export async function renderClass(root, meta, desk = null) {
       if (!seg && !owner) return { op: 'react', target: op.target, ok: false, error: missingTarget(op.target, segFacts()) };
       if (owner) { pendingTargets.set(String(op.target), { queue: owner.id }); notes.push(`react ${op.target} 挂在预备板 ${owner.id} 的组件上：开板时挂上`); }
       if (op.errors?.length) notes.push(`react ${op.target} 里有 ${op.errors.length} 行没用：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
-      const unknown = [...new Set(op.cases.flatMap((c) => c.show || []))].filter((id) => !segs.has(id));
+      const unknown = [...new Set(op.cases.flatMap((c) => c.show || []))].filter((id) => !segs.has(id) && !turnIds.has(id));
       if (unknown.length) notes.push(`react ${op.target} 的 show= 写了黑板上没有的段：${unknown.join('、')}（到时候揭不开）`);
       // 答错、想不出来、很久没动静（live）只在外部的课里照接；页面里的老师写了照旧不收（教学不预制，react.js）
       const live = EXT ? [] : op.cases.filter((c) => c.live);
@@ -1873,7 +1881,7 @@ export async function renderClass(root, meta, desk = null) {
     if (waker) {
       const w = waker.state();
       const bad = w.error ? `出错：${w.error}` : w.cm && w.status !== 'available' ? `状态：${w.status}` : !w.cm && w.status !== '准备中' ? w.status : '';
-      if (bad !== (extState.wakeTold || '')) { extState.wakeTold = bad; if (bad) lines.push(`[页面] 学生作答时叫醒你的门铃（评论发给 Claude）按不响，${bad}；学生要在 Safari 里打开学习台才行`); }
+      if (bad !== (extState.wakeTold || '')) { extState.wakeTold = bad; if (bad) lines.push(`[页面] 学生作答时叫醒你的门铃（评论发给 Claude）按不响，${bad}${w.status === 'off' ? '（学生在 Claude App 里打开学习台时就是这样，不是出错）' : ''}。作答、草稿照样写在 ext_out`); }
     }
     return lines;
   }
@@ -2610,6 +2618,8 @@ export async function renderClass(root, meta, desk = null) {
     const beatSegs = new Map(); // 拍 → 这一拍写的段 id（先藏着）
     // 一轮最多开一块新板（2026-11-03 我说：一下子给好几块板、每块一点点，很影响学习）：同一轮第二个 board new 起都并到这块板上
     let newBoards = 0;
+    // 这一轮后面才写的段（常见写法：先 react 再 add hold 它要揭开的段）：react 的 show= 指着它们不算写错
+    turnIds = new Set(opSegs.map((s) => s.op?.id).filter(Boolean));
     opSegs.forEach((s, i) => {
       const n = failures.length;
       let op = { ...s.op, body: s.body };
@@ -2626,6 +2636,7 @@ export async function renderClass(root, meta, desk = null) {
       boardOps.push(r);
       if (b > 0 && r.ok && ['add', 'replace', 'pin'].includes(op.op)) beatSegs.set(b, [...(beatSegs.get(b) || []), op.id]);
     });
+    turnIds = new Set();
     // 同一轮里先写错、后面又写对了同一段（add 错了紧跟一个 replace）：不用再要求重写
     failures = failures.filter((f) => !boardOps.some((o, i) => i > f.at && o.ok && o.id === f.id && ['add', 'new', 'replace', 'pin'].includes(o.op)));
     // 说的话：写在当前板的最上面（换了新板就写在新板上），把上一句换掉。还没有板就开一块只有话的板

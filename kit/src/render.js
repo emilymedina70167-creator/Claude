@@ -73,15 +73,19 @@ function forgive(text, store) {
     // 要背的：==……== 和写在公式外面的 \bei{……} 画成粉色荧光笔的底（在字底下，不压字）
     t = t.replace(/\\bei\{([^{}\n]{1,300})\}/g, (m, body) => raw(`<mark class="lk-bei">${md.renderInline(body)}</mark>`));
     // =={yellow}……==：换一种颜色的荧光笔（关键说明、结论），不写颜色就是要背的粉色
-    t = t.replace(/(^|[^=])==(?:\{(yellow|pink|blue|green|red|黄|粉|蓝|绿|红)\})?(?=[^\s=])([^=\n]{1,300}?)(?<=[^\s=])==(?!=)/g, (m, pre, c, body) => {
+    t = t.replace(/(^|[^=])==(?:\{(yellow|pink|blue|green|red|黄|粉|蓝|绿|红)\})?(?=[^\s=])([^=\n]{1,300}?)(?<=[^\s=])==(?!=)/g, (m, pre, c, body, at, all) => {
+      // 代码里的比较（dk==2 && i==5）：两头都贴着英文字母、数字，不是荧光笔
+      if (/[A-Za-z0-9_]/.test(pre) && /[A-Za-z0-9_]/.test(all[at + m.length] || '')) return m;
       const color = HL_COLORS[c] || 'pink';
       return `${pre}${raw(`<mark class="${color === 'pink' ? 'lk-bei' : `hl-mark hl-${color}`}">${md.renderInline(body)}</mark>`)}`;
     });
     t = t.replace(/(^|[^*])\*\*(?=\S)([^*\n]{1,200}?)\*\*(?!\*)/g, (m, pre, body, at, all) => {
       const after = all[at + m.length] || '';
       const before = pre || '';
-      const endsPunct = CJK_PUNCT.test(body.at(-1)) && after && !/[\s\p{P}]/u.test(after);
-      const startsPunct = CJK_PUNCT.test(body[0]) && before && !/[\s\p{P}]/u.test(before);
+      // 英文标点也一样：You can**, Mr. Menand points out,** become…（插入语连逗号一起加粗，11-23、11-24 两节都露了星号）
+      const punct = (c) => CJK_PUNCT.test(c) || /\p{P}/u.test(c);
+      const endsPunct = punct(body.at(-1)) && after && !/[\s\p{P}]/u.test(after);
+      const startsPunct = punct(body[0]) && before && !/[\s\p{P}]/u.test(before);
       if (!endsPunct && !startsPunct) return m;
       return `${pre}${raw(`<strong>${md.renderInline(body)}</strong>`)}`;
     });
