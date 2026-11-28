@@ -1892,6 +1892,58 @@ const SUITES = {
     return t;
   },
 
+  // array 的 mode: do（自己动手的数组）：点两下交换、挪指针，每一步进证据；做完了那条带全部步骤，作答表里也有
+  async arraydo(browser) {
+    const t = await seeded(browser);
+    const F4 = '````', F3 = '```';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-8`;
+    const arr = `${F3}array\nid: ad1\nmode: do\narray: 3 1 2\nptrs: i=1\ngoal: 1 3 2\n${F3}`;
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'DS-L8.2.3', title: '动手的数组（外部）', space: 'cs', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: `动手。\n\n${F4}board new id=b1 title="交换"\n${arr}\n${F4}\n`, at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('.ad-cell[data-p="1"]'), { timeout: 20000, what: '动手的数组画上板' });
+    await t.page.click('.ad-ptr[data-ptr="i"]');
+    await t.page.click('.ad-cell[data-p="2"]');
+    await t.page.click('.ad-done');
+    await t.waitFor(() => t.page.evaluate(() => /不一样/.test(document.querySelector('.ad-fb')?.textContent || '')), { timeout: 5000, what: '没做成时说和要的不一样' });
+    await t.page.click('.ad-cell[data-p="1"]');
+    await t.page.click('.ad-cell[data-p="2"]');
+    await t.page.click('.ad-done');
+    const fin = await t.waitFor(async () => (await t.docs('evidence')).find((e) => e.session === sid && e.final && /交换 A\[1\]、A\[2\]/.test(e.value || '')), { timeout: 15000, what: '做完了那条证据带着步骤' });
+    check(fin.ok === true && /i：1 → 2/.test(fin.value) && /1 3 2/.test(fin.detail || ''), `做完了那条不对：${JSON.stringify(fin).slice(0, 300)}`);
+    const sheet = await t.waitFor(async () => { const a = (await t.db())[`sessions/${sid}/meta/answers`]; return a?.rows?.some((r) => r.comp === 'ad1' && r.okAt) ? a : null; }, { timeout: 15000, what: '作答表里有这一题' });
+    check(sheet.rows.find((r) => r.comp === 'ad1').tries.length >= 2, `作答表里没有每一步：${JSON.stringify(sheet.rows).slice(0, 300)}`);
+    // 刷新后步骤放回来
+    await t.page.reload();
+    await t.waitFor(() => t.page.evaluate(() => [...document.querySelectorAll('.ad-cell')].map((c) => c.textContent).join(' ') === '1 3 2'), { timeout: 20000, what: '刷新后数组还是做完的样子' });
+    return t;
+  },
+
+  // 以前的课里「查过的生词」：点一个收进要记的（recall），收过的打勾、不能再点
+  async wordchip(browser) {
+    const t = await seeded(browser);
+    const sid = 'c-20261120-3';
+    const at = Date.now() - 86400e3;
+    await plant(t, {
+      [`sessions/${sid}`]: { kind: 'ext', status: 'closed', block: 'EN-L1.2.1', space: 'en', subject: '英语', title: '查过词的课', date: '2026-11-20', startedAt: at, endedAt: at + 3600e3 },
+      // 报告是页面照证据重算的：放一条查词的证据
+      'evidence/ev-e2e-gloss-1': { id: 'ev-e2e-gloss-1', src: 'event', kind: 'gloss', session: sid, word: 'ubiquitous', gloss: '无处不在的', block: 'EN-L1.2.1', at },
+    });
+    await t.page.goto(BASE);
+    await t.waitFor(async () => (await t.text('.dk-class'))?.includes('开新课'), { timeout: 20000, what: '回到首页' });
+    await t.page.click('.dk-spaces[aria-label="科目"] .dk-space[data-space="en"]'); await sleep(600);
+    await t.route(`#classes/${sid}`);
+    await t.waitFor(() => t.page.$('[data-wadd="ubiquitous"]:not([disabled])'), { timeout: 20000, what: '查过的生词是能点的' });
+    await t.page.click('[data-wadd="ubiquitous"]');
+    const rc = await t.waitFor(async () => Object.entries(await t.db()).find(([k, v]) => k.startsWith('recall/') && v?.q === 'ubiquitous')?.[1], { timeout: 15000, what: '点了以后进了要记的' });
+    check(rc.a === '无处不在的' && rc.space === 'en' && rc.block === 'EN-L1.2.1', `收进去的不对：${JSON.stringify(rc)}`);
+    await t.waitFor(() => t.page.$('[data-wadd="ubiquitous"][disabled]'), { timeout: 10000, what: '收过的打勾、不能再点' });
+    return t;
+  },
+
   // 从入口链接（#课号）直接进课：首页的代码不跑，meta/facts 也要跟上当天（project/factsclass.js）
   async factsclass(browser) {
     const t = await seeded(browser);

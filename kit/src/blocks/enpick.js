@@ -11,7 +11,9 @@ export function bracketHtml(tokens, spans, roles, { cls = () => '' } = {}) {
   const out = [];
   tokens.forEach((t, i) => {
     for (const s of spans.filter((x) => x.from === i).sort((a, b) => b.to - a.to)) out.push(`<span class="pz-open ${color(s.role)} ${cls(s)}">[<small>${escapeHtml(name(s.role))}</small></span>`);
-    out.push(t.word ? `<button type="button" class="pz-w" data-i="${i}">${escapeHtml(t.w)}</button>` : `<span class="en-punct">${escapeHtml(t.w)}</span>`);
+    // 标成 X（划掉）的那几个词当场画删除线、变淡
+    const cut = spans.some((x) => x.role === 'X' && x.from <= i && i <= x.to) ? ' is-cut' : '';
+    out.push(t.word ? `<button type="button" class="pz-w${cut}" data-i="${i}">${escapeHtml(t.w)}</button>` : `<span class="en-punct${cut}">${escapeHtml(t.w)}</span>`);
     for (const s of spans.filter((x) => x.to === i).sort((a, b) => a.from - b.from)) out.push(`<span class="pz-close ${color(s.role)} ${cls(s)}">]</span>`);
   });
   return out.join(' ');

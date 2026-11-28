@@ -7,7 +7,7 @@ import { markDraft } from '../drafts.js';
 import { parseFields } from '../parse.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import {
-  ROLES, matchText, textHint, parseCloze, tokenizeSentence, findWrong, parseAlts, parseBrackets, judgeSpans, spanText, spansHint, parseRoles, parseDrill, joinWords,
+  ROLES, matchText, textHint, parseCloze, tokenizeSentence, findWrong, parseAlts, parseBrackets, judgeSpans, spansDiff, parseAlso, spanText, spansHint, parseRoles, parseDrill, joinWords,
   parseAnswer, diagnose, parseDecoys, parseSteps, parseChunk, judgeChunks, chunkHint, chunksOf, parseLink, judgeLinks, linkHint, regradePrompt, parseRegrade,
   parsePoints, judgeTranslation, translationHint, roleName, joinsOf, judgeJoins, joinTarget,
   spansMarkup,
@@ -259,6 +259,11 @@ export function parse(el, src) {
   const ans = parseBrackets(fields.answer || '');
   const roles = parseRoles(fields.roles, [...new Set(ans.spans.map((s) => s.role))]);
   for (const s of ans.spans) if (!roles.some((r) => r.key === s.role)) roles.push({ key: s.role, name: roleName(s.role) });
+  // 可选写法（不写就和原来一样）：also: 另一种也算对的范围；feedback: role 给学生的那句话带上是哪个成分（仍不给范围、不给答案）
+  if (fields.also) parseAlso(fields.also, ans);
+  if (fields.feedback && !/^(count|role)$/i.test(fields.feedback.trim())) throw new Error('feedback 只有两种：count（只报几处，不写就是它）、role（带上是哪个成分）');
+  const level = /^role$/i.test((fields.feedback || '').trim()) ? 'role' : '';
+  fields.level = level;
   // 层次图（视觉第 5 批）：view: layers 明着要；不写时，从句套了两层以上、有分裂结构（~n）的才用。view: line 照旧一行
   const layered = /^layers$/i.test(fields.view || '') || (!/^line$/i.test(fields.view || '') && (clauseDepth(ans.spans) >= 2 || ans.spans.some((s) => s.join)));
   fields.layered = layered;
@@ -323,10 +328,11 @@ export function parse(el, src) {
     tried = sig;
     last = judgeSpans(mine(), ans.spans);
     rep.after(sig, last.ok);
-    session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), value: tried, ok: last.ok, attempts, detail: spansHint(last, roles), el });
+    // detail 是学生屏幕上那句话；check 是只给主讲看的「错在哪」（哪一段多圈、少圈了哪几个词）
+    session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), value: tried, ok: last.ok, attempts, detail: spansHint(last, roles, { level }), check: spansDiff(last, ans.tokens, ans.spans, roles) || undefined, el });
     fb.hidden = false;
     fb.className = `q-feedback ${last.ok ? 'is-ok' : 'is-bad'}`;
-    fb.innerHTML = verdict(last.ok, last.ok ? '' : spansHint(last, roles)) + (last.ok && fields.explain ? mdToHtml(fields.explain) : '');
+    fb.innerHTML = verdict(last.ok, last.ok ? '' : spansHint(last, roles, { level })) + (last.ok && fields.explain ? mdToHtml(fields.explain) : '');
     const res = last;
     pick.mark((s) => (res.right.includes(s) ? 'is-right' : 'is-wrong'));
     if (!last.ok) layers.show(res.right);
@@ -430,9 +436,10 @@ function parseByStep(el, fields, ans, roles, groups) {
     tried = markup(mine);
     last = judgeSpans(mine, target());
     rep.after(sig, last.ok);
-    const hint = spansHint(last, roles);
+    const hint = spansHint(last, roles, { level: fields.level });
+    const diff = spansDiff(last, ans.tokens, target(), roles); // 只给主讲看的「错在哪」
     // more：这一步对了、后面还有步（课堂里不为它单独叫老师：学生接着做下一步，跟着下一条一起告诉老师）
-    session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: `第 ${k + 1} 步（${stepName(k)}）`, value: tried, ok: last.ok, attempts, check: last.ok ? undefined : hint, more: (last.ok && k < groups.length - 1) || undefined, el });
+    session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: `第 ${k + 1} 步（${stepName(k)}）`, value: tried, ok: last.ok, attempts, check: last.ok ? undefined : [hint, diff].filter(Boolean).join('｜'), more: (last.ok && k < groups.length - 1) || undefined, el });
     fb.hidden = false;
     fb.className = `q-feedback ${last.ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = verdict(last.ok, last.ok ? '' : hint);

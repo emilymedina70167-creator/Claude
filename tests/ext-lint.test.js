@@ -171,3 +171,12 @@ test('「没写预案」的提示默认不报（答错不预写是这位学生�
   assert.doesNotMatch(lintTurn({ prior: [], text, names }).problems.map((p) => p.msg).join('\n'), /学生答错要等你/);
   assert.match(lintTurn({ prior: [], text, names, hints: { react: true } }).problems.map((p) => p.msg).join('\n'), /学生答错要等你/);
 });
+
+test('句子成分的可选写法：also 找不到词、feedback 写错，预检先报；写对的不报', async () => {
+  const names = await blockNames();
+  const errs = (body) => lintTurn({ prior: [], text: seg('new', 'b1', `${f}parse\nid: p1\n${body}\n${f}`), names }).problems.filter((p) => p.level !== 'hint').map((p) => p.msg).join('\n');
+  assert.equal(errs('answer: [S It] [V is] [A? still] [P a hard task].\nalso: [P hard task]\nfeedback: role'), '');
+  assert.match(errs('answer: [S It] [V is] [P a hard task].\nalso: [P an easy task]'), /also.*找不到/);
+  assert.match(errs('answer: [S It] [V is] [P a hard task].\nfeedback: span'), /feedback 只有两种/);
+  assert.match(errs('answer: [S It [V is] [P a hard task].'), /answer: .*没有配对/);
+});

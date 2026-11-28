@@ -48,3 +48,20 @@ export function vocabRecalls({ evidence = [], recall = [], session = {}, now = D
   }
   return out;
 }
+
+/**
+ * 「以前的课」里那节课查过的生词，一个词一个：[{ word, gloss, in }]。in：已经在「要记的」里了（问法就是这个词、没作废的）。
+ * 收不收由学生自己点（或主讲课后写），页面不替人定
+ */
+export function wordChips(words = [], recall = []) {
+  const have = new Set((recall || []).filter((d) => d && d.status !== 'void').map((d) => key(d.q)));
+  const seen = new Set();
+  const out = [];
+  for (const w of words || []) {
+    const k = key(w?.word);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push({ word: cut(w.word, 60), gloss: cut(w.gloss, 120), in: have.has(k) });
+  }
+  return out;
+}

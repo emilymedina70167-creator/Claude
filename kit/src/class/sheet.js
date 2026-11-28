@@ -9,10 +9,10 @@ export const SHEET_TRIES = 12;
 
 // 页面判错时说的话：各种题放在不同的栏里
 function whyOf(e) {
-  if (typeof e.detail === 'string' && e.detail) return e.detail;
-  if (e.fail) return String(e.fail);
-  if (Array.isArray(e.wrong) && e.wrong.length) return `选了 ${e.wrong.join('、')}`;
-  return '';
+  // check：只给主讲看的那一句（parse 的「主语：多圈了 quickly」），跟在学生屏幕上那句后面
+  const check = typeof e.check === 'string' && e.check ? e.check : '';
+  const said = typeof e.detail === 'string' && e.detail ? e.detail : e.fail ? String(e.fail) : Array.isArray(e.wrong) && e.wrong.length ? `选了 ${e.wrong.join('、')}` : '';
+  return [said, check].filter(Boolean).join('｜');
 }
 
 /**
