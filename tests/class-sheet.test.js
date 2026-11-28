@@ -57,3 +57,8 @@ test('内容一样，算出来的就一样（不带时间时 at 是最后一条�
   assert.deepEqual(answerSheet(evs), answerSheet(evs.slice().reverse()));
   assert.equal(answerSheet(evs).at, 9);
 });
+
+test('只给主讲看的那一句（check）跟在页面说的话后面', () => {
+  const s = answerSheet([rec('rt-1', 1, false, { check: '主语：标了「the manager quickly」，多圈了 quickly' })]);
+  assert.equal(s.rows[0].tries[0].why, '1 处范围不对｜主语：标了「the manager quickly」，多圈了 quickly');
+});

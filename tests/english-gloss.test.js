@@ -7,7 +7,7 @@ globalThis.document ??= { addEventListener() {} };
 const { mdToHtml } = await import('../kit/src/render.js');
 const { parsePoints, judgeTranslation, translationHint, parseGloss, glossMatches } = await import('../kit/src/entext.js');
 const { parseMarkSpec, markWhere } = await import('../kit/src/markspec.js');
-const { glossedWords, vocabRecalls, VOCAB_PER_SESSION } = await import('../kit/src/memory/vocab.js');
+const { glossedWords, vocabRecalls, VOCAB_PER_SESSION, wordChips } = await import('../kit/src/memory/vocab.js');
 const { buildReport, reportText } = await import('../kit/src/memory/report.js');
 const { calloutsIn } = await import('../kit/src/memory/sheet.js');
 const { actionText, actionTrigger } = await import('../kit/src/class/prompt.js');
@@ -102,4 +102,10 @@ test('课堂：点开生词不单独调用，跟着下一条说；翻译的作�
   const t = { source: 'record', type: 'translate', q: 'By 1830 …', value: '在1830年，殖民地开始变成独立国家', ok: false, attempts: 1, detail: '要点 1 / 3：「by 1830」的意思还没译出来' };
   assert.equal(actionTrigger(t), 'soon');
   assert.match(actionText(t), /\[作答\].*翻译.*译成「在1830年，殖民地开始变成独立国家」.*页面按要点判：要点 1 \/ 3/);
+});
+
+test('以前的课里查过的生词：一个词一个，已经在要记的里的标出来（作废的不算）', () => {
+  const chips = wordChips([{ word: 'Meeting', gloss: '会议' }, { word: 'meeting', gloss: '会议' }, { word: 'plan', gloss: '计划' }, { word: 'task', gloss: '任务' }, { word: '' }],
+    [{ id: 'K1', q: 'meeting', a: '会议', status: 'active' }, { id: 'K2', q: 'plan', a: '计划', status: 'void' }]);
+  assert.deepEqual(chips, [{ word: 'Meeting', gloss: '会议', in: true }, { word: 'plan', gloss: '计划', in: false }, { word: 'task', gloss: '任务', in: false }]);
 });

@@ -11,7 +11,8 @@ import { conjecture } from './conjecture.js';
 import { practice } from './practice.js';
 import { summary } from './summary.js';
 import { draft } from './draft.js';
-import { array, shellsort, sortpass } from './sorting.js';
+import { array as arrayShow, shellsort, sortpass } from './sorting.js';
+import { arrayDo } from './arraydo.js';
 import { steps } from './steps.js';
 import { recognize } from './recognize.js';
 import { findbug } from './findbug.js';
@@ -43,6 +44,14 @@ import { elimDo } from './elimdo.js';
 import { parseFields } from '../parse.js';
 import { pvBlock } from './pvdo.js';
 import { encodeDo } from './encodedo.js';
+
+// array：mode: do 是学生自己在数组上动手（blocks/arraydo.js），不写 mode 是静态示意；写了别的报出来
+function array(el, src) {
+  const mode = String(parseFields(src).fields.mode ?? '').trim();
+  if (!mode) return arrayShow(el, src);
+  if (/^do$/i.test(mode)) return arrayDo(el, src);
+  throw new Error(`array 的 mode: 只有 do（自己动手），现在是「${mode}」`);
+}
 
 // 代码块语言名 → 组件
 export const blocks = {

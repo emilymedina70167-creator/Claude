@@ -11,10 +11,11 @@ const SKIP = 'input, textarea, select, button, a, code, pre, script, style, svg,
 const seen = new WeakMap(); // 段 → 这一页里已经记过的词（点第二次不再记）
 
 export function gloss(el, src) {
-  const { items, problems } = parseGloss(src);
+  const { items, problems, showAll } = parseGloss(src);
   if (problems.length) throw new Error(problems.join('；'));
-  el.innerHTML = `<div class="lk-glossbox"><button type="button" class="lk-glossall" aria-expanded="false">生词 ${items.length} 个</button><span class="muted">：点带虚线的词看意思</span><div class="lk-glosslist" hidden>${items.map((it, i) => `<button type="button" class="lk-gchip" data-i="${i}">${escapeHtml(it.word)}<span class="lk-gmean" hidden>　${escapeHtml(it.gloss)}</span></button>`).join('')}</div></div>`;
+  el.innerHTML = `<div class="lk-glossbox"><button type="button" class="lk-glossall" aria-expanded="${showAll ? 'true' : 'false'}">生词 ${items.length} 个</button>${showAll ? '' : '<span class="muted">：点带虚线的词看意思</span>'}<div class="lk-glosslist"${showAll ? '' : ' hidden'}>${items.map((it, i) => `<button type="button" class="lk-gchip${showAll ? ' is-open' : ''}" data-i="${i}">${escapeHtml(it.word)}<span class="lk-gmean"${showAll ? '' : ' hidden'}>　${escapeHtml(it.gloss)}</span></button>`).join('')}</div></div>`;
   const box = el.querySelector('.lk-glossbox');
+  // show: all（主讲写的）：这张表直接摊开、意思都露着，不用一个一个点。摊开的不算「点开过」，不记动作
   const open = (it) => {
     const root = scopeOf(el);
     const got = seen.get(root) || new Set();
@@ -31,6 +32,7 @@ export function gloss(el, src) {
   });
   // 小字那一行：词先只露英文，点一个看一个（一下全露出来就不知道哪个真的不认识）
   box.querySelectorAll('.lk-gchip').forEach((b) => b.addEventListener('click', () => {
+    if (showAll) return;
     const it = items[Number(b.dataset.i)];
     b.querySelector('.lk-gmean').hidden = false;
     b.classList.add('is-open');

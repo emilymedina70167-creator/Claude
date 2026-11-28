@@ -717,6 +717,16 @@ body.has-keypad .tutor-fab { display: none; }
 .arr-cell.arr-cmp { border-color: var(--yellow); box-shadow: 0 0 0 3px rgb(var(--yellow-rgb) / 0.35); }
 .arr-cell.arr-moved { transform: translateY(-5px); box-shadow: 0 0 0 3px rgb(var(--yellow-rgb) / 0.6); }
 .arr-cell.arr-placed { transform: translateY(-5px); box-shadow: 0 0 0 3px rgb(var(--green-rgb) / 0.7); }
+/* array 的 mode: do：格子、指针都是能点的（44px） */
+button.ad-cell { width: 100%; min-height: 44px; padding: 0; cursor: pointer; font-family: var(--sans); -webkit-tap-highlight-color: transparent; }
+button.ad-cell:disabled { cursor: default; }
+.ad .arr-row { grid-template-columns: repeat(var(--cols), max(var(--cell), 44px)); }
+.ad-ptrs { align-items: start; }
+.ad-ptrs > div { display: grid; gap: 2px; justify-items: center; }
+.ad-ptr { min-width: 44px; min-height: 44px; padding: 0 2px; border: 2px solid transparent; border-radius: 9px; background: none; color: var(--yellow); font: 20px/1.1 var(--hand); cursor: pointer; }
+.ad-ptr span { display: block; font-size: 15px; color: var(--blue); }
+.ad-ptr.is-sel { border-color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.14); }
+.ad-ptr:disabled { cursor: default; }
 .arr-idx > div, .arr-ptr > div { text-align: center; font-size: 13px; color: var(--muted); line-height: 1.2; }
 .arr-ptr > div { font-family: var(--hand); font-size: 22px; color: var(--yellow); }
 .arr-ptr span { display: block; font-size: 16px; color: var(--blue); }
@@ -2659,6 +2669,11 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .dr-n { font: 13.5px/1.4 var(--sans); }
 .dr-sum { margin-top: 8px; font: 600 15px/1.4 var(--sans); color: var(--chalk); }
 .pz-help { font: 13.5px/1.5 var(--sans); margin-bottom: 4px; }
+/* 以前的课里查过的生词：一个词一个按钮，点了收进要记的 */
+.dk-words { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.dk-wadd { min-height: 44px; }
+.dk-wadd.is-in { opacity: 0.6; }
+.pz-w.is-cut, .en-punct.is-cut { text-decoration: line-through; opacity: 0.45; } /* 标成「划掉」的词 */
 .pz-w.is-sel { background: rgb(var(--yellow-rgb) / 0.18); border-color: rgb(var(--yellow-rgb) / 0.6); }
 .pz-open, .pz-close { font: 600 20px/1 var(--sans); cursor: pointer; }
 .pz-open small { font: 600 11.5px/1 var(--sans); margin-left: 1px; vertical-align: super; }

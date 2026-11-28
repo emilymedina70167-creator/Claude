@@ -3,6 +3,7 @@ import { laterLine, aimLines } from './holds.js';
 // 都只读、不调用 Claude；数据是首页一直订阅着的那份记忆库（desk.js 传进来），算的部分在 views.js。
 // 地址用 # 区分：#map、#weak、#errors、#classes、#classes/c-…（一节课的报告）、#stats。翻看以前的课的黑板是 #view/c-…（整页刷新进只读的课堂）。
 import { sheetMd } from './sheet.js';
+import { wordChips } from './vocab.js';
 import { ask } from '../dialog.js';
 import { mdToHtml, escapeHtml } from '../render.js';
 import { toast } from '../record.js';
@@ -203,7 +204,7 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
         ${rep && sheetMd(rep.sheet) ? `<div class="dk-memo-sub" role="heading" aria-level="3">这节课的一页</div><div class="dk-summary dk-sheet">${mdToHtml(sheetMd(rep.sheet))}</div>` : ''}
         ${rep?.scenes?.length ? `<div class="dk-memo-sub" role="heading" aria-level="3">这节课的几幕</div><div class="dk-summary dk-scenes">${rep.scenes.map((x) => `<p><b>${esc(`${x.n}. ${x.title}`)}</b>${x.keys.map((k) => `<br>${esc(k)}`).join('')}</p>`).join('')}</div>` : ''}
         ${checkHtml(sid)}
-        ${rep ? reportHtml(rep) : rep === false ? '<p class="muted">这节课还没有课后报告（下课以后才有；回首页会补写）。</p>' : '<p class="muted">正在读课后报告…</p>'}
+        ${rep ? reportHtml(rep, r) : rep === false ? '<p class="muted">这节课还没有课后报告（下课以后才有；回首页会补写）。</p>' : '<p class="muted">正在读课后报告…</p>'}
         ${obs.filter((o) => o.kind !== 'summary').length ? `<details class="dk-soft"><summary>老师当堂的笔记（${obs.filter((o) => o.kind !== 'summary').length} 条）</summary><ul class="dk-log">${obs.filter((o) => o.kind !== 'summary').map((o) => `<li>${o.kind === 'proposal' ? '<b>提议</b> ' : ''}${inline(o.text)}</li>`).join('')}</ul></details>` : ''}
       </section>`;
   }
@@ -243,14 +244,15 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
       <details class="dk-soft"><summary>按知识点（${Object.keys(sk.sum).length} 个）</summary><div class="dk-tablewrap"><table class="dk-table2"><thead><tr><th>知识点</th><th>题</th><th>一次对</th><th>失手</th></tr></thead><tbody>${Object.entries(sk.sum).sort((a, b) => cmpId(a[0], b[0])).map(([p, x]) => `<tr><td>${inline(name(p))}<span class="muted">（${inline(blockName(p.split('#')[0]))}）</span></td><td>${x.n}</td><td>${x.first}</td><td>${x.fail}</td></tr>`).join('')}</tbody></table></div></details>`;
   }
 
-  function reportHtml(rep) {
+  function reportHtml(rep, r = {}) {
+    const space = (data.sessions || []).find((x) => x.id === r.id)?.space || '';
     const t = rep.totals || {};
     const items = rep.items || [];
     return `<div class="dk-memo-sub" role="heading" aria-level="3">课后报告</div>
       <p>做了 ${t.items || 0} 题：一次对 ${t.first || 0}、改对 ${t.ok || 0}${t.guess ? `（其中 ${t.guess} 道是把选项试遍了才对）` : ''}、错 ${t.wrong || 0}、想不出来 ${t.giveup || 0}、看了答案 ${t.revealed || 0}${t.open ? `、没判 ${t.open}` : ''}${t.drafts ? `；${t.drafts} 处草稿没交` : ''}。</p>
       ${items.length ? `<div class="dk-tablewrap"><table class="dk-table2"><thead><tr><th>题</th><th>每次</th><th>结果</th><th>用时</th></tr></thead><tbody>${items.map((it) => `<tr><td>${inline(it.q)}${it.page ? `<span class="muted">（第 ${it.page} 块板）</span>` : ''}</td><td class="dk-seq">${esc(it.seq || '·')}</td><td>${esc(it.guess ? '试出来的' : OUTCOME_TEXT[it.outcome] || it.outcome)}</td><td>${it.ms ? `${Math.round(it.ms / 1000)} 秒` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}
       ${(rep.byTag || []).filter((x) => x.tag).length ? `<p><span class="dk-k">按块 / 知识点</span>${rep.byTag.filter((x) => x.tag).map((x) => `${inline(blockName(x.tag))}：${x.items} 题一次对 ${x.first}`).join('；')}</p>` : ''}
-      ${rep.words?.length ? `<p><span class="dk-k">查过的生词</span>${rep.words.map((w) => `${esc(w.word)}<span class="muted"> ${esc(w.gloss)}</span>`).join('；')}</p>` : ''}
+      ${rep.words?.length ? `<div class="dk-words"><span class="dk-k">查过的生词</span>${wordChips(rep.words, data.recall).map((w) => `<button type="button" class="btn btn-sm dk-wadd${w.in ? ' is-in' : ''}" data-wadd="${esc(w.word)}" data-gloss="${esc(w.gloss)}" data-block="${esc(r.block || '')}" data-space="${esc(space)}"${w.in ? ' disabled' : ''}>${w.in ? '✓' : '＋'} ${esc(w.word)}<span class="muted"> ${esc(w.gloss)}</span></button>`).join('')}</div>` : ''}
       ${rep.drafts?.length ? `<p><span class="dk-k">没交的草稿</span>${rep.drafts.map((d) => `「${esc(d.text)}」`).join('；')}</p>` : ''}
       ${rep.says?.length ? `<p><span class="dk-k">我说的</span>${rep.says.filter((s) => s.text).map((s) => `「${esc(s.text)}」`).join(' ')}</p>` : ''}
       ${rep.manual?.length ? `<p><span class="dk-k">补记</span>${rep.manual.map((m) => `「${esc(m.text)}」${m.verdict ? `（${esc(m.verdict)}）` : ''}`).join(' ')}</p>` : ''}`;
@@ -271,8 +273,14 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
   }
 
   async function onClick(e) {
-    const t = e.target.closest('[data-toggle], [data-solve], [data-goto], [data-more], [data-purge], [data-ckreplay]');
+    const t = e.target.closest('[data-toggle], [data-solve], [data-goto], [data-more], [data-purge], [data-ckreplay], [data-wadd]');
     if (!t) return;
+    // 查过的生词：点一个，收进「要记的」（和首页自己加一条是同一条路，能撤）
+    if (t.dataset.wadd) {
+      t.disabled = true;
+      try { await ops.me('recall-add', { q: t.dataset.wadd, a: t.dataset.gloss || '（课上点开看过）', block: t.dataset.block || '', space: t.dataset.space || 'en' }); toast('收进要记的了'); } catch (err) { toast(`没成：${err?.message || err}`); t.disabled = false; }
+      return;
+    }
     if (t.dataset.purge) { purge?.(t.dataset.purge, t); return; }
     if (t.dataset.ckreplay) {
       const slot = host.querySelector(`.ck-replay-slot[data-slot="${CSS.escape(t.dataset.ckreplay)}"]`);
