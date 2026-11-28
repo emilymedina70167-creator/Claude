@@ -1892,6 +1892,26 @@ const SUITES = {
     return t;
   },
 
+  // 从入口链接（#课号）直接进课：首页的代码不跑，meta/facts 也要跟上当天（project/factsclass.js）
+  async factsclass(browser) {
+    const t = await seeded(browser);
+    const F4 = '````';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-7`;
+    const old = (await t.db())['meta/facts'];
+    check(old?.today === today, `首页写的 meta/facts.today 是 ${old?.today}，应该是 ${today}`);
+    await plant(t, {
+      'meta/facts': { ...old, today: '2000-01-01', health: 4, at: 1 },
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'L2.1.4', title: '外部（事实）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: `开始。\n\n${F4}board new id=b1 title="一"\n第一段。\n${F4}\n`, at: Date.now() },
+    });
+    await t.open(sid);
+    const f = await t.waitFor(async () => { const x = (await t.db())['meta/facts']; return x?.today === today ? x : null; }, { timeout: 15000, what: '进课以后 meta/facts.today 变成今天' });
+    check(f.health === 4, `体检的条数课堂里不重算，应沿用上一份的 4，现在是 ${f.health}`);
+    check(f.spaces?.math?.open?.some((x) => x.id === sid), '这节挂着的课没算进 meta/facts 的 open');
+    return t;
+  },
+
   async errors(browser) {
     const t = await seeded(browser);
     // 故意制造一个没接住的错误：应该被记进 meta/errors，管理页能看到
