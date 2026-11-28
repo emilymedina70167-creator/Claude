@@ -15,7 +15,7 @@ import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { extClass, sessionFromFile } from './ext-class.js';
+import { extClass, sessionFromFile, sessionDirs } from './ext-class.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const KIT = resolve(here, '../kit/dist/la-kit.js');
@@ -28,16 +28,6 @@ const nextFile = arg('next');
 if (!nextFile) { console.error('要写 --next 这一轮.txt（这一轮要写进 ext_in 的 text）'); process.exit(2); }
 const LINT = process.argv.includes('--lint');
 if (!LINT && !existsSync(KIT)) { console.error(`没有 ${KIT}：先 npm run build`); process.exit(2); }
-
-// 存下来的 JSON：ArtifactData 的 out_dir 每条一个文件，内容可能是文档本身，也可能包了一层 { data }
-const readDocs = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => { const j = JSON.parse(readFileSync(join(dir, f), 'utf8')); return { id: f.replace(/\.json$/, ''), ...(j.data || j) }; }) : []);
-function sessionDirs(root, sid) {
-  const base = join(root, 'sessions');
-  if (!existsSync(base)) return null;
-  const ids = sid ? [sid] : readdirSync(base).filter((x) => existsSync(join(base, x, 'ext_in'))).sort();
-  const id = ids.at(-1);
-  return id ? { id, ins: readDocs(join(base, id, 'ext_in')), outs: readDocs(join(base, id, 'ext_out')) } : null;
-}
 
 const root = arg('session');
 // --session 是一个文件（每行一条 { id, data }，或一个数组）也认（dr-ext-round2）
